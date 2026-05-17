@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>AutoLeaseNet.Adapters.Pdf.QuestPdf</RootNamespace>
+    <Description>QuestPDF implementation of IPdfRenderer for quotes, invoices (ZATCA-compliant), receipts. Implementation pending Phase 1 Week 4.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\application\AutoLeaseNet.Application.Ports\AutoLeaseNet.Application.Ports.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="QuestPDF" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+</Project>

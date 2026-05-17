@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>AutoLeaseNet.Adapters.Email.InMemory</RootNamespace>
+    <Description>In-memory IEmailSender for tests and offline dev. Captures messages.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\application\AutoLeaseNet.Application.Ports\AutoLeaseNet.Application.Ports.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>AutoLeaseNet.Adapters.Email.AzureCommunication</RootNamespace>
+    <Description>Azure Communication Services IEmailSender adapter. Implementation pending Phase 1 Week 3.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\application\AutoLeaseNet.Application.Ports\AutoLeaseNet.Application.Ports.csproj" />
+    <ProjectReference Include="..\AutoLeaseNet.Adapters.Common\AutoLeaseNet.Adapters.Common.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Azure.Communication.Email" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+</Project>

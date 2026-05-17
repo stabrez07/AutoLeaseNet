@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>AutoLeaseNet.Adapters.Zatca</RootNamespace>
+    <Description>ZATCA Phase 2 e-invoicing adapter (KSA Fatoorah). Pattern B per doc 04. Implementation per doc 07 — pending Phase 1 Week 4.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AutoLeaseNet.Adapters.Common\AutoLeaseNet.Adapters.Common.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="Polly" />
+  </ItemGroup>
+</Project>

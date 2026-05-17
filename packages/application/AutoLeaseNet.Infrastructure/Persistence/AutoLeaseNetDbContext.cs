@@ -1,0 +1,18 @@
+using Microsoft.EntityFrameworkCore;
+
+namespace AutoLeaseNet.Infrastructure.Persistence;
+
+/// <summary>
+/// Root EF Core DbContext for AutoLeaseNet. Aggregates are mapped via IEntityTypeConfiguration
+/// implementations in Configurations/. Multi-tenancy is enforced at the database level via
+/// Row-Level Security policies (see migrations/_rls).
+/// </summary>
+public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> options) : DbContext(options)
+{
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        // Apply all IEntityTypeConfiguration<T> from this assembly
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AutoLeaseNetDbContext).Assembly);
+        base.OnModelCreating(modelBuilder);
+    }
+}

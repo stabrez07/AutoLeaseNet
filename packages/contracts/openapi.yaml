@@ -1,0 +1,88 @@
+openapi: 3.1.0
+info:
+  title: AutoLeaseNet BFF API
+  version: 0.1.0
+  description: |
+    Backend-for-Frontend serving the Web Portal and Customer Portal.
+    See Specs/06-bff-api-surface.md for design + full endpoint catalog.
+    Endpoints to be added incrementally per Phase 1 workstreams.
+  contact:
+    name: AutoLeaseNet team
+servers:
+  - url: http://localhost:5000/api/v1
+    description: Local dev
+  - url: https://api-staging.autoleasenet.io/api/v1
+    description: Staging
+  - url: https://api.autoleasenet.io/api/v1
+    description: Production
+
+security:
+  - BearerAuth: []
+
+paths:
+  /ping:
+    get:
+      summary: Lightweight liveness ping
+      description: Returns service identification and timestamp. No auth required.
+      security: []
+      operationId: ping
+      responses:
+        '200':
+          description: Service alive
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [service, timestamp]
+                properties:
+                  service: { type: string, example: 'AutoLeaseNet.Bff' }
+                  version: { type: string, example: '0.1.0' }
+                  timestamp: { type: string, format: date-time }
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: string
+          pattern: '^[0-9]+\.[0-9]{2}$'
+          example: '1234.56'
+        currency:
+          type: string
+          enum: [SAR]
+    ProblemDetails:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        traceId: { type: string }
+        errorCode: { type: string }
+        errorCategory:
+          type: string
+          enum:
+            [
+              Validation,
+              BusinessRule,
+              Authorization,
+              ExternalDependency,
+              SystemError,
+              NotFound,
+              Conflict,
+              RateLimited,
+            ]
+        localizedMessages:
+          type: object
+          properties:
+            ar: { type: string }
+            en: { type: string }

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>AutoLeaseNet.Application.Ports</RootNamespace>
+    <AssemblyName>AutoLeaseNet.Application.Ports</AssemblyName>
+    <Description>Port interfaces for Pattern A adapters (per doc 04). Generic capability contracts: ISmsSender, IObjectStorage, ICacheStore, IIdempotencyStore, IEmailSender, IPdfRenderer, IUnitOfWork, repositories. Depends only on Domain.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AutoLeaseNet.Domain\AutoLeaseNet.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

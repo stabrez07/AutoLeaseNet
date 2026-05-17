@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>AutoLeaseNet.Adapters.Tajeer</RootNamespace>
+    <AssemblyName>AutoLeaseNet.Adapters.Tajeer</AssemblyName>
+    <Description>Tajeer (KSA TGA leasing registry) adapter. Per doc 03 — canonical Pattern B example. ITajeerClient interface + V9.7 implementation, error catalog, resilience, idempotency, webhooks, helpers.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AutoLeaseNet.Adapters.Common\AutoLeaseNet.Adapters.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions" />
+    <PackageReference Include="Polly" />
+  </ItemGroup>
+
+</Project>

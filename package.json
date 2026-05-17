@@ -1,0 +1,53 @@
+{
+  "name": "superplexity",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20.11.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "infra:up": "docker compose -f compose/docker-compose.yml --env-file compose/.env.example up -d",
+    "infra:down": "docker compose -f compose/docker-compose.yml down",
+    "infra:reset": "docker compose -f compose/docker-compose.yml down -v && pnpm infra:up",
+    "infra:logs": "docker compose -f compose/docker-compose.yml logs -f",
+    "bff": "dotnet run --project services/bff/AutoLeaseNet.Bff.csproj",
+    "bff:watch": "dotnet watch --project services/bff/AutoLeaseNet.Bff.csproj",
+    "build:dotnet": "dotnet build AutoLeaseNet.sln -c Release",
+    "test:dotnet": "dotnet test AutoLeaseNet.sln -c Release --filter \"Category!=Integration\"",
+    "test:dotnet:integration": "dotnet test AutoLeaseNet.sln -c Release --filter \"Category=Integration\"",
+    "db:migrate": "dotnet ef database update --project packages/application/AutoLeaseNet.Infrastructure --startup-project services/bff",
+    "db:add-migration": "dotnet ef migrations add --project packages/application/AutoLeaseNet.Infrastructure --startup-project services/bff",
+    "openapi:gen": "pnpm --filter @superplexity/contracts run generate",
+    "clean": "turbo clean && find . -name 'bin' -type d -prune -exec rm -rf {} + && find . -name 'obj' -type d -prune -exec rm -rf {} +",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
+    "prettier": "^3.2.5",
+    "prettier-plugin-tailwindcss": "^0.5.14",
+    "turbo": "^2.0.4",
+    "typescript": "^5.4.5"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,mjs,cjs}": [
+      "prettier --write"
+    ],
+    "*.{json,md,yaml,yml,css}": [
+      "prettier --write"
+    ],
+    "*.cs": [
+      "dotnet format AutoLeaseNet.sln --include"
+    ]
+  }
+}

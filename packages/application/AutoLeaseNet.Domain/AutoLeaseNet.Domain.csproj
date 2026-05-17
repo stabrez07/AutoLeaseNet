@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>AutoLeaseNet.Domain</RootNamespace>
+    <AssemblyName>AutoLeaseNet.Domain</AssemblyName>
+    <Description>Domain layer — pure POCO entities, value objects, domain events, invariants. No external dependencies.</Description>
+  </PropertyGroup>
+
+  <!-- Domain has zero external dependencies by design -->
+
+</Project>

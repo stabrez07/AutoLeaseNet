@@ -1,0 +1,9 @@
+{
+  "extends": "@autoleasenet/tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "."
+  },
+  "include": ["generated/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

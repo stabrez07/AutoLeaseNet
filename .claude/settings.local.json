@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "Bash(mkdir -p apps services packages/application packages/adapters packages/ui packages/contracts packages/eslint-config-superplexity packages/tsconfig-superplexity infra/bicep/modules infra/bicep/parameters infra/scripts infra/docs tools/seed-data tools/tajeer-stub tools/db-tools compose .github/workflows .vscode .claude)",
+      "Bash(mkdir -p apps/web-portal apps/customer-portal services/bff)",
+      "Bash(dotnet new *)",
+      "Bash(dotnet sln *)",
+      "Bash(dotnet restore *)",
+      "Bash(echo \"=== Original directory ===\" && \\\\ *)",
+      "Read(//c/Users/Administrator/Desktop/Superplexity/**)",
+      "Read(//c/Users/Administrator/Desktop/**)",
+      "Bash(set -e)",
+      "Bash(mv \"/c/Users/Administrator/Desktop/Superplexity\" \"/c/Users/Administrator/Desktop/AutoLeaseNet\")",
+      "Bash(mkdir -p \"/c/Users/Administrator/Desktop/AutoLeaseNet/.claude\")",
+      "Bash(cp -f \"/c/Users/Administrator/Desktop/Personal/GenAI/Projects Prac/Superplexity/.claude/settings.local.json\" \"/c/Users/Administrator/Desktop/AutoLeaseNet/.claude/settings.local.json\")",
+      "Bash(rm -rf \"/c/Users/Administrator/Desktop/Personal/GenAI/Projects Prac/Superplexity\")",
+      "Bash(cp -r \"/c/Users/Administrator/Desktop/Superplexity\" \"/c/Users/Administrator/Desktop/AutoLeaseNet\")"
+    ]
+  }
+}

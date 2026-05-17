@@ -1,0 +1,21 @@
+{
+  "name": "@autoleasenet/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "OpenAPI source of truth + generated TypeScript types for the BFF API surface. See Specs/06-bff-api-surface.md.",
+  "type": "module",
+  "main": "./generated/index.ts",
+  "types": "./generated/index.ts",
+  "scripts": {
+    "generate": "echo 'TODO: openapi-typescript ./openapi.yaml -o ./generated/schema.d.ts'",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'No lint configured for contracts yet'"
+  },
+  "devDependencies": {
+    "@autoleasenet/tsconfig": "workspace:*",
+    "typescript": "^5.4.5",
+    "openapi-typescript": "^6.7.6",
+    "openapi-fetch": "^0.9.7"
+  }
+}
