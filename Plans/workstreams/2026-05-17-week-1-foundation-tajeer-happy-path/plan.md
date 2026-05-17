@@ -6,6 +6,8 @@
 **Source plan**: [Plan 02 — Phase 1 MVP §Week 1](../../02-phase-1-mvp-week-by-week.md#week-1--foundation--tajeer-happy-path)
 **Strategy**: **Hybrid** — start at Day 3 work (Adapters.Common, Tajeer adapter, `dev/save-contract`) locally, loop back to Days 1–2 (Bicep, App Insights, Entra app reg) once Azure/Entra land. Day 7 SMS stays on `Adapters.Sms.InMemory` until Unifonic creds arrive.
 
+**Local infra (2026-05-18 update)**: Docker Desktop install hit problems. Replaced compose stack with: local **SQL Server 2019 Developer** (default instance, Windows Integrated Auth, DB = `AutoLeaseNet_Dev`) + `Adapters.Cache.InMemory` (real Redis loop-back when Docker/Memurai land). Azurite + MailHog are not exercised in Week 1 and stay deferred. See [notes.md](./notes.md#t05--t06--t07---compose-stack-replaced-with-local-infra) for rationale.
+
 ---
 
 ## 1. Goal
@@ -44,7 +46,7 @@ A working `POST /api/v1/dev/save-contract` endpoint running locally (Docker Comp
 |---|---|---|
 | Tajeer Rabet App-id / App-key / Authorization | ✅ in hand | Day 4–5 |
 | ZATCA Fatoorah CSID | ✅ in hand | not needed this week |
-| Local Docker (SQL Edge, Redis, Azurite, MailHog) | assumed | Day 1 |
+| ~~Local Docker (SQL Edge, Redis, Azurite, MailHog)~~ → Local SQL Server 2019 (Windows Auth) + InMemory cache | ✅ in hand (2026-05-18) | Days 2, 5, 6 |
 | Public tunnel for webhook (ngrok / Azure dev URL) | needs setup | Day 6 |
 | Azure dev RG + Key Vault | ⏳ pending | loop-back §6 only |
 | Entra ID app reg | ⏳ pending | loop-back §6 only |
@@ -70,9 +72,9 @@ A working `POST /api/v1/dev/save-contract` endpoint running locally (Docker Comp
 - [ ] **T0.2** Run `dotnet build AutoLeaseNet.sln -warnaserror`. **Verify**: build succeeds with 0 errors, 0 warnings.
 - [ ] **T0.3** Run `pnpm install` at repo root. **Verify**: lockfile up to date, no peer-dependency errors blocking install.
 - [ ] **T0.4** Run `pnpm build` (Turborepo). **Verify**: all apps + packages compile.
-- [ ] **T0.5** `docker compose -f compose/docker-compose.yml up -d`. **Verify**: `docker compose ps` shows SQL Edge, Redis, Azurite, MailHog all healthy.
-- [ ] **T0.6** Probe SQL Edge with `sqlcmd -S localhost,1433 -U sa -Q "SELECT @@VERSION"`. **Verify**: version returns.
-- [ ] **T0.7** Probe Redis with `redis-cli -h localhost ping`. **Verify**: `PONG`.
+- [x] ~~**T0.5** `docker compose -f compose/docker-compose.yml up -d`.~~ **Replaced T0.5-alt**: Create `AutoLeaseNet_Dev` DB on local SQL Server (Windows Auth). **Verify**: `sqlcmd -S localhost -E -Q "SELECT name FROM sys.databases WHERE name='AutoLeaseNet_Dev'"` returns the row. ✅ 2026-05-18.
+- [x] ~~**T0.6** Probe SQL Edge with `sqlcmd -S localhost,1433 -U sa`.~~ **Replaced T0.6-alt**: Probe `AutoLeaseNet_Dev` with `Microsoft.Data.SqlClient` using the exact `appsettings.Development.json` connection string. **Verify**: connection opens, `ServerVersion` non-empty. ✅ 2026-05-18 (`ServerVersion=15.00.2170`).
+- [x] ~~**T0.7** Probe Redis with `redis-cli ping`.~~ **Replaced T0.7-alt**: Confirm `Adapters.Cache.InMemory.AddInMemoryCache()` exposes both `ICacheStore` + `IIdempotencyStore` for Day 5 wiring. **Verify**: file inspection. ✅ 2026-05-18.
 - [ ] **T0.8** Open `notes.md` and capture any drift discovered (version mismatches, missing scripts). **Verify**: file exists with timestamped entry or "no drift" line.
 
 ### Day 1 — Adapters.Common foundation (TDD)
@@ -125,7 +127,7 @@ A working `POST /api/v1/dev/save-contract` endpoint running locally (Docker Comp
 - [ ] **T5.3** Generate initial EF migration `Init_Lease`. **Verify**: `dotnet ef migrations add Init_Lease` succeeds; migration SQL inspected.
 - [ ] **T5.4** Apply migration to Dockerized SQL Edge. **Verify**: `dotnet ef database update` exits 0; `SELECT * FROM Leases` works.
 - [ ] **T5.5** Add BFF endpoint `POST /api/v1/dev/save-contract` requiring `Idempotency-Key` header. **Verify**: missing header → 400; present → 202 with response body.
-- [ ] **T5.6** Wire idempotency via Redis cache (24h TTL) keyed on `tenant + idempotency-key`. **Verify**: duplicate POST returns same cached response.
+- [ ] **T5.6** Wire idempotency via `Adapters.Cache.InMemory.AddInMemoryCache()` against the `IIdempotencyStore` port (24h TTL) keyed on `tenant + idempotency-key`. **Verify**: duplicate POST returns same cached response. *(Swap to Redis in §6 loop-back when Docker/Memurai available.)*
 - [ ] **T5.7** **First real Save against Tajeer staging** from local BFF (Postman or curl with dev JWT stub header). **Verify**: 202 response with real `ContractNumber` + `IssuanceUrl`; row in `Leases` table with `PendingIssuance`.
 - [ ] **T5.8** Capture sanitized request/response in `notes.md` + diagram the call flow if anything surprised. **Verify**: notes updated.
 
@@ -171,6 +173,12 @@ Pulled in as those external deps land. Do **not** block Days 0–7 on these.
 - [ ] **L.G1** GitHub Actions workflow `ci.yml`: restore → build (-warnaserror) → test → pnpm build/test.
 - [ ] **L.G2** Branch protection on `main` requiring CI green + 1 review.
 - [ ] **L.G3** CI secrets: Tajeer creds, ZATCA CSID, Azure deploy SP.
+
+### Real Redis (when Docker Desktop fixed OR Memurai installed)
+- [ ] **L.R1** Verify `redis-cli ping` returns `PONG`.
+- [ ] **L.R2** Add `ConnectionStrings:Redis` to `appsettings.Development.json`; flip `Cache:Mode` to `Redis`.
+- [ ] **L.R3** Wire `Adapters.Cache.Redis.AddRedisCache()` in BFF DI when `Cache:Mode == "Redis"`. **Verify**: idempotency integration test passes against real Redis (24h TTL respected).
+- [ ] **L.R4** Run T5.6 + T6.x integration tests against Redis; capture any divergence vs InMemory in `notes.md`.
 
 ### Unifonic SMS (when sender ID approved ~3 days)
 - [ ] **L.U1** Real `Adapters.Sms.Unifonic.UnifonicSmsClient` against `ISmsClient` port. **Verify**: contract tests pass against both InMemory + Unifonic.

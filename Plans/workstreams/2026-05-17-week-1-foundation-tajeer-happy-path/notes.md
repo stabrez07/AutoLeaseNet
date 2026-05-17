@@ -1,0 +1,76 @@
+# Notes — Week 1 Foundation + Tajeer Happy Path
+
+Running log of decisions, surprises, and drift captured during execution.
+
+---
+
+## 2026-05-18 — Day 0 scaffold verification
+
+### T0.1 `dotnet restore` — ✅ passed
+- .NET 8.0.206 SDK present.
+- 20 projects restored cleanly.
+- Surfaced **NU1902 warning** on `OpenTelemetry.Exporter.OpenTelemetryProtocol 1.12.0` (transitive `Grpc.Net.Client` advisory `GHSA-4625-4j76-fww9`). Already acknowledged in the scaffold's `Directory.Build.props` comment as upstream-blocked.
+
+### T0.2 `dotnet build -warnaserror` — ⚠️ initial fail, fixed
+
+Three drift items broke the build under `-warnaserror`:
+
+1. **NU1902 / NU1903** — listed in `<WarningsNotAsErrors>` but still failed under CLI `-warnaserror`. Moved to `<NoWarn>` in [Directory.Build.props](../../../Directory.Build.props) since the upstream OTel exporter has no patched release yet. Tracked: re-enable once OTel ships a transitive bump.
+2. **CA1716** on `AutoLeaseNet.Domain.Shared` — namespace name conflicts with reserved keyword `Shared`. This is a deliberate DDD building-block convention; not consumed cross-language. Suppressed globally in `<NoWarn>` with an inline comment explaining why.
+3. **CA1707** on test method `InMemoryClient_exposes_all_sub_interfaces` — underscores in test names is the project's chosen xUnit/BDD convention (matches `IntegrationResult_Success_carries_value` style throughout the Week 1 plan). Suppressed only for `*.Tests` projects via a conditional `<PropertyGroup>` in `Directory.Build.props`.
+
+After the analyzer fixes, a real code error surfaced:
+- **CS1061** in [services/bff/Program.cs:10](../../../services/bff/Program.cs#L10) — `AddOpenApi()` is a .NET 9 API and we target net8.0. The line was redundant (Swashbuckle already wired on the next line via `AddEndpointsApiExplorer()` + `AddSwaggerGen()`). Removed.
+
+Final build: 0 warnings, 0 errors.
+
+### T0.3 `pnpm install` — ⚠️ initial fail, fixed
+
+Workspace had stale template names from a `superplexity` fork. Two fixes:
+
+1. [pnpm-workspace.yaml](../../../pnpm-workspace.yaml): pointed at `eslint-config-superplexity` / `tsconfig-superplexity` — empty leftover dirs. Repointed to the real `eslint-config-autoleasenet` / `tsconfig-autoleasenet` packages.
+2. [package.json](../../../package.json): root name was `"superplexity"`; the `openapi:gen` script filtered `@superplexity/contracts`. Renamed to `autoleasenet` and `@autoleasenet/contracts` respectively.
+
+Leftover empty dirs `packages/eslint-config-superplexity/` and `packages/tsconfig-superplexity/` are not git-tracked. Left in place; safe to delete with `rmdir` if desired.
+
+After fixes: 433 packages installed across 5 workspace projects (root + 2 apps + ui + contracts). No peer-dep blocking errors.
+
+### T0.4 `pnpm build` — ✅ passed
+- Both `@autoleasenet/web-portal` and `@autoleasenet/customer-portal` Next.js apps compiled and prerendered static pages successfully. 33s on cold turbo cache.
+
+### T0.5 / T0.6 / T0.7 — 🔀 Compose stack replaced with local infra
+
+Docker Desktop install ran into trouble. User confirmed local SQL Server 2019 Developer Edition is already present. Adopted decision:
+
+| Compose service | Week 1 substitute | Rationale |
+|---|---|---|
+| `sql` (Azure SQL Edge) | Local SQL Server 2019 Developer, default instance, Windows Integrated Auth | Same engine family (T-SQL, Always Encrypted, RLS all available); no install cost |
+| `redis` | `Adapters.Cache.InMemory` via hexagonal swap | Port already exists ([InMemoryCacheStore.cs](../../../packages/adapters/AutoLeaseNet.Adapters.Cache.InMemory/InMemoryCacheStore.cs)); flip `Cache:Mode` config when real Redis arrives |
+| `azurite` (blob) | N/A this week | Not exercised until Week 3 photo/sketch upload |
+| `mailhog` (SMTP) | N/A this week | No email send-path until Week 4 quotation PDF |
+
+**T0.5-alt** ✅ Created `AutoLeaseNet_Dev` database via `sqlcmd -S localhost -E`.
+**T0.6-alt** ✅ Probed `Microsoft.Data.SqlClient` connection with the exact BFF config string — `ServerVersion=15.00.2170, State=Open`.
+**T0.7-alt** ✅ Confirmed `AddInMemoryCache()` extension wires both `ICacheStore` and `IIdempotencyStore` — Day 5 idempotency cache will use it.
+
+[services/bff/appsettings.Development.json](../../../services/bff/appsettings.Development.json) updated:
+- `ConnectionStrings:AutoLeaseNet` → `Server=localhost;Database=AutoLeaseNet_Dev;Trusted_Connection=true;TrustServerCertificate=true;Encrypt=false;Application Name=AutoLeaseNet.Bff`
+- `ConnectionStrings:Redis` removed
+- Added `Cache:Mode = "InMemory"` toggle (wired in T1.x ServiceCollection extensions on Day 1)
+
+**Loop-back when Docker resolves OR Memurai installed**: revisit T5.6 + downstream to swap `AddInMemoryCache()` for `AddRedisCache()` and re-run integration tests. Track in plan §6.
+
+**Note**: existing SQL Server hosts other databases (Ajar-related — `EHIAjarDB`, `AJARFRBApplications`, etc.). Confirmed those are not ours; we touch only `AutoLeaseNet_Dev`.
+
+### T0.8 drift summary
+
+| Drift | Severity | Resolution |
+|---|---|---|
+| NU1902/NU1903 in `WarningsNotAsErrors` doesn't hold under CLI `-warnaserror` | Med | Moved to `<NoWarn>` |
+| CA1716 on `Domain.Shared` | Low | Suppressed (deliberate DDD pattern) |
+| CA1707 on test methods | Low | Suppressed for `*.Tests` projects only |
+| `AddOpenApi()` in BFF Program.cs (net9 API on net8 target) | Med | Removed; Swashbuckle already wired |
+| pnpm workspace pointed at empty `superplexity` dirs | Med | Repointed to real `autoleasenet` dirs |
+| Root `package.json` name + filter named `superplexity` | Low | Renamed to `autoleasenet` |
+| Empty leftover dirs `packages/eslint-config-superplexity/`, `packages/tsconfig-superplexity/` | Low | Left in place (not git-tracked, harmless) |
+| Docker Desktop not installed | **High** | Resolved by substitution: local SQL Server 2019 (Windows auth) + `Adapters.Cache.InMemory`; Azurite/MailHog deferred (not needed this week) |
