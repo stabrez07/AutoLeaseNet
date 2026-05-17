@@ -2,6 +2,6 @@ packages:
   - 'apps/*'
   - 'packages/ui'
   - 'packages/contracts'
-  - 'packages/eslint-config-superplexity'
-  - 'packages/tsconfig-superplexity'
+  - 'packages/eslint-config-autoleasenet'
+  - 'packages/tsconfig-autoleasenet'
   - 'tools/*'

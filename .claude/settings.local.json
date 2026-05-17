@@ -15,7 +15,16 @@
       "Bash(mkdir -p \"/c/Users/Administrator/Desktop/AutoLeaseNet/.claude\")",
       "Bash(cp -f \"/c/Users/Administrator/Desktop/Personal/GenAI/Projects Prac/Superplexity/.claude/settings.local.json\" \"/c/Users/Administrator/Desktop/AutoLeaseNet/.claude/settings.local.json\")",
       "Bash(rm -rf \"/c/Users/Administrator/Desktop/Personal/GenAI/Projects Prac/Superplexity\")",
-      "Bash(cp -r \"/c/Users/Administrator/Desktop/Superplexity\" \"/c/Users/Administrator/Desktop/AutoLeaseNet\")"
+      "Bash(cp -r \"/c/Users/Administrator/Desktop/Superplexity\" \"/c/Users/Administrator/Desktop/AutoLeaseNet\")",
+      "Bash(dotnet --version)",
+      "Bash(pnpm --version)",
+      "Bash(pnpm install *)",
+      "Bash(pnpm m *)",
+      "Bash(pnpm build *)",
+      "Bash(docker info *)",
+      "PowerShell(docker --version)",
+      "PowerShell(docker info --format '{{.ServerVersion}}')",
+      "PowerShell($dd1='C:\\\\Program Files\\\\Docker\\\\Docker\\\\resources\\\\bin\\\\docker.exe'; $dd2=\"$env:LOCALAPPDATA\\\\Docker\\\\Docker\\\\resources\\\\bin\\\\docker.exe\"; if \\(Test-Path $dd1\\) { \"Found: $dd1\" } elseif \\(Test-Path $dd2\\) { \"Found: $dd2\" } else { \"Docker Desktop not found in default paths.\" }; Get-Service -Name 'com.docker.service' -ErrorAction SilentlyContinue | Select-Object Name, Status; Get-Process -Name 'Docker Desktop' -ErrorAction SilentlyContinue | Select-Object -First 1 Name, Id)"
     ]
   }
 }

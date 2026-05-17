@@ -7,7 +7,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 // === Logging & Telemetry ===
 // Serilog configured in appsettings; OpenTelemetry hooked up below.
-builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHealthChecks();

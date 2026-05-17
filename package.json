@@ -1,5 +1,5 @@
 {
-  "name": "superplexity",
+  "name": "autoleasenet",
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@9.0.0",
@@ -26,7 +26,7 @@
     "test:dotnet:integration": "dotnet test AutoLeaseNet.sln -c Release --filter \"Category=Integration\"",
     "db:migrate": "dotnet ef database update --project packages/application/AutoLeaseNet.Infrastructure --startup-project services/bff",
     "db:add-migration": "dotnet ef migrations add --project packages/application/AutoLeaseNet.Infrastructure --startup-project services/bff",
-    "openapi:gen": "pnpm --filter @superplexity/contracts run generate",
+    "openapi:gen": "pnpm --filter @autoleasenet/contracts run generate",
     "clean": "turbo clean && find . -name 'bin' -type d -prune -exec rm -rf {} + && find . -name 'obj' -type d -prune -exec rm -rf {} +",
     "prepare": "husky"
   },
