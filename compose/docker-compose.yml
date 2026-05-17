@@ -1,0 +1,46 @@
+name: autoleasenet
+
+services:
+  sql:
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    container_name: autoleasenet-sql
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${SQL_SA_PASSWORD:-LocalDev_P@ssw0rd_2026}
+    ports:
+      - '1433:1433'
+    volumes:
+      - sql-data:/var/opt/mssql
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: autoleasenet-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: autoleasenet-azurite
+    command: 'azurite-blob --blobHost 0.0.0.0 --blobPort 10000 --loose --skipApiVersionCheck'
+    ports:
+      - '10000:10000'
+    volumes:
+      - azurite-data:/data
+    restart: unless-stopped
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: autoleasenet-mailhog
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # Web UI → http://localhost:8025
+    restart: unless-stopped
+
+volumes:
+  sql-data:
+  redis-data:
+  azurite-data:

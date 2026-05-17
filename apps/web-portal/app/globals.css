@@ -1,0 +1,12 @@
+/* Tailwind directives will be added when design.md arrives. Minimal reset for now. */
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}

@@ -1,0 +1,53 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "BFF (.NET Run)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-bff",
+      "program": "${workspaceFolder}/services/bff/bin/Debug/net8.0/AutoLeaseNet.Bff.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/services/bff",
+      "stopAtEntry": false,
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
+        "uriFormat": "%s/swagger"
+      },
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "https://localhost:5001;http://localhost:5000"
+      }
+    },
+    {
+      "name": "Web Portal (Next.js)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@autoleasenet/web-portal", "dev"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "serverReadyAction": {
+        "pattern": "started server on .+, url: (https?://.+)",
+        "uriFormat": "%s",
+        "action": "openExternally"
+      }
+    },
+    {
+      "name": "Customer Portal (Next.js)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@autoleasenet/customer-portal", "dev"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "All (BFF + Web + Customer)",
+      "configurations": ["BFF (.NET Run)", "Web Portal (Next.js)", "Customer Portal (Next.js)"]
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20.11.1'
+  DOTNET_VERSION: '8.0.x'
+  PNPM_VERSION: '9'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  js:
+    name: JS (lint + typecheck + test + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+        continue-on-error: true # until apps + ui have content
+
+      - name: Typecheck
+        run: pnpm typecheck
+        continue-on-error: true # until apps + ui have content
+
+      - name: Test
+        run: pnpm test
+        continue-on-error: true # until test suites exist
+
+      - name: Build
+        run: pnpm build
+        continue-on-error: true # until apps have content
+
+  dotnet:
+    name: .NET (restore + build + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore AutoLeaseNet.sln
+
+      - name: Build
+        run: dotnet build AutoLeaseNet.sln -c Release --no-restore
+
+      - name: Test (unit only — integration tests run separately)
+        run: dotnet test AutoLeaseNet.sln -c Release --no-build --filter "Category!=Integration&Trait!=Integration"
+        continue-on-error: true # until test suites exist
+
+  tajeer-integration:
+    name: Tajeer sandbox integration tests
+    runs-on: ubuntu-latest
+    needs: dotnet
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Run Tajeer integration tests
+        if: ${{ secrets.TAJEER_APPKEY != '' }}
+        env:
+          TAJEER__APPID: ${{ secrets.TAJEER_APPID }}
+          TAJEER__APPKEY: ${{ secrets.TAJEER_APPKEY }}
+          TAJEER__AUTHORIZATION: ${{ secrets.TAJEER_AUTHORIZATION }}
+          TAJEER__BASEURL: 'https://tajeer-stg.api.elm.sa'
+        run: dotnet test AutoLeaseNet.sln -c Release --filter "Trait=Integration"
+
+  infra:
+    name: Infra (Bicep lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-bicep@v1
+      - name: Lint Bicep (if any)
+        run: |
+          if [ -f infra/bicep/main.bicep ]; then
+            bicep lint infra/bicep/main.bicep
+          else
+            echo "No infra/bicep/main.bicep yet — skipping"
+          fi

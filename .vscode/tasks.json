@@ -1,0 +1,47 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-bff",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/services/bff/AutoLeaseNet.Bff.csproj",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "build-all-dotnet",
+      "command": "dotnet",
+      "type": "process",
+      "args": ["build", "${workspaceFolder}/AutoLeaseNet.sln", "/consoleloggerparameters:NoSummary"],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "test-all-dotnet",
+      "command": "dotnet",
+      "type": "process",
+      "args": ["test", "${workspaceFolder}/AutoLeaseNet.sln", "--filter", "Trait!=Integration"],
+      "problemMatcher": "$msCompile",
+      "group": "test"
+    },
+    {
+      "label": "infra-up",
+      "command": "pnpm",
+      "type": "shell",
+      "args": ["infra:up"],
+      "presentation": { "reveal": "always" }
+    },
+    {
+      "label": "infra-down",
+      "command": "pnpm",
+      "type": "shell",
+      "args": ["infra:down"]
+    }
+  ]
+}
