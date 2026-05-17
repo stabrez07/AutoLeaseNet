@@ -24,7 +24,11 @@
       "Bash(docker info *)",
       "PowerShell(docker --version)",
       "PowerShell(docker info --format '{{.ServerVersion}}')",
-      "PowerShell($dd1='C:\\\\Program Files\\\\Docker\\\\Docker\\\\resources\\\\bin\\\\docker.exe'; $dd2=\"$env:LOCALAPPDATA\\\\Docker\\\\Docker\\\\resources\\\\bin\\\\docker.exe\"; if \\(Test-Path $dd1\\) { \"Found: $dd1\" } elseif \\(Test-Path $dd2\\) { \"Found: $dd2\" } else { \"Docker Desktop not found in default paths.\" }; Get-Service -Name 'com.docker.service' -ErrorAction SilentlyContinue | Select-Object Name, Status; Get-Process -Name 'Docker Desktop' -ErrorAction SilentlyContinue | Select-Object -First 1 Name, Id)"
+      "PowerShell($dd1='C:\\\\Program Files\\\\Docker\\\\Docker\\\\resources\\\\bin\\\\docker.exe'; $dd2=\"$env:LOCALAPPDATA\\\\Docker\\\\Docker\\\\resources\\\\bin\\\\docker.exe\"; if \\(Test-Path $dd1\\) { \"Found: $dd1\" } elseif \\(Test-Path $dd2\\) { \"Found: $dd2\" } else { \"Docker Desktop not found in default paths.\" }; Get-Service -Name 'com.docker.service' -ErrorAction SilentlyContinue | Select-Object Name, Status; Get-Process -Name 'Docker Desktop' -ErrorAction SilentlyContinue | Select-Object -First 1 Name, Id)",
+      "PowerShell(sqlcmd -S localhost -E -Q \"IF DB_ID\\('AutoLeaseNet_Dev'\\) IS NULL CREATE DATABASE AutoLeaseNet_Dev; SELECT name, state_desc, collation_name FROM sys.databases WHERE name='AutoLeaseNet_Dev';\")",
+      "PowerShell(Add-Type -AssemblyName 'System.Data'; $cs = \"Server=localhost;Database=AutoLeaseNet_Dev;Trusted_Connection=true;TrustServerCertificate=true;Encrypt=false;Application Name=AutoLeaseNet.Bff\"; $c = New-Object System.Data.SqlClient.SqlConnection $cs; try { $c.Open\\(\\); \"Connected. ServerVersion=$\\($c.ServerVersion\\); DB=$\\($c.Database\\); State=$\\($c.State\\)\" } catch { \"FAILED: $\\($_.Exception.Message\\)\" } finally { if \\($c.State -eq 'Open'\\) { $c.Close\\(\\) } })",
+      "Bash(git check-ignore *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
