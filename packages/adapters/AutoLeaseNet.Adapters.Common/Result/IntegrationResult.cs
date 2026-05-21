@@ -1,45 +1,53 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace AutoLeaseNet.Adapters.Common.Result;
 
 /// <summary>
-/// Shared discriminated-union result for all Pattern B adapters (Tajeer, ZATCA, D365, etc.).
-/// Per doc 04 §15 Q3 — standardize across adapters; vendor-specific errors extend IntegrationError.
+/// Shared result type for all Pattern B adapters (Tajeer, ZATCA, D365, etc.).
+/// Per Spec 04 §15 Q3 — standardized across adapters.
+///
+/// Carries success value OR error metadata (code, message, transient flag, correlation id).
+/// IsTransient distinguishes retryable errors (5xx, timeout, network) from permanent ones
+/// (4xx business rule, validation).
 /// </summary>
-public abstract record IntegrationResult<T>
+/// <typeparam name="T">Payload type for successful results.</typeparam>
+[SuppressMessage(
+    "Microsoft.Design",
+    "CA1000:DoNotDeclareStaticMembersOnGenericTypes",
+    Justification = "Result<T>.Success(value) / Failure(...) is the idiomatic factory pattern for generic result types (LanguageExt, FluentResults). A non-generic helper class would obscure the payload type at call sites.")]
+public sealed record IntegrationResult<T>
 {
-    public sealed record Ok(T Value) : IntegrationResult<T>;
-    public sealed record BusinessError(IntegrationError Error) : IntegrationResult<T>;
-    public sealed record SystemError(string Message, Exception? Exception = null) : IntegrationResult<T>;
+    public bool IsSuccess { get; private init; }
+    public T? Value { get; private init; }
+    public string? ErrorCode { get; private init; }
+    public string? ErrorMessage { get; private init; }
+    public bool IsTransient { get; private init; }
+    public string? CorrelationId { get; private init; }
 
-    public bool IsOk => this is Ok;
-    public T? ValueOrDefault => this is Ok ok ? ok.Value : default;
-
-    public IntegrationResult<TOut> Map<TOut>(Func<T, TOut> mapper) => this switch
+    /// <summary>Factory: successful result carrying a value.</summary>
+    public static IntegrationResult<T> Success(T value, string? correlationId = null) => new()
     {
-        Ok ok => new IntegrationResult<TOut>.Ok(mapper(ok.Value)),
-        BusinessError be => new IntegrationResult<TOut>.BusinessError(be.Error),
-        SystemError se => new IntegrationResult<TOut>.SystemError(se.Message, se.Exception),
-        _ => throw new InvalidOperationException("Unknown IntegrationResult variant")
+        IsSuccess = true,
+        Value = value,
+        CorrelationId = correlationId,
+    };
+
+    /// <summary>Factory: failed result with explicit transient classification.</summary>
+    public static IntegrationResult<T> Failure(
+        string errorCode,
+        string errorMessage,
+        bool isTransient = false,
+        string? correlationId = null) => new()
+    {
+        IsSuccess = false,
+        ErrorCode = errorCode,
+        ErrorMessage = errorMessage,
+        IsTransient = isTransient,
+        CorrelationId = correlationId,
     };
 }
 
-/// <summary>Base for vendor-specific errors. Tajeer/ZATCA/etc. extend with their own error codes.</summary>
-public abstract record IntegrationError(string Code, string RawMessage, LocalizedMessage UserMessage, ErrorCategory Category);
-
-public sealed record LocalizedMessage(string Ar, string En);
-
-public enum ErrorCategory
-{
-    Validation,
-    BusinessRule,
-    Authorization,
-    ExternalDependency,
-    SystemError,
-    NotFound,
-    Conflict,
-    RateLimited
-}
-
-/// <summary>Marker type for void-returning operations.</summary>
+/// <summary>Marker type for void-returning operations (use IntegrationResult&lt;Unit&gt;).</summary>
 public sealed record Unit
 {
     public static readonly Unit Value = new();

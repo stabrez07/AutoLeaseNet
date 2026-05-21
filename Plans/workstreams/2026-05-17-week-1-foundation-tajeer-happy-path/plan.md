@@ -79,16 +79,16 @@ A working `POST /api/v1/dev/save-contract` endpoint running locally (Docker Comp
 
 ### Day 1 — Adapters.Common foundation (TDD)
 
-- [ ] **T1.1** RED: write failing test `IntegrationResult_Success_carries_value`. **Verify**: `dotnet test` shows 1 failing.
-- [ ] **T1.2** GREEN: implement `IntegrationResult<T>` (`Success`, `Failure`, `IsTransient`, `ErrorCode`, `CorrelationId`). **Verify**: test passes.
-- [ ] **T1.3** RED + GREEN: `IntegrationResult_Failure_distinguishes_transient_vs_permanent`. **Verify**: 2 tests pass.
-- [ ] **T1.4** RED: write failing test `PiiMasking_masks_id_number_keeps_last_4`. **Verify**: 1 failing.
-- [ ] **T1.5** GREEN: implement `PiiMasking.Mask(string fieldName, string value)` covering ID number, IBAN, license. **Verify**: test passes; add cases for IBAN + license.
-- [ ] **T1.6** Add Polly v8 package ref to `Adapters.Common.csproj`. **Verify**: `dotnet restore` clean.
-- [ ] **T1.7** Implement `PollyPipelineFactory.Build(adapterName, options)` with retry (exponential + jitter), timeout, circuit breaker. **Verify**: unit test asserts retries on `HttpRequestException`, no retry on `400`.
-- [ ] **T1.8** Add `IClock` + `SystemClock` (UTC). **Verify**: unit test injects `FakeClock`, asserts deterministic timestamps.
-- [ ] **T1.9** Add `ICredentialProvider` interface + `DevEnvironmentCredentialProvider` reading from `appsettings.Development.json` / user-secrets (Key Vault impl deferred). **Verify**: unit test reads a known secret from in-memory config.
-- [ ] **T1.10** REFACTOR: extract `ResultExtensions.Bind` / `Map` helpers if call sites duplicate. **Verify**: tests still green.
+- [x] **T1.1** RED: write failing test `IntegrationResult_Success_carries_value`. **Verify**: `dotnet test` shows 1 failing. ✅ 2026-05-18.
+- [x] **T1.2** GREEN: implement `IntegrationResult<T>` (`Success`, `Failure`, `IsTransient`, `ErrorCode`, `CorrelationId`). **Verify**: test passes. ✅ 2026-05-18.
+- [x] **T1.3** RED + GREEN: `IntegrationResult_Failure_distinguishes_transient_vs_permanent`. **Verify**: 2 tests pass. ✅ 2026-05-18.
+- [x] **T1.4** RED: write failing test `PiiMasking_masks_id_number_keeps_last_4`. **Verify**: 1 failing. ✅ 2026-05-18.
+- [x] **T1.5** GREEN: implement `PiiMasking.Mask(string fieldName, string value)` covering ID number, IBAN, license. **Verify**: test passes; add cases for IBAN + license. ✅ 2026-05-18 (added 4 cases incl. null/empty + short-value defensive + unknown-field).
+- [x] **T1.6** Add Polly v8 package ref to `Adapters.Common.csproj`. **Verify**: `dotnet restore` clean. ✅ 2026-05-18 (was already referenced from scaffold; bumped to 8.4.2).
+- [x] **T1.7** Implement `PollyPipelineFactory.Build(adapterName, options)` with retry (exponential + jitter), timeout, circuit breaker. **Verify**: unit test asserts retries on `HttpRequestException`, no retry on `400`. ✅ 2026-05-18 (3 tests: HttpRequestException retries, 400 no-retry, 500 retries).
+- [x] **T1.8** Add `IClock` + `SystemClock` (UTC). **Verify**: unit test injects `FakeClock`, asserts deterministic timestamps. ✅ 2026-05-18 (IClock lives in `Application.Ports/Time/` per Spec 04; Common.Tests references it; 3 tests).
+- [x] **T1.9** Add `ICredentialProvider` interface + `DevEnvironmentCredentialProvider` reading from `appsettings.Development.json` / user-secrets (Key Vault impl deferred). **Verify**: unit test reads a known secret from in-memory config. ✅ 2026-05-18 (5 tests; `KeyVaultCredentialProvider` also updated to implement the new interface).
+- [x] ~~**T1.10** REFACTOR: extract `ResultExtensions.Bind` / `Map` helpers if call sites duplicate.~~ **Skipped 2026-05-18** — zero call sites for `IntegrationResult` yet (adapters are stubs); no duplication to extract. Will revisit during Day 3 (Tajeer auth + smoke call) when first real consumer appears.
 
 ### Day 2 — TenancyMiddleware (dev-stub mode) + BFF skeleton
 

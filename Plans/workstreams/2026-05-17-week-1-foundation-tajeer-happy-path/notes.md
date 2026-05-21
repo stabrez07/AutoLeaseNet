@@ -74,3 +74,36 @@ Docker Desktop install ran into trouble. User confirmed local SQL Server 2019 De
 | Root `package.json` name + filter named `superplexity` | Low | Renamed to `autoleasenet` |
 | Empty leftover dirs `packages/eslint-config-superplexity/`, `packages/tsconfig-superplexity/` | Low | Left in place (not git-tracked, harmless) |
 | Docker Desktop not installed | **High** | Resolved by substitution: local SQL Server 2019 (Windows auth) + `Adapters.Cache.InMemory`; Azurite/MailHog deferred (not needed this week) |
+
+---
+
+## Day 1 — 2026-05-18 (Adapters.Common foundation, TDD)
+
+All ten T1.x tasks worked end-to-end. Test count went from 0 → 20 in `AutoLeaseNet.Adapters.Common.Tests`. Full sweep on `dotnet build -warnaserror` clean (0 warnings, 0 errors); 21/21 tests green across the solution.
+
+### Decisions
+
+- **IntegrationResult redesigned** from the scaffolded discriminated-union (Ok/BusinessError/SystemError + Map) to the plan-required Result type (Success/Failure factories + IsTransient/ErrorCode/CorrelationId properties). Safe — no callers existed yet. Added `[SuppressMessage("CA1000")]` with justification: static factories on generic Result types are idiomatic (see LanguageExt, FluentResults).
+- **IClock kept in `Application.Ports/Time/`** rather than moving to `Adapters.Common`. Rationale: domain/application code is the primary consumer; ports live in Application.Ports per Spec 04. Common.Tests references Application.Ports for the FakeClock test.
+- **`KeyVaultCredentialProvider` updated to implement the new `ICredentialProvider`** — same shape as `DevEnvironmentCredentialProvider`, nullable returns for "not found" (callers decide fatality).
+- **T1.10 skipped** — no call sites for `IntegrationResult` yet (adapters are stubs); refactoring nothing prematurely. Re-evaluate Day 3 when Tajeer adapter starts using it.
+
+### New drift fixed
+
+| Drift | Severity | Resolution |
+|---|---|---|
+| CA1000 on `IntegrationResult<T>.Success/Failure` | Low | Per-type `[SuppressMessage]` with justification (idiomatic Result pattern) |
+| CA1859 on test helper returning interface | Low | Per-method `[SuppressMessage]` — tests intentionally exercise the port surface |
+
+### Verification
+
+```
+dotnet build AutoLeaseNet.sln  → 0 warnings, 0 errors
+dotnet test  AutoLeaseNet.sln  → 21 passed / 0 failed
+  AutoLeaseNet.Adapters.Common.Tests : 20 (IntegrationResult ×2, PiiMasking ×6, PollyPipeline ×3, Clock ×3, DevEnvironmentCredentialProvider ×5, IntegrationResult lifecycle ×1)
+  AutoLeaseNet.Adapters.Tajeer.Tests : 1 (InMemory smoke)
+```
+
+### Next pickup
+
+Day 2 — TenancyMiddleware (dev-stub mode) + BFF skeleton. First task T2.1: `DevJwtStubHandler` reading tenant claims from `X-Dev-Tenant-*` headers (Development only). The `ITenantContext` port already exists in `Application.Ports/Tenancy/` from scaffolding — just need the BFF-side handler + middleware + tests.
