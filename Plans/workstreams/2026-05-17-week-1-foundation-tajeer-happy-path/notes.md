@@ -203,3 +203,48 @@ dotnet test  AutoLeaseNet.sln --settings .runsettings  → 63 passed / 0 failed 
 ### Next pickup
 
 Day 4 — Tajeer `SaveContract` adapter (DTOs V9.7 → `ITajeerClient.SaveContractAsync` → `IntegrationResult<SaveContractResponse>`). Follow the same RED → GREEN cadence; wire under `AddTajeer` alongside `TajeerLookupClient`.
+
+---
+
+## Day 4 — Tajeer SaveContract adapter (2026-05-23)
+
+### What landed
+
+| Task | Status | Detail |
+|---|---|---|
+| T4.1 — `SaveContractRequest` DTO | ✅ | V9.7 shape from Spec 03 §6.2 — top-level + `RenterDto` + `PaymentDetailsDto` + `VehicleDetailsDto` + 6 optional nested DTOs in `OptionalRequestDtos.cs`. Tajeer's documented misspelling `addtionalServices` preserved (asserted on the wire by test). |
+| T4.2 — `SaveContractResponse` + envelopes | ✅ | `SaveContractResponse` + `PaymentSummary` per Spec 03 §6.3. New `TajeerErrorEnvelope` carries `errorKey` / `errorCode` / `rawMessage` / `message` (Tajeer uses both) for defensive parsing. |
+| T4.3 + T4.4 — RED → GREEN `TajeerContractClient.SaveAsync` | ✅ | 6 unit tests via `StubHttpMessageHandler` + `StubHttpClientFactory`: happy 200, JSON body shape (incl. typo preservation), 4xx vendor error, **200-with-errorKey vendor error**, 5xx transient, network exception transient. POST to `/api/contracts/save` (canonical path TBC at smoke). |
+| T4.5 — Vendor error mapping | ✅ | `errorCode = tajeer.vendor.{errorKey}`, `isTransient = false`; defensive — applied even on 200 OK per Spec 03 §8.1 Q4. |
+| T4.6 — Polly retry assertion | ✅ | `TajeerContractClientResilienceTests` (3 tests). Uses a parallel zero-delay retry pipeline that mirrors `ResiliencePolicies.DefaultHttpPipeline` predicate so the run is sub-millisecond. Asserts: retries 3 times on 503 then `IsTransient=true`, recovers within retry budget when upstream returns 200, does NOT retry on 4xx business errors. |
+| T4.7 — InMemory sibling | ✅ | `InMemoryTajeerContractClient` in `Adapters.Tajeer.InMemory` — default factory returns deterministic Success (contract number `1_000_000_001+seq`, 15% VAT, in-memory issuance URL); injectable factory for failure simulation; captures every call. 4 unit tests. |
+| T4.8 — Mode switch | ✅ | `TajeerOptions.Mode` + `TajeerMode { Real, InMemory }` enum. `AddInMemoryTajeerContracts()` uses `IServiceCollection.Replace` to override the real `ITajeerContractClient` registration. `AddTajeerWithModeSwitch(section)` is the one-line composition helper. **Defaults to `Real`** when `Mode` is missing — Production-safe. 3 registration tests. |
+
+### Design decisions
+
+- **Pattern B sub-client lives in `Adapters.Tajeer`**: `ITajeerContractClient` + `TajeerContractClient` are colocated in the vendor adapter package (not in `Application.Ports`). The existing `ITajeerClient` root facade with sub-interfaces is kept for the older legacy InMemory wiring — new sub-clients (Contracts, Lookups, Webhooks, Execution) are individually registered with their own port interfaces. This matches the pragmatic shape established by `TajeerLookupClient` on Day 3.
+- **Defensive vendor-error parsing**: every response body is tried as `TajeerErrorEnvelope` first regardless of HTTP status. A 200 OK with `errorKey` is still a `Failure` (Spec 03 §8.1 Q4 — Tajeer occasionally does this). Bodies that aren't JSON fall through silently to the HTTP-status path.
+- **Resilience test fidelity vs. speed**: production pipeline (in `ResiliencePolicies.DefaultHttpPipeline`) uses exponential backoff base 2s + jitter, giving ~7–21s of retries. The retry test wires a zero-delay parallel pipeline with the same `ShouldHandle` predicate so the assertion runs in <1ms. Trade-off documented inline in `TajeerContractClientResilienceTests.cs`.
+- **Mode switch defaults to `Real`**: `ReadMode` falls back to `TajeerMode.Real` when `Tajeer:Mode` is missing or unparseable. Same fail-loud-on-Production posture as `DevJwtStubHandler` (Day 2): Production must opt-in to a fake, never accidentally fall into one.
+
+### Drift fixed during Day 4
+
+| Item | Severity | Resolution |
+|---|---|---|
+| `DefaultSaveResponse` referencing instance `_saveCalls` from `static` context | Low | Refactored to accept `sequenceNumber` parameter; eliminates static-instance crossover. |
+| `Adapters.Tajeer.InMemory.csproj` missing `Configuration.Abstractions` + `Options` | Low | Added to the package's `<ItemGroup>` so `IConfigurationSection` and `IOptions<TajeerOptions>` resolve cleanly. |
+
+### Verification
+
+```
+dotnet build AutoLeaseNet.sln                          → 0 warnings, 0 errors
+dotnet test  AutoLeaseNet.sln --settings .runsettings  → 79 passed / 0 failed (smoke excluded)
+  AutoLeaseNet.Adapters.Common.Tests     : 20 (unchanged)
+  AutoLeaseNet.Adapters.Tajeer.Tests     : 37 (was 21; +6 ContractClient, +3 Resilience, +4 InMemoryContract, +3 ModeRegistration)
+  AutoLeaseNet.Bff.Tests                 : 18 (unchanged)
+  AutoLeaseNet.Infrastructure.Tests      : 4  (unchanged)
+```
+
+### Next pickup
+
+Day 5 — BFF `POST /api/v1/dev/save-contract` endpoint. T5.1 begins with the `Application.SaveContractCommand` + handler that calls `ITajeerContractClient` and persists a minimal `Lease` row with `Status = PendingIssuance`. EF Core migration `Init_Lease` follows in T5.3.

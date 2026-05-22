@@ -114,14 +114,14 @@ A working `POST /api/v1/dev/save-contract` endpoint running locally (Docker Comp
 
 ### Day 4 — Tajeer SaveContract adapter
 
-- [ ] **T4.1** Define `SaveContractRequest` DTO matching V9.7 (renter info, vehicle ref, branch, contract dates, rent policy, payment). **Verify**: compiles; XML doc comments cite V9.7 section.
-- [ ] **T4.2** Define `SaveContractResponse` DTO (`ContractNumber`, `IssuanceUrl`, `ExpiryAt`, error envelope). **Verify**: compiles.
-- [ ] **T4.3** RED: write failing test `TajeerContractClient_SaveContract_maps_request_and_parses_response` using `MockHttpMessageHandler`. **Verify**: 1 failing.
-- [ ] **T4.4** GREEN: implement `TajeerContractClient.SaveContractAsync(SaveContractRequest)` returning `IntegrationResult<SaveContractResponse>`. **Verify**: test passes.
-- [ ] **T4.5** RED + GREEN: error-mapping test — 4xx with vendor error code → `IntegrationResult.Failure(transient: false, errorCode)`. **Verify**: passes.
-- [ ] **T4.6** RED + GREEN: transient test — 503 → `IntegrationResult.Failure(transient: true)` and Polly retries N times. **Verify**: passes; retry count asserted via test sink.
-- [ ] **T4.7** Sibling `Adapters.Tajeer.InMemory.InMemoryTajeerContractClient` returning canned `SaveContractResponse`. **Verify**: contract test from `Adapters.Tajeer.Tests` runs against both real-mock and InMemory implementations.
-- [ ] **T4.8** Register both implementations behind `ITajeerContractClient` port; selection via `Tajeer:Mode` config (`Real` / `InMemory`). **Verify**: integration test asserts mode switching.
+- [x] **T4.1** Define `SaveContractRequest` DTO matching V9.7 (renter info, vehicle ref, branch, contract dates, rent policy, payment). **Verify**: compiles; XML doc comments cite V9.7 section. ✅ 2026-05-23 (`Contracts/Dtos/SaveContractRequest.cs` + RenterDto / PaymentDetailsDto / VehicleDetailsDto / OptionalRequestDtos.cs; Tajeer's `addtionalServices` misspelling preserved per Spec 03 §6.2 note).
+- [x] **T4.2** Define `SaveContractResponse` DTO (`ContractNumber`, `IssuanceUrl`, `ExpiryAt`, error envelope). **Verify**: compiles. ✅ 2026-05-23 (`Contracts/Dtos/SaveContractResponse.cs` with `PaymentSummary`; `Contracts/Dtos/TajeerErrorEnvelope.cs` for defensive vendor-error parsing).
+- [x] **T4.3** RED: write failing test `TajeerContractClient_SaveContract_maps_request_and_parses_response` using `MockHttpMessageHandler`. **Verify**: 1 failing. ✅ 2026-05-23 (`TajeerContractClientTests` initially failed on `NotImplementedException`).
+- [x] **T4.4** GREEN: implement `TajeerContractClient.SaveContractAsync(SaveContractRequest)` returning `IntegrationResult<SaveContractResponse>`. **Verify**: test passes. ✅ 2026-05-23 (POST to `/api/contracts/save`, body camelCase JSON with typo preserved, parsed response).
+- [x] **T4.5** RED + GREEN: error-mapping test — 4xx with vendor error code → `IntegrationResult.Failure(transient: false, errorCode)`. **Verify**: passes. ✅ 2026-05-23 (defensive parsing also handles 200-with-errorKey per Spec 03 §8.1 Q4; errorCode `tajeer.vendor.{errorKey}`).
+- [x] **T4.6** RED + GREEN: transient test — 503 → `IntegrationResult.Failure(transient: true)` and Polly retries N times. **Verify**: passes; retry count asserted via test sink. ✅ 2026-05-23 (`TajeerContractClientResilienceTests` — 3 tests: retries 3 times on 503 then transient failure, recovers on first 200, does NOT retry on 4xx; uses zero-delay parallel pipeline so sub-millisecond).
+- [x] **T4.7** Sibling `Adapters.Tajeer.InMemory.InMemoryTajeerContractClient` returning canned `SaveContractResponse`. **Verify**: contract test from `Adapters.Tajeer.Tests` runs against both real-mock and InMemory implementations. ✅ 2026-05-23 (`InMemory/Contracts/InMemoryTajeerContractClient.cs` with default deterministic factory + injectable factory for failure simulation; 4 tests).
+- [x] **T4.8** Register both implementations behind `ITajeerContractClient` port; selection via `Tajeer:Mode` config (`Real` / `InMemory`). **Verify**: integration test asserts mode switching. ✅ 2026-05-23 (`TajeerOptions.Mode` + `TajeerMode` enum; `AddInMemoryTajeerContracts()` replaces the real reg; `AddTajeerWithModeSwitch()` reads `Tajeer:Mode` and dispatches; defaults to `Real` when missing — Production-safe; 3 registration tests).
 
 ### Day 5 — BFF `dev/save-contract` endpoint + first staging Save
 

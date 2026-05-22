@@ -52,5 +52,27 @@ public sealed class TajeerOptions
     public bool IsEnabled { get; init; } = true;
     public bool IsSandbox { get; init; }
 
+    /// <summary>
+    /// Adapter implementation to register for sub-clients like
+    /// <see cref="Contracts.ITajeerContractClient"/>. <see cref="TajeerMode.Real"/> wires
+    /// the HTTP-backed client; <see cref="TajeerMode.InMemory"/> wires the in-memory fake.
+    /// Defaults to <see cref="TajeerMode.Real"/> so Production stays safe-by-default.
+    /// </summary>
+    public TajeerMode Mode { get; init; } = TajeerMode.Real;
+
     public TimeSpan RequestTimeout => TimeSpan.FromSeconds(TimeoutSeconds);
+}
+
+/// <summary>
+/// Selects which <see cref="Contracts.ITajeerContractClient"/> implementation is bound at
+/// composition time. See Spec 04 §8 — every Pattern B adapter ships a sibling InMemory
+/// for tests and offline dev.
+/// </summary>
+public enum TajeerMode
+{
+    /// <summary>Real HTTP client talking to Tajeer Rabet (staging or prod).</summary>
+    Real = 0,
+
+    /// <summary>Deterministic in-memory fake — no network calls.</summary>
+    InMemory = 1,
 }

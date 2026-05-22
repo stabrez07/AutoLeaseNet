@@ -1,6 +1,7 @@
 using AutoLeaseNet.Adapters.Common.Resilience;
 using AutoLeaseNet.Adapters.Tajeer.Authentication;
 using AutoLeaseNet.Adapters.Tajeer.Configuration;
+using AutoLeaseNet.Adapters.Tajeer.Contracts;
 using AutoLeaseNet.Adapters.Tajeer.Lookups;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -62,6 +63,12 @@ public static class ServiceCollectionExtensions
             });
 
         services.AddScoped<TajeerLookupClient>();
+
+        // Real Tajeer HTTP impl is the default registration for ITajeerContractClient.
+        // Composition roots can override via AddInMemoryTajeerContracts() — see
+        // AutoLeaseNet.Adapters.Tajeer.InMemory or the AddTajeerWithModeSwitch helper.
+        services.AddScoped<TajeerContractClient>();
+        services.AddScoped<ITajeerContractClient>(sp => sp.GetRequiredService<TajeerContractClient>());
 
         return services;
     }
