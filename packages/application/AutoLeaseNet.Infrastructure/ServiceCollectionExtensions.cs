@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using AutoLeaseNet.Application.Ports.Persistence;
 using AutoLeaseNet.Application.Ports.Time;
 using AutoLeaseNet.Infrastructure.Persistence;
+using AutoLeaseNet.Infrastructure.Persistence.Repositories;
 
 namespace AutoLeaseNet.Infrastructure;
 
@@ -30,7 +31,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUnitOfWork>(sp => new EfUnitOfWork(sp.GetRequiredService<AutoLeaseNetDbContext>()));
         services.AddSingleton<IClock, SystemClock>();
 
-        // Repository registrations will be added per aggregate as Phase 1 features land.
+        services.AddScoped<ILeaseRepository, EfLeaseRepository>();
 
         return services;
     }

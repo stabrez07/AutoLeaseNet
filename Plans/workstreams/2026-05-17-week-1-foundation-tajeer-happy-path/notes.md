@@ -248,3 +248,127 @@ dotnet test  AutoLeaseNet.sln --settings .runsettings  → 79 passed / 0 failed 
 ### Next pickup
 
 Day 5 — BFF `POST /api/v1/dev/save-contract` endpoint. T5.1 begins with the `Application.SaveContractCommand` + handler that calls `ITajeerContractClient` and persists a minimal `Lease` row with `Status = PendingIssuance`. EF Core migration `Init_Lease` follows in T5.3.
+
+---
+
+## Day 5 — BFF dev/save-contract endpoint + first staging Save (2026-05-23)
+
+### What landed
+
+| Task | Status | Detail |
+|---|---|---|
+| T5.2 — `Domain.Leases.Lease` + `LeaseStatus` | ✅ | 9-state enum mirroring Tajeer codes (Spec 03 §7). Lease aggregate has `CreatePending` factory + idempotent `MarkIssued` transition. `LeaseConfiguration` maps to `Leases` table with `(TenantId, Status)` index + unique filtered index on `(TenantId, TajeerContractNumber)` so the same Tajeer number can't repeat within a tenant. Row-Level Security policy lands Week 2 Day 9. |
+| T5.1 — `Application.SaveContractCommand` + handler | ✅ | MediatR `IRequest<SaveContractCommandResult>`. Handler glues idempotency replay → Tajeer call → Lease persist → result cache. `[LoggerMessage]` source generators (event IDs 5001-5003). New `ILeaseRepository` port + `EfLeaseRepository` impl. New `Application.Tests` project (5 tests using EF Core InMemory + `InMemoryTajeerContractClient` + `InMemoryIdempotencyStore`): happy persist, vendor error → no row, idempotency replay → single Tajeer call, cross-tenant key namespace isolation, empty tenant throws. |
+| T5.3 — EF migration `Init_Lease` | ✅ | `Persistence/AutoLeaseNetDbContextFactory.cs` design-time factory reads `AUTOLEASENET_MIGRATIONS_CONNECTION` env var → falls back to local SQL (`Server=localhost;Database=AutoLeaseNet_Dev;Integrated Security=true`). Local tool manifest pins `dotnet-ef 8.0.5` (matches our `net8.0` TFM; global tool was 10.0). Migration `Persistence/Migrations/20260522232532_Init_Lease.cs` creates `Leases` + `__EFMigrationsHistory`. |
+| T5.4 — Apply migration to local SQL | ✅ | `dotnet tool run dotnet-ef database update` → `Applying migration '20260522232532_Init_Lease'. Done.` Verified via `sqlcmd -E -d AutoLeaseNet_Dev -Q "SELECT MigrationId FROM __EFMigrationsHistory"`. |
+| T5.5 — BFF `POST /api/v1/dev/save-contract` | ✅ | Wired in `services/bff/Endpoints/DevEndpoints.cs` under the existing dev group, `RequireAuthorization()`. Missing `Idempotency-Key` → `400 Problem`; vendor business error → `422`; transient infra failure → `503`; success → `202 Accepted` with `{ leaseId, tajeerContractNumber, issuanceUrl }`. New `SaveContractEndpointTests` (3 tests via `WebApplicationFactory<Program>` with EF InMemory + shared `InMemoryTajeerContractClient`). |
+| T5.6 — Idempotency replay | ✅ | Same `Idempotency-Key` returns byte-identical JSON and `Tajeer.SaveCalls.Count == 1` (no second vendor call). Backed by the existing `InMemoryIdempotencyStore` registered via `AddInMemoryCache()` in `Program.cs`. Per Spec 03 §10, TTL = 24h, key namespaced as `tenant:{guid}:save-contract:{client-key}` so cross-tenant collisions are impossible. |
+| T5.7 — Real staging Save | ⏳ awaiting manual run | The BFF needs real Tajeer credentials (Spec 03 §4.1) plus `Tajeer:Mode=Real` to talk to Rabet staging. Steps below; placeholder result block under T5.8. |
+| T5.8 — Notes template | ✅ scaffold | Placeholder block below — fill in after the first successful staging Save. |
+
+### How to do the first real staging Save (T5.7)
+
+```pwsh
+# 1. Put real Tajeer staging creds in BFF user-secrets (NOT in appsettings.Development.json — it's tracked).
+cd services\bff
+dotnet user-secrets set "Tajeer:AppId" "<staging-app-id>"
+dotnet user-secrets set "Tajeer:AppKey" "<staging-app-key>"
+dotnet user-secrets set "Tajeer:AuthorizationToken" "Basic <staging-base64>"
+dotnet user-secrets set "Tajeer:BranchId" "<your branch>"
+dotnet user-secrets set "Tajeer:Mode" "Real"
+
+# 2. Start the BFF locally.
+cd ..\..
+dotnet run --project services\bff\AutoLeaseNet.Bff.csproj
+# (BFF listens on http://localhost:5000 / https://localhost:5001 by default.)
+
+# 3. POST a saved-known-good Tajeer V9.7 body (replace IDs with values from your staging tenant).
+$body = @{
+  customerId = $null
+  request = @{
+    renter = @{
+      personAddress = "Riyadh, Olaya"
+      mobile        = "05XXXXXXXX"
+      idTypeCode    = 1
+      idNumber      = 1234567890
+    }
+    paymentDetails = @{ paymentMethodCode = 1; rentAmount = 200; paidAmount = 50 }
+    vehicleDetails = @{ vehicleId = <staging vehicle id> }
+    workingBranchId   = <branch>
+    rentPolicyId      = <staging rent policy>
+    contractStartDate = "2026-05-23T10:00"
+    contractEndDate   = "2026-05-25T10:00"
+    receiveBranchId   = <branch>
+    returnBranchId    = <branch>
+    contractTypeCode  = 1
+    operatorId        = <staging operator id>
+  }
+} | ConvertTo-Json -Depth 10
+
+Invoke-RestMethod `
+  -Uri  "https://localhost:5001/api/v1/dev/save-contract" `
+  -Method POST `
+  -Headers @{
+    "X-Dev-Tenant-Id"  = "00000000-0000-0000-0000-000000000001"
+    "X-Dev-User-Type"  = "InternalStaff"
+    "Idempotency-Key"  = ([Guid]::NewGuid().ToString("N"))
+    "Content-Type"     = "application/json"
+  } `
+  -Body $body `
+  -SkipCertificateCheck
+```
+
+**Expected**: `202 Accepted` with `leaseId`, `tajeerContractNumber`, and `issuanceURL` from real Tajeer. Verify the local row landed:
+
+```pwsh
+sqlcmd -S localhost -E -d AutoLeaseNet_Dev -Q "SELECT TOP 5 Id, TenantId, TajeerContractNumber, Status, IssuanceUrl FROM Leases ORDER BY CreatedAtUtc DESC"
+```
+
+`Status = 2` (PendingIssuance) is the success signal — Tajeer's webhook later (Day 6) flips it to `Active`.
+
+### T5.8 placeholder — paste PII-masked staging Save result here
+
+> Replace this block with the masked response after the first staging Save. Use `PiiMasking.Mask("idNumber", value)` (keeps last 4) for any echoed renter identifiers. Strip the `Authorization`/`App-id`/`App-key` headers — never paste those.
+
+```text
+[YYYY-MM-DDTHH:MM:SSZ] POST /api/v1/dev/save-contract → 202 Accepted
+Idempotency-Key (sent): <opaque>
+Request (masked):
+  renter.mobile        = ******1234
+  renter.idNumber      = ******7890
+  vehicleDetails.vehicleId = <int>
+  contractStartDate    = YYYY-MM-DDTHH:mm
+  contractEndDate      = YYYY-MM-DDTHH:mm
+Response:
+  leaseId              = <guid>
+  tajeerContractNumber = <int>
+  issuanceUrl          = https://tajeerstg.logisti.sa/#/public-contract/<n>/<masked-token>
+Local row:
+  Leases.Status = 2 (PendingIssuance)
+```
+
+### Drift fixed during Day 5
+
+| Item | Severity | Resolution |
+|---|---|---|
+| Global `dotnet-ef` is 10.0 — targets net10 framework which we don't have | Med | Created `.config/dotnet-tools.json` and installed local `dotnet-ef 8.0.5` matching our `net8.0` TFM. Run migrations via `dotnet tool run dotnet-ef …`. |
+| EF-generated migration code triggers CA1707 (underscore) + CA1861 (array literals) + CA1062 | Low | Project-level `NoWarn` in `AutoLeaseNet.Infrastructure.csproj` covering generated migration patterns. |
+| `TajeerOptions.ValidateOnStart()` blows up existing BFF tests after wiring `AddTajeerWithModeSwitch` in `Program.cs` | Med | Added complete dummy Tajeer values to `appsettings.Development.json` (Mode=InMemory so they're never used over the wire). The Staging-env test injects the same dummies inline because non-Development envs skip the Development settings file. |
+| CA1725 on MediatR `Handle` parameter names | Low | Renamed to `request` / `cancellationToken` and aliased locally for body clarity. |
+| CA1512 on manual `throw new ArgumentOutOfRangeException` | Low | Switched to `ArgumentOutOfRangeException.ThrowIfNegativeOrZero`. |
+
+### Verification
+
+```
+dotnet build AutoLeaseNet.sln                          → 0 warnings, 0 errors
+dotnet test  AutoLeaseNet.sln --settings .runsettings  → 87 passed / 0 failed (smoke excluded)
+  AutoLeaseNet.Adapters.Common.Tests     : 20 (unchanged)
+  AutoLeaseNet.Adapters.Tajeer.Tests     : 37 (unchanged)
+  AutoLeaseNet.Bff.Tests                 : 21 (was 18; +3 SaveContractEndpoint)
+  AutoLeaseNet.Infrastructure.Tests      : 4  (unchanged)
+  AutoLeaseNet.Application.Tests (new)   : 5  (SaveContractCommandHandler — happy, vendor error, replay, tenant namespace, empty tenant)
+```
+
+### Next pickup
+
+Day 6 — Tajeer webhook receiver. T6.1 begins with the `WebhookLog` entity + migration. T6.2 ships the `/api/v1/webhooks/tajeer` endpoint. T6.3 adds HMAC signature verification. End-to-end happy path (T6.8) chains Day 5's `POST /dev/save-contract` → wait for the real webhook → assert `Lease.Status = Active`.

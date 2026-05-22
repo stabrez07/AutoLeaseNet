@@ -32,7 +32,8 @@
       "Bash(cd \"/c/Users/Administrator/Desktop/AutoLeaseNet\" && \\\\ *)",
       "PowerShell(Set-Location \"C:\\\\Users\\\\Administrator\\\\Desktop\\\\AutoLeaseNet\"; Write-Host \"=== Polly refs in Adapters.Common.csproj ===\"; Select-String -Path \"packages/adapters/AutoLeaseNet.Adapters.Common/AutoLeaseNet.Adapters.Common.csproj\" -Pattern \"Polly\" | ForEach-Object { $_.Line.Trim\\(\\) }; Write-Host \"\"; Write-Host \"=== Polly versions centrally pinned ===\"; Select-String -Path \"Directory.Packages.props\" -Pattern \"Polly\" | ForEach-Object { $_.Line.Trim\\(\\) }; Write-Host \"\"; Write-Host \"=== Restore check \\(T1.6 verification\\) ===\"; dotnet restore packages/adapters/AutoLeaseNet.Adapters.Common/AutoLeaseNet.Adapters.Common.csproj 2>&1 | Select-Object -Last 3)",
       "PowerShell($env:SQLCMDPASSWORD = $null; sqlcmd -S localhost -E -Q \"SELECT name FROM sys.databases WHERE name='AutoLeaseNet_Dev'\" -h -1 -W 2>&1)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "PowerShell($env:SQLCMDPASSWORD = $null; sqlcmd -S localhost -E -d AutoLeaseNet_Dev -Q \"SELECT TOP 0 Id, TenantId, TajeerContractNumber, Status FROM Leases; SELECT MigrationId FROM __EFMigrationsHistory\" -h -1 -W 2>&1 | Select-Object -Last 8)"
     ]
   }
 }

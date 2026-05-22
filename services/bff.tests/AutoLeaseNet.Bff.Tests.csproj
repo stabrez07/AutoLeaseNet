@@ -10,6 +10,10 @@
   <ItemGroup>
     <ProjectReference Include="..\bff\AutoLeaseNet.Bff.csproj" />
     <ProjectReference Include="..\..\packages\application\AutoLeaseNet.Application.Ports\AutoLeaseNet.Application.Ports.csproj" />
+    <ProjectReference Include="..\..\packages\application\AutoLeaseNet.Application\AutoLeaseNet.Application.csproj" />
+    <ProjectReference Include="..\..\packages\application\AutoLeaseNet.Infrastructure\AutoLeaseNet.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Tajeer\AutoLeaseNet.Adapters.Tajeer.csproj" />
+    <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Tajeer.InMemory\AutoLeaseNet.Adapters.Tajeer.InMemory.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,6 +25,7 @@
     </PackageReference>
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
   </ItemGroup>
 
 </Project>

@@ -2,14 +2,21 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using AutoLeaseNet.Adapters.Cache.InMemory;
+using AutoLeaseNet.Adapters.Tajeer;
+using AutoLeaseNet.Adapters.Tajeer.Configuration;
+using AutoLeaseNet.Adapters.Tajeer.InMemory;
+using AutoLeaseNet.Application.Leases;
 using AutoLeaseNet.Application.Ports.Tenancy;
 using AutoLeaseNet.Bff.Authentication;
 using AutoLeaseNet.Bff.Endpoints;
 using AutoLeaseNet.Bff.Health;
 using AutoLeaseNet.Bff.Middleware;
 using AutoLeaseNet.Bff.Tenancy;
+using AutoLeaseNet.Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -38,15 +45,16 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, ClaimsTenantContext>();
 
 // === Application & Infrastructure ===
-// builder.Services.AddAutoLeaseNetInfrastructure(builder.Configuration);
+builder.Services.AddAutoLeaseNetInfrastructure(builder.Configuration);
+builder.Services.AddMediatR(cfg =>
+    cfg.RegisterServicesFromAssemblyContaining<SaveContractCommand>());
 
 // === Adapters (per doc 04 — each via its own AddXxx() extension method) ===
-// Phase 1 wiring will be added as each adapter is built:
-// builder.Services.AddTajeer(builder.Configuration.GetSection("Tajeer"));
-// builder.Services.AddInMemorySms();
-// builder.Services.AddInMemoryStorage();
-// builder.Services.AddInMemoryCache();
-// builder.Services.AddInMemoryEmail();
+// AddTajeerWithModeSwitch wires the named HttpClient + auth + resilience and then,
+// based on Tajeer:Mode (Real | InMemory), binds ITajeerContractClient to the right impl.
+builder.Services.AddTajeerWithModeSwitch(builder.Configuration.GetSection(TajeerOptions.SectionName));
+builder.Services.AddInMemoryCache();
+// Future: AddInMemorySms(), AddInMemoryStorage(), AddInMemoryEmail() etc.
 
 var app = builder.Build();
 

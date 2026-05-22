@@ -2,6 +2,7 @@ using AutoLeaseNet.Bff.Authentication;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace AutoLeaseNet.Bff.Tests.Authentication;
@@ -44,6 +45,27 @@ public sealed class DevJwtStubProductionGuardTests
     private sealed class EnvironmentWebApplicationFactory(string environment) : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
-            => builder.UseEnvironment(environment);
+        {
+            builder.UseEnvironment(environment);
+            // The non-Development envs don't load appsettings.Development.json, so supply
+            // dummy Tajeer config inline. TajeerOptions.ValidateOnStart needs every required
+            // field; the actual values don't matter here — the test only asserts that
+            // AddDevJwtStub doesn't throw in Staging.
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:AutoLeaseNet"] = "Server=ignored;Database=ignored;TrustServerCertificate=true;Encrypt=false",
+                    ["Tajeer:BaseUrl"] = "https://tajeer-stg.api.elm.sa",
+                    ["Tajeer:IssuanceUrlBase"] = "https://tajeerstg.logisti.sa",
+                    ["Tajeer:AppId"] = "staging-test-app",
+                    ["Tajeer:AppKey"] = "staging-test-key",
+                    ["Tajeer:AuthorizationToken"] = "Basic staging-test",
+                    ["Tajeer:BranchId"] = "1",
+                    ["Tajeer:WebhookSharedSecret"] = "staging-test-secret",
+                    ["Tajeer:Mode"] = "InMemory",
+                });
+            });
+        }
     }
 }

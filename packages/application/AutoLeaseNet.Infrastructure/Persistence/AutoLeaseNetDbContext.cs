@@ -1,3 +1,4 @@
+using AutoLeaseNet.Domain.Leases;
 using Microsoft.EntityFrameworkCore;
 
 namespace AutoLeaseNet.Infrastructure.Persistence;
@@ -9,6 +10,8 @@ namespace AutoLeaseNet.Infrastructure.Persistence;
 /// </summary>
 public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> options) : DbContext(options)
 {
+    public DbSet<Lease> Leases => Set<Lease>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Apply all IEntityTypeConfiguration<T> from this assembly

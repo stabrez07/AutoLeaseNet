@@ -9,6 +9,12 @@
   <ItemGroup>
     <ProjectReference Include="..\AutoLeaseNet.Domain\AutoLeaseNet.Domain.csproj" />
     <ProjectReference Include="..\AutoLeaseNet.Application.Ports\AutoLeaseNet.Application.Ports.csproj" />
+    <!--
+      Pattern B sub-client reference is intentional per Spec 04 §3.2: the application
+      layer talks to ITajeerContractClient directly. If KSA-leasing ever needs to swap
+      vendors, introduce a higher-level port (e.g. ILeaseRegistryClient) at that point.
+    -->
+    <ProjectReference Include="..\..\adapters\AutoLeaseNet.Adapters.Tajeer\AutoLeaseNet.Adapters.Tajeer.csproj" />
   </ItemGroup>
 
   <ItemGroup>
