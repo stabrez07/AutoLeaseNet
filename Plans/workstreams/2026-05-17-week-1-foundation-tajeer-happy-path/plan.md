@@ -17,6 +17,7 @@ A working `POST /api/v1/dev/save-contract` endpoint running locally (Docker Comp
 ## 2. Scope
 
 **In scope this workstream:**
+
 - Scaffold verification (`dotnet build`, `pnpm install`, Docker Compose up)
 - `Adapters.Common`: Polly v8 pipeline, `IntegrationResult<T>`, PII masking, dev `ICredentialProvider` stub
 - `Adapters.Tajeer`: `TajeerOptions`, `TajeerAuthHandler` (App-id / App-key / Authorization), `HttpClient` registration, `GET /branch/all` auth smoke
@@ -28,6 +29,7 @@ A working `POST /api/v1/dev/save-contract` endpoint running locally (Docker Comp
 - Integration test: happy-path Save Contract → webhook → state update
 
 **Deferred (loop-back tasks, gated on external deps):**
+
 - Bicep skeleton for dev RG (gated: Azure subscription)
 - Application Insights workspace + OTel exporter wiring (gated: Azure subscription)
 - Entra ID app registrations + real JWT validation (gated: Entra tenant)
@@ -35,6 +37,7 @@ A working `POST /api/v1/dev/save-contract` endpoint running locally (Docker Comp
 - Unifonic SMS sandbox swap (gated: Unifonic sender ID approval ~3 days)
 
 **Out of scope (later weeks):**
+
 - Domain entities for Customer/Vehicle/Driver/Lease persistence beyond the minimum needed for webhook update (Week 2)
 - RLS policies (Week 2 Day 9)
 - Any Next.js UI work (Week 2 Day 11)
@@ -42,27 +45,27 @@ A working `POST /api/v1/dev/save-contract` endpoint running locally (Docker Comp
 
 ## 3. Dependencies
 
-| Dependency | Status | Blocks |
-|---|---|---|
-| Tajeer Rabet App-id / App-key / Authorization | ✅ in hand | Day 4–5 |
-| ZATCA Fatoorah CSID | ✅ in hand | not needed this week |
-| ~~Local Docker (SQL Edge, Redis, Azurite, MailHog)~~ → Local SQL Server 2019 (Windows Auth) + InMemory cache | ✅ in hand (2026-05-18) | Days 2, 5, 6 |
-| Public tunnel for webhook (ngrok / Azure dev URL) | needs setup | Day 6 |
-| Azure dev RG + Key Vault | ⏳ pending | loop-back §6 only |
-| Entra ID app reg | ⏳ pending | loop-back §6 only |
-| Unifonic sandbox | ⏳ pending | loop-back §6 only |
-| GitHub Actions CI secrets | ⏳ pending | loop-back §6 only |
+| Dependency                                                                                                   | Status                  | Blocks               |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------- | -------------------- |
+| Tajeer Rabet App-id / App-key / Authorization                                                                | ✅ in hand              | Day 4–5              |
+| ZATCA Fatoorah CSID                                                                                          | ✅ in hand              | not needed this week |
+| ~~Local Docker (SQL Edge, Redis, Azurite, MailHog)~~ → Local SQL Server 2019 (Windows Auth) + InMemory cache | ✅ in hand (2026-05-18) | Days 2, 5, 6         |
+| Public tunnel for webhook (ngrok / Azure dev URL)                                                            | needs setup             | Day 6                |
+| Azure dev RG + Key Vault                                                                                     | ⏳ pending              | loop-back §6 only    |
+| Entra ID app reg                                                                                             | ⏳ pending              | loop-back §6 only    |
+| Unifonic sandbox                                                                                             | ⏳ pending              | loop-back §6 only    |
+| GitHub Actions CI secrets                                                                                    | ⏳ pending              | loop-back §6 only    |
 
 ## 4. Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
-| Tajeer staging auth handshake fails (App-key signing format) | M | Critical | Day 4 first: `GET /branch/all` smoke before touching SaveContract. Capture raw request/response with PII masking. |
-| Webhook signature spec ambiguous in vendor docs | M | High | Day 6: implement permissive log-only mode first, tighten to reject once verified against real callback. |
-| Polly v8 + `HttpClient` DI ordering trips delegating handler chain | L | Med | Pin order in test: `AddHttpClient` → `AddHttpMessageHandler<TajeerAuthHandler>` → `AddResilienceHandler`. Cover with unit test. |
-| ngrok URL changes between runs invalidating registered webhook URL | M | Low | Use ngrok reserved domain or Azure dev URL when subscription lands; document URL re-registration step. |
-| `dotnet build` warnings-as-errors trips on auto-generated EF migrations | L | Low | Exclude generated migrations folder from analyzer rules in `Directory.Build.props` per project. |
-| TenancyMiddleware dev-stub leaks into staging deploy | M | High | Stub registered only when `ASPNETCORE_ENVIRONMENT=Development`; fail-fast assertion in `Program.cs` if stub is active outside Development. |
+| Risk                                                                    | Likelihood | Impact   | Mitigation                                                                                                                                 |
+| ----------------------------------------------------------------------- | ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Tajeer staging auth handshake fails (App-key signing format)            | M          | Critical | Day 4 first: `GET /branch/all` smoke before touching SaveContract. Capture raw request/response with PII masking.                          |
+| Webhook signature spec ambiguous in vendor docs                         | M          | High     | Day 6: implement permissive log-only mode first, tighten to reject once verified against real callback.                                    |
+| Polly v8 + `HttpClient` DI ordering trips delegating handler chain      | L          | Med      | Pin order in test: `AddHttpClient` → `AddHttpMessageHandler<TajeerAuthHandler>` → `AddResilienceHandler`. Cover with unit test.            |
+| ngrok URL changes between runs invalidating registered webhook URL      | M          | Low      | Use ngrok reserved domain or Azure dev URL when subscription lands; document URL re-registration step.                                     |
+| `dotnet build` warnings-as-errors trips on auto-generated EF migrations | L          | Low      | Exclude generated migrations folder from analyzer rules in `Directory.Build.props` per project.                                            |
+| TenancyMiddleware dev-stub leaks into staging deploy                    | M          | High     | Stub registered only when `ASPNETCORE_ENVIRONMENT=Development`; fail-fast assertion in `Program.cs` if stub is active outside Development. |
 
 ## 5. Tasks
 
@@ -101,13 +104,13 @@ A working `POST /api/v1/dev/save-contract` endpoint running locally (Docker Comp
 
 ### Day 3 — Tajeer auth + smoke call
 
-- [ ] **T3.1** Define `TajeerOptions` (BaseUrl, AppId, AppKey, AuthorizationToken, BranchId, TimeoutSeconds) bound from `Tajeer:` config section. **Verify**: unit test loads from in-memory config, validates required fields.
-- [ ] **T3.2** RED: write failing test for `TajeerAuthHandler` injecting headers `App-id`, `App-key`, `Authorization` per V9.7 spec. **Verify**: 1 failing.
-- [ ] **T3.3** GREEN: implement `TajeerAuthHandler : DelegatingHandler`. **Verify**: test passes; assert headers on outbound `HttpRequestMessage`.
-- [ ] **T3.4** Register `HttpClient` in `Adapters.Tajeer` ServiceCollection extension with `TajeerAuthHandler` + `PollyPipelineFactory.Build("tajeer", ...)`. **Verify**: integration test resolves named client with both handlers in order.
-- [ ] **T3.5** Implement `TajeerLookupClient.GetAllBranchesAsync()` returning `IntegrationResult<IReadOnlyList<TajeerBranch>>`. **Verify**: unit test with `MockHttpMessageHandler` returns canned JSON → mapped DTO.
-- [ ] **T3.6** **Smoke test against real Tajeer staging**: dev console runner or xUnit `[Trait("Category","Smoke")]` test that calls `GetAllBranchesAsync()` with real creds from user-secrets. **Verify**: 200 response, non-empty branch list, no PII leaked in logs.
-- [ ] **T3.7** Capture smoke-call request/response (PII masked) in `notes.md`. **Verify**: notes appended with timestamp + sanitized payload.
+- [x] **T3.1** Define `TajeerOptions` (BaseUrl, AppId, AppKey, AuthorizationToken, BranchId, TimeoutSeconds) bound from `Tajeer:` config section. **Verify**: unit test loads from in-memory config, validates required fields. ✅ 2026-05-22 (`Configuration/TajeerOptions.cs` + 9 unit tests).
+- [x] **T3.2** RED: write failing test for `TajeerAuthHandler` injecting headers `App-id`, `App-key`, `Authorization` per V9.7 spec. **Verify**: 1 failing. ✅ 2026-05-22 (`TajeerAuthHandlerTests` initially failed on `NotImplementedException`).
+- [x] **T3.3** GREEN: implement `TajeerAuthHandler : DelegatingHandler`. **Verify**: test passes; assert headers on outbound `HttpRequestMessage`. ✅ 2026-05-22 (`Authentication/TajeerAuthHandler.cs`; re-reads `IOptionsMonitor` per call so token rotation is live).
+- [x] **T3.4** Register `HttpClient` in `Adapters.Tajeer` ServiceCollection extension with `TajeerAuthHandler` + `PollyPipelineFactory.Build("tajeer", ...)`. **Verify**: integration test resolves named client with both handlers in order. ✅ 2026-05-22 (named client `tajeer` + `AddResilienceHandler("tajeer-resilience", ResiliencePolicies.DefaultHttpPipeline)`; 2 registration tests).
+- [x] **T3.5** Implement `TajeerLookupClient.GetAllBranchesAsync()` returning `IntegrationResult<IReadOnlyList<TajeerBranch>>`. **Verify**: unit test with `MockHttpMessageHandler` returns canned JSON → mapped DTO. ✅ 2026-05-22 (`Lookups/TajeerLookupClient.cs` + `Lookups/TajeerBranch.cs`; 5 unit tests covering 2xx mapping, canonical path, 4xx non-transient, 5xx transient, network exception transient; `AddScoped<TajeerLookupClient>` wired + resolution test).
+- [x] **T3.6** **Smoke test against real Tajeer staging**: dev console runner or xUnit `[Trait("Category","Smoke")]` test that calls `GetAllBranchesAsync()` with real creds from user-secrets. **Verify**: 200 response, non-empty branch list, no PII leaked in logs. ✅ 2026-05-22 scaffold (`Smoke/TajeerStagingSmokeTests.cs` + `.runsettings` excludes `Category=Smoke` by default; reads user-secrets / `TAJEER_*` env vars; gracefully early-returns when `Tajeer:AppId` is absent so CI stays green). Awaiting first manual run with staging creds.
+- [ ] **T3.7** Capture smoke-call request/response (PII masked) in `notes.md`. **Verify**: notes appended with timestamp + sanitized payload. ⏳ template placed in notes.md Day 3 section; fill in after first staging run.
 
 ### Day 4 — Tajeer SaveContract adapter
 
@@ -127,7 +130,7 @@ A working `POST /api/v1/dev/save-contract` endpoint running locally (Docker Comp
 - [ ] **T5.3** Generate initial EF migration `Init_Lease`. **Verify**: `dotnet ef migrations add Init_Lease` succeeds; migration SQL inspected.
 - [ ] **T5.4** Apply migration to Dockerized SQL Edge. **Verify**: `dotnet ef database update` exits 0; `SELECT * FROM Leases` works.
 - [ ] **T5.5** Add BFF endpoint `POST /api/v1/dev/save-contract` requiring `Idempotency-Key` header. **Verify**: missing header → 400; present → 202 with response body.
-- [ ] **T5.6** Wire idempotency via `Adapters.Cache.InMemory.AddInMemoryCache()` against the `IIdempotencyStore` port (24h TTL) keyed on `tenant + idempotency-key`. **Verify**: duplicate POST returns same cached response. *(Swap to Redis in §6 loop-back when Docker/Memurai available.)*
+- [ ] **T5.6** Wire idempotency via `Adapters.Cache.InMemory.AddInMemoryCache()` against the `IIdempotencyStore` port (24h TTL) keyed on `tenant + idempotency-key`. **Verify**: duplicate POST returns same cached response. _(Swap to Redis in §6 loop-back when Docker/Memurai available.)_
 - [ ] **T5.7** **First real Save against Tajeer staging** from local BFF (Postman or curl with dev JWT stub header). **Verify**: 202 response with real `ContractNumber` + `IssuanceUrl`; row in `Leases` table with `PendingIssuance`.
 - [ ] **T5.8** Capture sanitized request/response in `notes.md` + diagram the call flow if anything surprised. **Verify**: notes updated.
 
@@ -159,28 +162,33 @@ A working `POST /api/v1/dev/save-contract` endpoint running locally (Docker Comp
 Pulled in as those external deps land. Do **not** block Days 0–7 on these.
 
 ### Azure dev landing zone (when subscription arrives)
+
 - [ ] **L.A1** Bicep skeleton in `infra/` for dev RG (RG, KV, App Service plan, SQL, Redis, Storage, App Insights).
 - [ ] **L.A2** `azd up` or pipeline deploy to dev RG. **Verify**: all resources provisioned, KV accessible.
 - [ ] **L.A3** Migrate secrets from user-secrets to Key Vault; swap `DevEnvironmentCredentialProvider` for `KeyVaultCredentialProvider` in non-Dev envs.
 - [ ] **L.A4** Wire OpenTelemetry → Application Insights with Serilog enricher + PII masking sink. **Verify**: trace appears in App Insights for a `dev/save-contract` call.
 
 ### Entra ID (when tenant + app reg ready)
+
 - [ ] **L.E1** Register BFF + Web Portal apps in Entra ID. **Verify**: client IDs captured.
 - [ ] **L.E2** Replace `DevJwtStubHandler` with `Microsoft.Identity.Web` JWT validation in non-Dev envs. **Verify**: integration test against staging issues real token, claims map to `TenantContext`.
 - [ ] **L.E3** Add startup assertion: dev stub forbidden when `ASPNETCORE_ENVIRONMENT != Development`.
 
 ### GitHub CI
+
 - [ ] **L.G1** GitHub Actions workflow `ci.yml`: restore → build (-warnaserror) → test → pnpm build/test.
 - [ ] **L.G2** Branch protection on `main` requiring CI green + 1 review.
 - [ ] **L.G3** CI secrets: Tajeer creds, ZATCA CSID, Azure deploy SP.
 
 ### Real Redis (when Docker Desktop fixed OR Memurai installed)
+
 - [ ] **L.R1** Verify `redis-cli ping` returns `PONG`.
 - [ ] **L.R2** Add `ConnectionStrings:Redis` to `appsettings.Development.json`; flip `Cache:Mode` to `Redis`.
 - [ ] **L.R3** Wire `Adapters.Cache.Redis.AddRedisCache()` in BFF DI when `Cache:Mode == "Redis"`. **Verify**: idempotency integration test passes against real Redis (24h TTL respected).
 - [ ] **L.R4** Run T5.6 + T6.x integration tests against Redis; capture any divergence vs InMemory in `notes.md`.
 
 ### Unifonic SMS (when sender ID approved ~3 days)
+
 - [ ] **L.U1** Real `Adapters.Sms.Unifonic.UnifonicSmsClient` against `ISmsClient` port. **Verify**: contract tests pass against both InMemory + Unifonic.
 - [ ] **L.U2** Sandbox smoke: send `lease_issued_ar` to a test phone. **Verify**: delivery confirmation logged.
 - [ ] **L.U3** Switch BFF DI to Unifonic for staging environment only. Dev stays InMemory.

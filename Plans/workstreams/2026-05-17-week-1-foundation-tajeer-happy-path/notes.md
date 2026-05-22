@@ -146,3 +146,60 @@ dotnet test  AutoLeaseNet.sln  → 43 passed / 0 failed
 ### Next pickup
 
 Day 3 — Tajeer auth + smoke call. First task T3.1: `TajeerOptions` bound from `Tajeer:` config section with required-field validation. Then auth handler, retry pipeline, and an end-to-end smoke call to `GET /api/lookups/branches` against Tajeer Rabet staging.
+
+---
+
+## Day 3 — Tajeer auth handler + lookups smoke (2026-05-22)
+
+### What landed
+
+| Task | Status | Detail |
+|---|---|---|
+| T3.1 — `TajeerOptions` | ✅ | Required + URL + Range data-annotations; bound from `Tajeer:` section with `ValidateOnStart()`. 9 unit tests. |
+| T3.2 + T3.3 — `TajeerAuthHandler` (RED → GREEN) | ✅ | Delegating handler reads `IOptionsMonitor<TajeerOptions>` on every send → injects `App-id`, `App-key`, `Authorization`. Token rotation picked up without DI reload. 3 unit tests (CapturingInnerHandler + OptionsMonitorStub). |
+| T3.4 — Named HttpClient registration | ✅ | `AddTajeer` registers `IHttpClientFactory` named client `"tajeer"` with `BaseAddress` + `Timeout`, attaches `TajeerAuthHandler`, then chains `AddResilienceHandler("tajeer-resilience", ...)` reusing `ResiliencePolicies.DefaultHttpPipeline`. 2 registration tests. |
+| T3.5 — `TajeerLookupClient.GetAllBranchesAsync` (RED → GREEN) | ✅ | `IntegrationResult<IReadOnlyList<TajeerBranch>>` — 2xx → Success(parsed list), 4xx → Failure non-transient, 5xx → Failure transient, `HttpRequestException` / `TaskCanceledException` (timeout) / `JsonException` mapped to dedicated error codes. `[LoggerMessage]` source generators used (CA1848 clean). 5 unit tests via `StubHttpMessageHandler` + `StubHttpClientFactory`. DI wired (`AddScoped<TajeerLookupClient>`) + 1 resolution test. |
+| T3.6 — Staging smoke harness | ✅ scaffold (awaiting cred run) | `Smoke/TajeerStagingSmokeTests.cs` marked `[Trait("Category","Smoke")]`. Reads `Tajeer:*` from user-secrets (UserSecretsId on the test csproj) or `TAJEER_*` env vars; gracefully early-returns when `Tajeer:AppId` is missing so CI stays green. Default `dotnet test` runs filter `Category!=Smoke` via `.runsettings` at the repo root. |
+| T3.7 — PII-masked smoke payload | ⏳ awaiting first real call | Template placed below — paste the masked branch list after running the smoke test locally with user-secrets configured. |
+
+### How to run the smoke test
+
+```pwsh
+# one-time: drop creds into user-secrets for the test project
+cd packages\adapters\AutoLeaseNet.Adapters.Tajeer.Tests
+dotnet user-secrets set "Tajeer:AppId" "<app-id>"
+dotnet user-secrets set "Tajeer:AppKey" "<app-key>"
+dotnet user-secrets set "Tajeer:AuthorizationToken" "Basic <base64>"
+dotnet user-secrets set "Tajeer:BranchId" "1"
+dotnet user-secrets set "Tajeer:WebhookSharedSecret" "<webhook-secret>"
+
+# run only the smoke tests
+cd ..\..\..
+dotnet test packages\adapters\AutoLeaseNet.Adapters.Tajeer.Tests --filter Category=Smoke
+```
+
+### T3.7 placeholder — paste PII-masked response here after the first staging call
+
+> Run the smoke test above, copy the test-output `Branch count` + `First branch:` lines, then mask any sensitive fields (`licenseNumber` → keep last 4 with `PiiMasking.Mask("licenseNumber", value)`). Replace this block with the masked excerpt and timestamp.
+
+```text
+[YYYY-MM-DDTHH:MM:SSZ] GET https://tajeer-stg.api.elm.sa/api/lookups/branches → 200 OK
+Branch count: <N>
+First branch: id=<int> code=<str> nameEn=<str> city=<str> active=<bool>
+licenseNumber (masked): ****<last4>
+```
+
+### Verification
+
+```
+dotnet build AutoLeaseNet.sln                          → 0 warnings, 0 errors
+dotnet test  AutoLeaseNet.sln --settings .runsettings  → 63 passed / 0 failed (smoke excluded)
+  AutoLeaseNet.Adapters.Common.Tests    : 20 (unchanged from Day 1)
+  AutoLeaseNet.Adapters.Tajeer.Tests    : 21 (was 1; +9 Options, +3 AuthHandler, +3 AddTajeer/LookupResolve, +5 LookupClient)
+  AutoLeaseNet.Bff.Tests                : 18 (unchanged from Day 2)
+  AutoLeaseNet.Infrastructure.Tests     : 4  (unchanged from Day 2)
+```
+
+### Next pickup
+
+Day 4 — Tajeer `SaveContract` adapter (DTOs V9.7 → `ITajeerClient.SaveContractAsync` → `IntegrationResult<SaveContractResponse>`). Follow the same RED → GREEN cadence; wire under `AddTajeer` alongside `TajeerLookupClient`.
