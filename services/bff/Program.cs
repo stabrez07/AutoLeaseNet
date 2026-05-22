@@ -7,8 +7,10 @@ using Microsoft.Extensions.Hosting;
 using AutoLeaseNet.Application.Ports.Tenancy;
 using AutoLeaseNet.Bff.Authentication;
 using AutoLeaseNet.Bff.Endpoints;
+using AutoLeaseNet.Bff.Health;
 using AutoLeaseNet.Bff.Middleware;
 using AutoLeaseNet.Bff.Tenancy;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,7 +18,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Serilog configured in appsettings; OpenTelemetry hooked up below.
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddHealthChecks();
+var readyTags = new[] { "ready" };
+builder.Services
+    .AddHealthChecks()
+    .AddCheck<SqlHealthCheck>("sql", tags: readyTags);
 
 // === Authentication ===
 // Phase 1: DevJwtStubHandler (header-based, dev/CI/staging only).
@@ -55,8 +60,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseTenancy();
 
-app.MapHealthChecks("/health/liveness");
-app.MapHealthChecks("/health/readiness");
+// Liveness = "process is up" (no downstream checks). Readiness = "ready to serve traffic"
+// (all "ready"-tagged checks must pass; today that's just SQL).
+app.MapHealthChecks("/health/liveness", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/readiness", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 
 // === API v1 ===
 var v1 = app.MapGroup("/api/v1");

@@ -92,12 +92,12 @@ A working `POST /api/v1/dev/save-contract` endpoint running locally (Docker Comp
 
 ### Day 2 — TenancyMiddleware (dev-stub mode) + BFF skeleton
 
-- [ ] **T2.1** Add `DevJwtStubHandler` authentication handler that reads tenant claims from a header `X-Dev-Tenant-Id` / `X-Dev-Tenant-Slug` (Development environment only, fails hard outside). **Verify**: unit test asserts header → ClaimsPrincipal mapping, asserts throw in Production.
-- [ ] **T2.2** Wire `TenancyMiddleware` in `services/bff/` reading `tenant_id` claim. **Verify**: middleware unit test asserts claim → `TenantContext.Current`.
-- [ ] **T2.3** Open SQL session, call `EXEC sp_set_session_context @key='TenantId', @value=@tenant`. **Verify**: integration test against Dockerized SQL Edge confirms `SESSION_CONTEXT('TenantId')` returns set value.
-- [ ] **T2.4** Add `/health/liveness` minimal endpoint returning 200. **Verify**: `curl http://localhost:5000/health/liveness` → 200.
-- [ ] **T2.5** Add `/health/readiness` checking SQL + Redis connectivity. **Verify**: returns 200 with stack up, 503 with Redis down.
-- [ ] **T2.6** Add `Program.cs` startup assertion: `if (env.IsProduction() && stubHandlerRegistered) throw`. **Verify**: integration test with `ASPNETCORE_ENVIRONMENT=Production` + stub registered → app fails to start.
+- [x] **T2.1** Add `DevJwtStubHandler` authentication handler that reads tenant claims from a header `X-Dev-Tenant-Id` / `X-Dev-Tenant-Slug` (Development environment only, fails hard outside). **Verify**: unit test asserts header → ClaimsPrincipal mapping, asserts throw in Production. ✅ 2026-05-18 (handler + AddDevJwtStub extension + 3 happy-path tests via WebApplicationFactory).
+- [x] **T2.2** Wire `TenancyMiddleware` in `services/bff/` reading `tenant_id` claim. **Verify**: middleware unit test asserts claim → `TenantContext.Current`. ✅ 2026-05-18 (`ClaimsTenantContext` implements `ITenantContext`; `TenancyMiddleware` enforces tenant_id on authenticated requests + opens logging scope; 8 unit tests + 1 integration test via /dev/whoami).
+- [x] **T2.3** Open SQL session, call `EXEC sp_set_session_context @key='TenantId', @value=@tenant`. **Verify**: integration test against ~~Dockerized SQL Edge~~ **local AutoLeaseNet_Dev DB** (Docker unavailable per [[local-dev-infra]]) confirms `SESSION_CONTEXT('TenantId')` returns set value. ✅ 2026-05-18 (`SqlSessionContext` helper in Infrastructure; 4 integration tests: round-trip, read-only enforcement (error 15664), 3-key set, fresh-connection null).
+- [x] **T2.4** Add `/health/liveness` minimal endpoint returning 200. **Verify**: `curl http://localhost:5000/health/liveness` → 200. ✅ 2026-05-18 (mapped with `Predicate = _ => false` so no downstream checks gate it; 2 integration tests).
+- [x] **T2.5** Add `/health/readiness` checking SQL + ~~Redis~~ connectivity. **Verify**: returns 200 with stack up, 503 with ~~Redis~~ **SQL** down. ✅ 2026-05-18 (`SqlHealthCheck` tagged "ready"; Redis check deferred — using InMemory cache per [[local-dev-infra]]; 2 integration tests inc. broken-conn-string fault injection).
+- [x] **T2.6** Add `Program.cs` startup assertion: `if (env.IsProduction() && stubHandlerRegistered) throw`. **Verify**: integration test with `ASPNETCORE_ENVIRONMENT=Production` + stub registered → app fails to start. ✅ 2026-05-18 (assertion lives in `AddDevJwtStub` extension; 2 tests verify Production throws + Staging allowed).
 
 ### Day 3 — Tajeer auth + smoke call
 

@@ -107,3 +107,42 @@ dotnet test  AutoLeaseNet.sln  → 21 passed / 0 failed
 ### Next pickup
 
 Day 2 — TenancyMiddleware (dev-stub mode) + BFF skeleton. First task T2.1: `DevJwtStubHandler` reading tenant claims from `X-Dev-Tenant-*` headers (Development only). The `ITenantContext` port already exists in `Application.Ports/Tenancy/` from scaffolding — just need the BFF-side handler + middleware + tests.
+
+---
+
+## Day 2 — 2026-05-18 (TenancyMiddleware + BFF skeleton, TDD)
+
+All six T2.x tasks complete. Two new test projects (`AutoLeaseNet.Bff.Tests`, `AutoLeaseNet.Infrastructure.Tests`). Test count went from 21 → 43.
+
+### Decisions
+
+- **DevJwtStubHandler in `services/bff/Authentication/`** — reads `X-Dev-Tenant-Id` (+ optional `X-Dev-User-Type`, `X-Dev-Customer-Id`, `X-Dev-Branch-Ids`, `X-Dev-User-Id`, `X-Dev-Roles`). Missing tenant header → `AuthenticateResult.NoResult()` (caller gets 401 if endpoint requires auth). Claim type names match Spec 06 §3.2 (`tenant_id`, `user_type`, `customer_id`, `branch_id`).
+- **T2.1 + T2.6 collapsed into one Program.cs registration**: `AddDevJwtStub(environment)` throws `InvalidOperationException` when `env.IsProduction()`. Program.cs always calls `AddDevJwtStub` (Phase 1) so Production attempt → app refuses to start. JwtBearer wiring planned Phase 2+; until then, Production fails loudly by design.
+- **ClaimsTenantContext implements `ITenantContext`** by reading from `IHttpContextAccessor.HttpContext.User`. Scoped DI registration; one instance per request. Test discovery: real `HttpContextAccessor` uses `AsyncLocal` which clobbers across two-context tests in the same async flow — stubbed via a tiny `StubHttpContextAccessor` for unit tests.
+- **TenancyMiddleware** is thin: passes anonymous requests through unchanged, validates `tenant_id` on authenticated requests (rejects with 400 if missing/malformed), opens a `BeginScope` with `TenantId` so adapter logs auto-tag. Health endpoints stay anonymous so probes work.
+- **SqlSessionContext helper in Infrastructure**: `SetTenantIdAsync` + `SetTenancyAsync` (multi-key) + `GetTenantIdAsync`. All sets use `@read_only=1` so RLS predicates can trust the value; subsequent set attempts throw SQL error 15664 (verified by test).
+- **Health checks: liveness vs readiness via tags**. `Predicate = _ => false` for liveness (zero downstream checks). `Predicate = c => c.Tags.Contains("ready")` for readiness (SQL today; Redis when Memurai/WSL2 lands).
+- **Redis readiness check deferred** because cache is `Adapters.Cache.InMemory` until Docker Desktop is resolved. Will add when we wire `Adapters.Cache.Redis`.
+
+### Drift fixed during Day 2
+
+| Drift | Severity | Resolution |
+|---|---|---|
+| CA1859 on test-helper return-type | Low | Added `CA1859` to `*.Tests` NoWarn block (test helpers intentionally exercise port abstractions) |
+| CA1861 on `tags: new[] { "ready" }` array allocation | Low | Hoisted to `var readyTags = new[] { "ready" };` |
+| HttpContextAccessor AsyncLocal clobbering across two contexts in one test | Med | Tiny `StubHttpContextAccessor` per-context for unit tests; real accessor unchanged for integration |
+
+### Verification
+
+```
+dotnet build AutoLeaseNet.sln  → 0 warnings, 0 errors
+dotnet test  AutoLeaseNet.sln  → 43 passed / 0 failed
+  AutoLeaseNet.Adapters.Common.Tests    : 20 (unchanged from Day 1)
+  AutoLeaseNet.Adapters.Tajeer.Tests    : 1  (unchanged from Day 1)
+  AutoLeaseNet.Bff.Tests (new)          : 18 (DevJwtStub ×3, ProductionGuard ×2, Whoami+Tenancy ×1, ClaimsTenantContext ×8, Health ×4)
+  AutoLeaseNet.Infrastructure.Tests (new): 4 (SqlSessionContext integration — needs local SQL)
+```
+
+### Next pickup
+
+Day 3 — Tajeer auth + smoke call. First task T3.1: `TajeerOptions` bound from `Tajeer:` config section with required-field validation. Then auth handler, retry pipeline, and an end-to-end smoke call to `GET /api/lookups/branches` against Tajeer Rabet staging.

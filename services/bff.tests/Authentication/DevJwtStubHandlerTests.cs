@@ -66,6 +66,31 @@ public sealed class DevJwtStubHandlerTests : IClassFixture<DevWebApplicationFact
         whoami.BranchIds.Should().HaveCount(2);
     }
 
+    // T2.2 — verify the injected ITenantContext (resolved via DI from claims) returns the
+    // same data as the raw User.Claims. This proves the full chain: header → stub handler →
+    // claims principal → ClaimsTenantContext → injected port.
+    [Fact]
+    public async Task Whoami_Tenancy_section_matches_claims_via_DI()
+    {
+        var client = _factory.CreateClient();
+        var tenantId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        client.DefaultRequestHeaders.Add("X-Dev-Tenant-Id", tenantId.ToString());
+        client.DefaultRequestHeaders.Add("X-Dev-User-Type", "EXTERNAL_FLEET_ADMIN");
+        client.DefaultRequestHeaders.Add("X-Dev-Customer-Id", customerId.ToString());
+
+        var response = await client.GetAsync("/api/v1/dev/whoami");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var whoami = await response.Content.ReadFromJsonAsync<WhoamiWithTenancyResponse>();
+        whoami!.Tenancy.Should().NotBeNull();
+        whoami.Tenancy!.TenantId.Should().Be(tenantId.ToString());
+        whoami.Tenancy.CustomerId.Should().Be(customerId.ToString());
+        whoami.Tenancy.UserType.Should().Be("EXTERNAL_FLEET_ADMIN");
+        whoami.Tenancy.IsInternalStaff.Should().BeFalse();
+        whoami.Tenancy.IsSystem.Should().BeFalse();
+    }
+
     private sealed record WhoamiResponse(
         bool IsAuthenticated,
         string? TenantId,
@@ -74,6 +99,17 @@ public sealed class DevJwtStubHandlerTests : IClassFixture<DevWebApplicationFact
         string? UserType,
         IReadOnlyList<string> BranchIds,
         IReadOnlyList<string> Roles);
+
+    private sealed record WhoamiWithTenancyResponse(TenancyDto Tenancy);
+
+    private sealed record TenancyDto(
+        string TenantId,
+        string? CustomerId,
+        string? UserId,
+        string UserType,
+        IReadOnlyList<string> BranchIds,
+        bool IsInternalStaff,
+        bool IsSystem);
 }
 
 /// <summary>
