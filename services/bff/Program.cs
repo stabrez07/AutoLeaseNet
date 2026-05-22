@@ -1,7 +1,14 @@
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using AutoLeaseNet.Application.Ports.Tenancy;
+using AutoLeaseNet.Bff.Authentication;
 using AutoLeaseNet.Bff.Endpoints;
+using AutoLeaseNet.Bff.Middleware;
+using AutoLeaseNet.Bff.Tenancy;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +17,20 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHealthChecks();
+
+// === Authentication ===
+// Phase 1: DevJwtStubHandler (header-based, dev/CI/staging only).
+// AddDevJwtStub throws if env == Production — by design, the app refuses to start
+// if real Entra ID JWT bearer isn't wired (Phase 2+). This is intentional fail-loud
+// behaviour (T2.6 startup assertion).
+builder.Services
+    .AddAuthentication(DevJwtStubHandler.SchemeName)
+    .AddDevJwtStub(builder.Environment);
+builder.Services.AddAuthorization();
+
+// === Tenancy (ITenantContext resolved from current request claims) ===
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ITenantContext, ClaimsTenantContext>();
 
 // === Application & Infrastructure ===
 // builder.Services.AddAutoLeaseNetInfrastructure(builder.Configuration);
@@ -30,12 +51,21 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseTenancy();
+
 app.MapHealthChecks("/health/liveness");
 app.MapHealthChecks("/health/readiness");
 
-// API v1 endpoint groups (registered as Phase 1 work lands)
+// === API v1 ===
 var v1 = app.MapGroup("/api/v1");
 v1.MapHealthRoot();
+
+if (app.Environment.IsDevelopment())
+{
+    v1.MapDevEndpoints();
+}
 
 app.Run();
 

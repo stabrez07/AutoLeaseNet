@@ -32,9 +32,13 @@
     <NeutralLanguage>en</NeutralLanguage>
   </PropertyGroup>
 
-  <!-- Test projects: snake_case test method names (BDD-style) are the project convention. -->
+  <!-- Test projects:
+       - CA1707: snake_case test method names (BDD-style) are the project convention.
+       - CA1859: test helpers intentionally return port interfaces so the test exercises the
+         abstraction surface; perf concern doesn't apply in tests.
+  -->
   <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
-    <NoWarn>$(NoWarn);CA1707</NoWarn>
+    <NoWarn>$(NoWarn);CA1707;CA1859</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Label="Source Link &amp; deterministic build">
