@@ -6,10 +6,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using AutoLeaseNet.Adapters.Cache.InMemory;
+using AutoLeaseNet.Adapters.Seed;
 using AutoLeaseNet.Adapters.Tajeer;
 using AutoLeaseNet.Adapters.Tajeer.Configuration;
 using AutoLeaseNet.Adapters.Tajeer.InMemory;
 using AutoLeaseNet.Application.Leases;
+using AutoLeaseNet.Application.Ports.Seeding;
 using AutoLeaseNet.Application.Ports.Tenancy;
 using AutoLeaseNet.Bff.Authentication;
 using AutoLeaseNet.Bff.Endpoints;
@@ -47,16 +49,30 @@ builder.Services.AddScoped<ITenantContext, ClaimsTenantContext>();
 // === Application & Infrastructure ===
 builder.Services.AddAutoLeaseNetInfrastructure(builder.Configuration);
 builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssemblyContaining<SaveContractCommand>());
+{
+    cfg.RegisterServicesFromAssemblyContaining<SaveContractCommand>();
+    // Lookup-query handlers live in Infrastructure so they can use DbContext directly.
+    cfg.RegisterServicesFromAssemblyContaining<AutoLeaseNet.Infrastructure.Persistence.AutoLeaseNetDbContext>();
+});
 
 // === Adapters (per doc 04 — each via its own AddXxx() extension method) ===
 // AddTajeerWithModeSwitch wires the named HttpClient + auth + resilience and then,
 // based on Tajeer:Mode (Real | InMemory), binds ITajeerContractClient to the right impl.
 builder.Services.AddTajeerWithModeSwitch(builder.Configuration.GetSection(TajeerOptions.SectionName));
 builder.Services.AddInMemoryCache();
+builder.Services.AddSeed(builder.Configuration.GetSection(SeedOptions.SectionName));
 // Future: AddInMemorySms(), AddInMemoryStorage(), AddInMemoryEmail() etc.
 
 var app = builder.Build();
+
+// C7 — Demo / Dev seeding hook. Runs once on startup; the seeder itself short-circuits
+// if rows already exist for the configured tenant.
+if (app.Environment.IsDevelopment())
+{
+    using var seedScope = app.Services.CreateScope();
+    var seeder = seedScope.ServiceProvider.GetRequiredService<IDataSeeder>();
+    await seeder.SeedAsync(CancellationToken.None);
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -76,6 +92,7 @@ app.MapHealthChecks("/health/readiness", new HealthCheckOptions { Predicate = ch
 // === API v1 ===
 var v1 = app.MapGroup("/api/v1");
 v1.MapHealthRoot();
+v1.MapLookupEndpoints();
 
 if (app.Environment.IsDevelopment())
 {

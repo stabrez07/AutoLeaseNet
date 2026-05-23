@@ -32,6 +32,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IClock, SystemClock>();
 
         services.AddScoped<ILeaseRepository, EfLeaseRepository>();
+        services.AddScoped<ICustomerRepository, EfCustomerRepository>();
+        services.AddScoped<IVehicleRepository, EfVehicleRepository>();
+        services.AddScoped<IDriverRepository, EfDriverRepository>();
+        services.AddScoped<IBranchRepository, EfBranchRepository>();
+        services.AddScoped<IRentPolicyRepository, EfRentPolicyRepository>();
+        services.AddScoped<IExtendedCoverageRepository, EfExtendedCoverageRepository>();
 
         return services;
     }

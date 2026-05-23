@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using AutoLeaseNet.Adapters.Tajeer.Contracts.Dtos;
 using AutoLeaseNet.Application.Leases;
 using AutoLeaseNet.Application.Ports.Tenancy;
 using AutoLeaseNet.Bff.Authentication;
@@ -37,7 +36,6 @@ public static class DevEndpoints
                 UserType = user.FindFirst(DevJwtStubHandler.ClaimUserType)?.Value,
                 BranchIds = user.FindAll(DevJwtStubHandler.ClaimBranchId).Select(c => c.Value).ToArray(),
                 Roles = user.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray(),
-                // T2.2 — also echo the resolved ITenantContext to prove DI wiring works.
                 Tenancy = new
                 {
                     TenantId = tenancy.TenantId.ToString(),
@@ -54,8 +52,10 @@ public static class DevEndpoints
         .WithName("DevWhoami")
         .WithSummary("Echoes the current authenticated user's tenancy claims (Development only)");
 
-        // T5.5 — POST /dev/save-contract — issues a Tajeer SaveContract using the supplied
-        // V9.7 request body. Requires Idempotency-Key header per CLAUDE.md §8.
+        // T5.5 / Day D — POST /dev/save-contract — issues a Tajeer SaveContract.
+        // Day-D reshape: body is now domain-shaped (CustomerId / VehicleId / DriverId /
+        // RentPolicyId / BranchIds + contract terms). The handler resolves aggregates and
+        // builds the Tajeer V9.7 DTO internally. Requires Idempotency-Key header per CLAUDE.md §8.
         dev.MapPost("/save-contract",
             async (
                 HttpContext ctx,
@@ -72,15 +72,40 @@ public static class DevEndpoints
                         statusCode: StatusCodes.Status400BadRequest);
                 }
 
-                if (body?.Request is null)
+                if (body is null)
                 {
                     return Results.Problem(
                         title: "Missing request body",
-                        detail: "Body must contain a 'request' field with the Tajeer V9.7 SaveContract payload.",
+                        detail: "POST /dev/save-contract requires a JSON body with domain references and contract terms.",
                         statusCode: StatusCodes.Status400BadRequest);
                 }
 
-                var command = new SaveContractCommand(idempotencyKey, body.CustomerId, body.Request);
+                var command = new SaveContractCommand
+                {
+                    IdempotencyKey = idempotencyKey,
+                    CustomerId = body.CustomerId,
+                    VehicleId = body.VehicleId,
+                    PrimaryDriverId = body.PrimaryDriverId,
+                    ExtraDriverId = body.ExtraDriverId,
+                    AuthorizedDriverId = body.AuthorizedDriverId,
+                    RentPolicyId = body.RentPolicyId,
+                    ExtendedCoverageId = body.ExtendedCoverageId,
+                    WorkingBranchId = body.WorkingBranchId,
+                    ReceiveBranchId = body.ReceiveBranchId,
+                    ReturnBranchId = body.ReturnBranchId,
+                    ContractStartUtc = body.ContractStartUtc,
+                    ContractEndUtc = body.ContractEndUtc,
+                    ContractTypeCode = body.ContractTypeCode,
+                    AllowedKmPerHour = body.AllowedKmPerHour,
+                    AllowedKmPerDay = body.AllowedKmPerDay,
+                    UnlimitedKm = body.UnlimitedKm,
+                    AllowedLateHours = body.AllowedLateHours,
+                    RentAmount = body.RentAmount,
+                    PaidAmount = body.PaidAmount,
+                    PaymentMethodCode = body.PaymentMethodCode,
+                    DiscountType = body.DiscountType,
+                    DiscountValue = body.DiscountValue,
+                };
                 var result = await mediator.Send(command, ct);
 
                 if (!result.Success)
@@ -105,18 +130,38 @@ public static class DevEndpoints
             })
         .RequireAuthorization()
         .WithName("DevSaveContract")
-        .WithSummary("Dev-only: POST a Tajeer V9.7 SaveContract payload and persist a Lease (Development only)");
+        .WithSummary("Dev-only: post a domain-shaped Save Contract request (Development only)");
 
         return dev;
     }
 }
 
 /// <summary>
-/// Body shape for <c>POST /dev/save-contract</c>. <see cref="Request"/> is the verbatim
-/// Tajeer V9.7 payload (so clients can paste a known-good staging body without translation);
-/// <see cref="CustomerId"/> is an optional B2B association.
+/// Domain-shaped body for <c>POST /dev/save-contract</c>. The handler resolves the
+/// aggregate references and BUILDS the Tajeer V9.7 wire payload internally.
 /// </summary>
-public sealed record SaveContractDevRequest(
-    Guid? CustomerId,
-    SaveContractRequest Request);
-
+public sealed record SaveContractDevRequest
+{
+    public required Guid CustomerId { get; init; }
+    public required Guid VehicleId { get; init; }
+    public required Guid PrimaryDriverId { get; init; }
+    public Guid? ExtraDriverId { get; init; }
+    public Guid? AuthorizedDriverId { get; init; }
+    public required Guid RentPolicyId { get; init; }
+    public Guid? ExtendedCoverageId { get; init; }
+    public required Guid WorkingBranchId { get; init; }
+    public required Guid ReceiveBranchId { get; init; }
+    public required Guid ReturnBranchId { get; init; }
+    public required DateTimeOffset ContractStartUtc { get; init; }
+    public required DateTimeOffset ContractEndUtc { get; init; }
+    public required int ContractTypeCode { get; init; }
+    public int AllowedKmPerHour { get; init; }
+    public int AllowedKmPerDay { get; init; }
+    public bool UnlimitedKm { get; init; }
+    public int AllowedLateHours { get; init; }
+    public required decimal RentAmount { get; init; }
+    public decimal PaidAmount { get; init; }
+    public required int PaymentMethodCode { get; init; }
+    public int? DiscountType { get; init; }
+    public decimal? DiscountValue { get; init; }
+}

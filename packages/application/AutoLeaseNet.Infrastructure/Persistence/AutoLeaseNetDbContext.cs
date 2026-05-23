@@ -1,4 +1,10 @@
+using AutoLeaseNet.Domain.Branches;
+using AutoLeaseNet.Domain.Customers;
+using AutoLeaseNet.Domain.Drivers;
+using AutoLeaseNet.Domain.ExtendedCoverages;
 using AutoLeaseNet.Domain.Leases;
+using AutoLeaseNet.Domain.RentPolicies;
+using AutoLeaseNet.Domain.Vehicles;
 using AutoLeaseNet.Domain.Webhooks;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,6 +18,12 @@ namespace AutoLeaseNet.Infrastructure.Persistence;
 public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> options) : DbContext(options)
 {
     public DbSet<Lease> Leases => Set<Lease>();
+    public DbSet<Customer> Customers => Set<Customer>();
+    public DbSet<Vehicle> Vehicles => Set<Vehicle>();
+    public DbSet<Driver> Drivers => Set<Driver>();
+    public DbSet<Branch> Branches => Set<Branch>();
+    public DbSet<RentPolicy> RentPolicies => Set<RentPolicy>();
+    public DbSet<ExtendedCoverage> ExtendedCoverages => Set<ExtendedCoverage>();
     public DbSet<WebhookLog> WebhookLogs => Set<WebhookLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

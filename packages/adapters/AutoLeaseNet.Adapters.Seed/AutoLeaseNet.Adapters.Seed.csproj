@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>AutoLeaseNet.Adapters.Seed</RootNamespace>
+    <AssemblyName>AutoLeaseNet.Adapters.Seed</AssemblyName>
+    <Description>Production-shaped seed data for Dev / Demo environments (KSA-localised via Bogus). Implements IDataSeeder; selected via Seed:Mode config switch. Per [[feedback-production-ready-data]].</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\application\AutoLeaseNet.Domain\AutoLeaseNet.Domain.csproj" />
+    <ProjectReference Include="..\..\application\AutoLeaseNet.Application.Ports\AutoLeaseNet.Application.Ports.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Bogus" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+
+</Project>
