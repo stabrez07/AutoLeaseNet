@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using AutoLeaseNet.Adapters.Cache.InMemory;
 using AutoLeaseNet.Adapters.Seed;
+using AutoLeaseNet.Adapters.Sms.InMemory;
 using AutoLeaseNet.Adapters.Tajeer;
 using AutoLeaseNet.Adapters.Tajeer.Configuration;
 using AutoLeaseNet.Adapters.Tajeer.InMemory;
@@ -60,8 +61,9 @@ builder.Services.AddMediatR(cfg =>
 // based on Tajeer:Mode (Real | InMemory), binds ITajeerContractClient to the right impl.
 builder.Services.AddTajeerWithModeSwitch(builder.Configuration.GetSection(TajeerOptions.SectionName));
 builder.Services.AddInMemoryCache();
+builder.Services.AddInMemorySms();
 builder.Services.AddSeed(builder.Configuration.GetSection(SeedOptions.SectionName));
-// Future: AddInMemorySms(), AddInMemoryStorage(), AddInMemoryEmail() etc.
+// Future: AddInMemoryStorage(), AddInMemoryEmail() etc.
 
 var app = builder.Build();
 

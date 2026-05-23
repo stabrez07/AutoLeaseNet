@@ -14,6 +14,7 @@
     <ProjectReference Include="..\..\packages\application\AutoLeaseNet.Infrastructure\AutoLeaseNet.Infrastructure.csproj" />
     <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Tajeer\AutoLeaseNet.Adapters.Tajeer.csproj" />
     <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Tajeer.InMemory\AutoLeaseNet.Adapters.Tajeer.InMemory.csproj" />
+    <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Sms.InMemory\AutoLeaseNet.Adapters.Sms.InMemory.csproj" />
   </ItemGroup>
 
   <ItemGroup>

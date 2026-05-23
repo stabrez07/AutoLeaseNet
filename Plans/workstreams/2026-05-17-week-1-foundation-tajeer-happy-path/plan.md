@@ -148,14 +148,14 @@ A working `POST /api/v1/dev/save-contract` endpoint running locally (Docker Comp
 
 ### Day 7 — SMS dispatch + integration test
 
-- [ ] **T7.1** Add `ISmsClient` port in `Application.Ports`. **Verify**: compiles.
-- [ ] **T7.2** Implement `Adapters.Sms.InMemory.InMemorySmsClient` capturing sent messages in a thread-safe list. **Verify**: unit test asserts capture.
-- [ ] **T7.3** Add `LeaseIssuedDomainEvent` + handler that calls `ISmsClient.SendAsync(customerPhone, template, vars)`. **Verify**: unit test with InMemory port asserts message dispatched once `Lease.Status = Issued`.
-- [ ] **T7.4** SMS template `lease_issued_ar` + `lease_issued_en` with `{contractNumber}` + `{issuanceUrl}` placeholders. **Verify**: template renderer test asserts both locales.
-- [ ] **T7.5** End-to-end integration test (xUnit + WebApplicationFactory) — POST `dev/save-contract` against InMemory Tajeer adapter + simulate webhook → assert Lease `Issued` + SMS captured. **Verify**: test passes deterministically (no flakes across 10 runs).
-- [ ] **T7.6** Run full `dotnet test` + `pnpm test`. **Verify**: 0 failures, 0 skipped without justification.
-- [ ] **T7.7** Run `dotnet build -warnaserror` + `pnpm build`. **Verify**: 0 warnings, 0 errors.
-- [ ] **T7.8** Manual staging smoke (the **Done criteria** below) — record video or screenshots. **Verify**: every Done-criteria checkbox ticked.
+- [x] **T7.1** `ISmsClient` port — already scaffolded as `ISmsSender` in `Application.Ports.Messaging` (Day 0 scaffold). Same shape; name kept stable. ✅ 2026-05-24.
+- [x] **T7.2** `Adapters.Sms.InMemory.InMemorySmsSender` capturing sent messages in a thread-safe `ConcurrentBag<SmsMessage>` + injectable `RespondWith` for failure simulation. ✅ 2026-05-24 (1 unit test asserts capture + default provider-id shape).
+- [x] **T7.3** `LeaseIssuedDomainEvent` (Domain) + `Lease.MarkIssued` raises it + `LeaseIssuedNotification` MediatR wrapper (Application) + `LeaseIssuedSmsHandler : INotificationHandler<LeaseIssuedNotification>` that looks up Customer mobile, picks AR/EN template, calls `ISmsSender.SendAsync`. Swallows provider failures + exceptions so issuance never rolls back. `[LoggerMessage]` event IDs 7001-7006. Webhook handler scans `lease.DomainEvents` post-`SaveChangesAsync` and publishes wrappers via `IPublisher`. ✅ 2026-05-24.
+- [x] **T7.4** Templates `lease_issued_ar` + `lease_issued_en` in `LeaseIssuedSmsTemplates.Render(language, contractNumber, issuanceUrl)` with `{contractNumber}` + `{issuanceUrl}` placeholders. ✅ 2026-05-24 (2 handler tests assert each locale produces the right body + correct `Tags["template"]` value).
+- [x] **T7.5** End-to-end `LeaseIssuedSmsEndToEndTests` — `POST /api/v1/webhooks/tajeer` with valid sig + matching Lease (B2C customer with mobile + PreferredLanguage=Ar) → asserts 200 + Lease.Active + 1 SMS captured with Ar body, right contract number, right URL, right template tag. Second test: Lease with no Customer reference still flips to Active and produces zero SMS. ✅ 2026-05-24.
+- [x] **T7.6** Run full `dotnet test`. ✅ 2026-05-24 (153 / 153 with smoke excluded).
+- [x] **T7.7** `dotnet build -warnaserror`. ✅ 2026-05-24 (0 warnings, 0 errors).
+- [ ] **T7.8** Manual staging smoke (the **Done criteria** below) — record video or screenshots. **Verify**: every Done-criteria checkbox ticked. ⏳ depends on real Tajeer staging credentials + ngrok account (same blocker as T5.7/T6.7).
 
 ## 6. Loop-back tasks (gated on Pre-week-0 unblocks)
 

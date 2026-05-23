@@ -214,6 +214,14 @@ public sealed class Lease : Entity
         StartFuelLevelCode = startFuelLevelCode;
         IssuanceConditionNotes = conditionNotes;
         UpdatedAtUtc = nowUtc;
+
+        RaiseDomainEvent(new LeaseIssuedDomainEvent(
+            LeaseId: Id,
+            TenantId: TenantId,
+            CustomerId: CustomerId,
+            TajeerContractNumber: TajeerContractNumber ?? 0,
+            IssuanceUrl: IssuanceUrl ?? string.Empty,
+            IssuedAtUtc: nowUtc));
     }
 
     public void MarkSuspended(int suspensionReasonCode, DateTimeOffset nowUtc)
