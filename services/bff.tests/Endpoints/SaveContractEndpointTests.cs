@@ -217,17 +217,22 @@ public sealed class SaveContractEndpointFactory : WebApplicationFactory<Program>
     public async Task EnsureSeededAsync()
     {
         if (_seedFinished) return;
-        // Force the host to build by creating a client.
+        // Force the host to build by creating a client. The Program.cs Development
+        // startup hook awaits `seeder.SeedAsync(...)` before app.Run(), so the seed
+        // should be complete by the time CreateClient() returns; the polling below
+        // is defensive against any future startup-timing race.
+        // Timeout 30s — Bogus generation of ~173 rows on a Linux runner (1 vCPU)
+        // takes longer than the 5s the local Windows dev box needed.
         using var probe = CreateClient();
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AutoLeaseNetDbContext>();
-        var deadline = DateTime.UtcNow.AddSeconds(5);
+        var deadline = DateTime.UtcNow.AddSeconds(30);
         while (DateTime.UtcNow < deadline)
         {
             if (await db.Customers.AnyAsync()) { _seedFinished = true; return; }
-            await Task.Delay(50);
+            await Task.Delay(100);
         }
-        throw new InvalidOperationException("Seeder did not populate Customers within 5s.");
+        throw new InvalidOperationException("Seeder did not populate Customers within 30s.");
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
