@@ -68,6 +68,24 @@ public sealed class HealthTestFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+        builder.ConfigureAppConfiguration((_, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:AutoLeaseNet"] =
+                    "Server=localhost;Database=AutoLeaseNet_Dev;Integrated Security=true;TrustServerCertificate=true;Encrypt=false",
+                ["Tajeer:BaseUrl"] = "https://tajeer-stg.api.elm.sa",
+                ["Tajeer:IssuanceUrlBase"] = "https://tajeerstg.logisti.sa",
+                ["Tajeer:AppId"] = "test-app",
+                ["Tajeer:AppKey"] = "test-key",
+                ["Tajeer:AuthorizationToken"] = "Basic test",
+                ["Tajeer:BranchId"] = "1",
+                ["Tajeer:TimeoutSeconds"] = "10",
+                ["Tajeer:WebhookSharedSecret"] = "test-secret",
+                ["Tajeer:Mode"] = "InMemory",
+                ["Seed:Mode"] = "Empty",
+            });
+        });
     }
 }
 
@@ -84,6 +102,16 @@ public sealed class BrokenSqlHealthTestFactory : WebApplicationFactory<Program>
                 // Port 11111 is reserved/unused → SqlException ConnectionFailure within timeout
                 ["ConnectionStrings:AutoLeaseNet"] =
                     "Server=localhost,11111;Database=AutoLeaseNet_Dev;User Id=sa;Password=wrong;Connect Timeout=1;TrustServerCertificate=true;Encrypt=false",
+                ["Tajeer:BaseUrl"] = "https://tajeer-stg.api.elm.sa",
+                ["Tajeer:IssuanceUrlBase"] = "https://tajeerstg.logisti.sa",
+                ["Tajeer:AppId"] = "test-app",
+                ["Tajeer:AppKey"] = "test-key",
+                ["Tajeer:AuthorizationToken"] = "Basic test",
+                ["Tajeer:BranchId"] = "1",
+                ["Tajeer:TimeoutSeconds"] = "10",
+                ["Tajeer:WebhookSharedSecret"] = "test-secret",
+                ["Tajeer:Mode"] = "InMemory",
+                ["Seed:Mode"] = "Empty",
             });
         });
     }
