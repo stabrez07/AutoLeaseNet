@@ -209,6 +209,9 @@ Files to update:
 - Additional hardening: `SaveContractEndpointFactory.EnsureSeededAsync` now explicitly resolves
   `IDataSeeder` and calls `SeedAsync(...)` (idempotent by design) before polling, removing dependency
   on Development startup-hook ordering in parallelized test-host runs.
+- CI follow-up: `.runsettings` default filter changed from `Category!=Smoke` to
+  `Category!=Smoke&Category!=Integration` so Linux CI does not attempt local SQL-dependent
+  infrastructure integration tests.
 - Added better diagnostics in `SaveContractEndpointFactory.EnsureSeededAsync` (120s wait + mode/count/db details)
   to make future CI triage fast if seeding regresses.
 - Validation runs after fix:

@@ -2,8 +2,9 @@
 <RunSettings>
   <RunConfiguration>
     <!-- Default test run excludes Smoke-tagged tests so CI never reaches real vendor sandboxes. -->
+    <!-- Integration-tagged tests require local dependencies (e.g., SQL Server) and are opt-in. -->
     <!-- Run smoke explicitly with: dotnet test (option dash-dash filter) Category=Smoke -->
     <!-- The explicit filter on the CLI overrides this default. -->
-    <TestCaseFilter>Category!=Smoke</TestCaseFilter>
+    <TestCaseFilter>Category!=Smoke&amp;Category!=Integration</TestCaseFilter>
   </RunConfiguration>
 </RunSettings>
