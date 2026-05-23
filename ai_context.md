@@ -227,10 +227,23 @@ User needs Tajeer Rabet staging credentials + an ngrok account. Full runbook at
 [`STAGING-SMOKE.md`](./Plans/workstreams/2026-05-17-week-1-foundation-tajeer-happy-path/STAGING-SMOKE.md).
 Closes T3.7 + T5.7 + T5.8 + T6.7 + T6.8 + T6.9 + T7.8 in ~45-90 minutes.
 
-### 3. L.G2 / L.G3 — branch protection + repo secrets
+### 3. ✅ DELIVERED — L.G2 / L.G3 — branch protection + repo secrets
 
-Blocked on GitHub Pro upgrade ($4/mo) OR repo going public. Once unblocked, follow
-[`.github/SETUP-GITHUB.md`](./.github/SETUP-GITHUB.md).
+Executed 2026-05-24 via governance Option B:
+
+- Repo `stabrez07/AutoLeaseNet` flipped to **PUBLIC** (free branch protection + unlimited Actions).
+- Branch protection on `main`: required status checks (`.NET (build -warnaserror + test)`,
+  `JS (lint + typecheck + build)`) with `strict=true`, PRs required (review count `0` because
+  solo dev can't self-approve — CI + linear history + conversation resolution still gate it),
+  `enforce_admins=true`, no force-push, no deletions, linear history, conversation
+  resolution required.
+- Five dummy `TAJEER_*` Actions secrets seeded (rotate when real Rabet creds arrive):
+  `TAJEER_APPID`, `TAJEER_APPKEY`, `TAJEER_AUTHORIZATION_TOKEN`, `TAJEER_BRANCH_ID`,
+  `TAJEER_WEBHOOK_SHARED_SECRET`.
+
+**Consequence for future sessions**: direct push to `main` is blocked. Every change goes
+through a feature branch + PR. Use `gh pr create` then `gh pr merge --squash --delete-branch`
+once CI is green. Self-approval is not required (count=0) but a PR + green CI is.
 
 ### 4. ✅ PARTIALLY DELIVERED — Week 2 UI scaffold (without design.md)
 
