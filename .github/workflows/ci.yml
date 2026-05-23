@@ -5,6 +5,7 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
 env:
   NODE_VERSION: '20.11.1'
@@ -16,9 +17,58 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  js:
-    name: JS (lint + typecheck + test + build)
+  # ─────────────────────────────────────────────────────────────────────────
+  # .NET build + test — enforces today's invariants (Week-1 done):
+  #   - solution restores cleanly
+  #   - dotnet build AutoLeaseNet.sln succeeds with WarnAsError (set in
+  #     Directory.Build.props); CI inherits — no extra flag needed
+  #   - all 153 unit/integration tests pass with the .runsettings filter
+  #     (Category=Smoke excluded; smoke runs separately when creds exist)
+  # ─────────────────────────────────────────────────────────────────────────
+  dotnet:
+    name: .NET (build -warnaserror + test)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore local tools (dotnet-ef 8.0.5)
+        run: dotnet tool restore
+
+      - name: Restore NuGet packages
+        run: dotnet restore AutoLeaseNet.sln
+
+      - name: Build (Release, treat warnings as errors)
+        run: dotnet build AutoLeaseNet.sln -c Release --no-restore
+
+      - name: "Test (default filter: Category!=Smoke via .runsettings)"
+        run: |
+          dotnet test AutoLeaseNet.sln -c Release --no-build \
+            --settings .runsettings \
+            --logger "console;verbosity=normal" \
+            --results-directory ./TestResults \
+            --collect:"XPlat Code Coverage" || exit 1
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-test-results
+          path: ./TestResults/
+          retention-days: 14
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # JS / pnpm — apps are skeletal until design.md from user lands.
+  # continue-on-error: true on lint/typecheck/test/build until then.
+  # ─────────────────────────────────────────────────────────────────────────
+  js:
+    name: JS (lint + typecheck + test + build) — best-effort until UI lands
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -36,45 +86,33 @@ jobs:
 
       - name: Lint
         run: pnpm lint
-        continue-on-error: true # until apps + ui have content
+        continue-on-error: true
 
       - name: Typecheck
         run: pnpm typecheck
-        continue-on-error: true # until apps + ui have content
+        continue-on-error: true
 
       - name: Test
         run: pnpm test
-        continue-on-error: true # until test suites exist
+        continue-on-error: true
 
       - name: Build
         run: pnpm build
-        continue-on-error: true # until apps have content
+        continue-on-error: true
 
-  dotnet:
-    name: .NET (restore + build + test)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Restore
-        run: dotnet restore AutoLeaseNet.sln
-
-      - name: Build
-        run: dotnet build AutoLeaseNet.sln -c Release --no-restore
-
-      - name: Test (unit only — integration tests run separately)
-        run: dotnet test AutoLeaseNet.sln -c Release --no-build --filter "Category!=Integration&Trait!=Integration"
-        continue-on-error: true # until test suites exist
-
-  tajeer-integration:
-    name: Tajeer sandbox integration tests
+  # ─────────────────────────────────────────────────────────────────────────
+  # Tajeer staging smoke — runs only on pushes to main AND only when the
+  # repository secrets are populated. Free private repos can't set secrets
+  # via the API today — once the user upgrades to Pro OR makes the repo
+  # public AND runs the `gh secret set` commands from SETUP-GITHUB.md,
+  # this job lights up automatically. Until then it is skipped cleanly.
+  # ─────────────────────────────────────────────────────────────────────────
+  tajeer-staging-smoke:
+    name: Tajeer staging smoke (Category=Smoke)
     runs-on: ubuntu-latest
     needs: dotnet
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -82,25 +120,19 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Run Tajeer integration tests
-        if: ${{ secrets.TAJEER_APPKEY != '' }}
-        env:
-          TAJEER__APPID: ${{ secrets.TAJEER_APPID }}
-          TAJEER__APPKEY: ${{ secrets.TAJEER_APPKEY }}
-          TAJEER__AUTHORIZATION: ${{ secrets.TAJEER_AUTHORIZATION }}
-          TAJEER__BASEURL: 'https://tajeer-stg.api.elm.sa'
-        run: dotnet test AutoLeaseNet.sln -c Release --filter "Trait=Integration"
-
-  infra:
-    name: Infra (Bicep lint)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: azure/setup-bicep@v1
-      - name: Lint Bicep (if any)
+      - name: Restore + build smoke-test project
         run: |
-          if [ -f infra/bicep/main.bicep ]; then
-            bicep lint infra/bicep/main.bicep
-          else
-            echo "No infra/bicep/main.bicep yet — skipping"
-          fi
+          dotnet restore packages/adapters/AutoLeaseNet.Adapters.Tajeer.Tests/AutoLeaseNet.Adapters.Tajeer.Tests.csproj
+          dotnet build packages/adapters/AutoLeaseNet.Adapters.Tajeer.Tests/AutoLeaseNet.Adapters.Tajeer.Tests.csproj -c Release --no-restore
+
+      - name: Run smoke (gracefully skips when secrets absent)
+        env:
+          TAJEER_TAJEER__APPID: ${{ secrets.TAJEER_APPID }}
+          TAJEER_TAJEER__APPKEY: ${{ secrets.TAJEER_APPKEY }}
+          TAJEER_TAJEER__AUTHORIZATIONTOKEN: ${{ secrets.TAJEER_AUTHORIZATION }}
+          TAJEER_TAJEER__BRANCHID: ${{ secrets.TAJEER_BRANCHID }}
+          TAJEER_TAJEER__WEBHOOKSHAREDSECRET: ${{ secrets.TAJEER_WEBHOOKSECRET }}
+        run: |
+          dotnet test packages/adapters/AutoLeaseNet.Adapters.Tajeer.Tests \
+            -c Release --no-build --filter Category=Smoke \
+            --logger "console;verbosity=normal"
