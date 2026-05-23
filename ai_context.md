@@ -232,11 +232,38 @@ Closes T3.7 + T5.7 + T5.8 + T6.7 + T6.8 + T6.9 + T7.8 in ~45-90 minutes.
 Blocked on GitHub Pro upgrade ($4/mo) OR repo going public. Once unblocked, follow
 [`.github/SETUP-GITHUB.md`](./.github/SETUP-GITHUB.md).
 
-### 4. design.md from user — unlocks Week 2 UI work (still missing)
+### 4. ✅ PARTIALLY DELIVERED — Week 2 UI scaffold (without design.md)
 
-Days 11–14 of Week 2 are entirely Next.js / shadcn / form work that can't start
-without it. Days 8–10 are already pre-done via the Domain Deepening workstream
-(entities + ports + repos + seed + lookup endpoints).
+User explicitly waived the design.md gate ("currently there is no ui so I can't") and
+asked for a best-effort scaffold to iterate against during end-user testing. Delivered:
+
+- **Tailwind 3.4 wired** on `apps/web-portal` (`tailwind.config.mjs`, `postcss.config.mjs`,
+  updated `app/globals.css` with `@tailwind` directives, brand palette + RTL font swap).
+- **Locale + RTL** via lightweight `LocaleProvider` (`apps/web-portal/lib/locale-provider.tsx` +
+  `lib/i18n.ts`) with AR/EN dictionaries — no next-intl `[locale]` segments yet, can migrate
+  cleanly later. `<html dir>` flips automatically on locale change; cookie-persisted.
+- **Typed BFF client** (`apps/web-portal/lib/bff-client.ts`) calling `/api/v1/lookups/*` +
+  `/api/v1/dev/save-contract` with `X-Dev-Tenant-Id` + `X-Dev-User-Type` headers and an
+  `Idempotency-Key` for the save. Will be regenerated from `packages/contracts/openapi.yaml`
+  once that file is fleshed out.
+- **App shell** (`components/app-shell.tsx`) with header nav + AR/EN toggle + active-route highlighting.
+- **Pages**: dashboard (`app/page.tsx`), customers, vehicles, drivers, branches lists with
+  search + pagination, and `app/leases/new/page.tsx` — full Save Contract form mirroring
+  the BFF `SaveContractDevRequest` shape, pre-picking the first seeded values for a
+  one-click happy-path submit.
+
+### 5. ✅ DELIVERED — Local Tajeer happy-path smoke with dummy credentials
+
+New `scripts/local-smoke.ps1` boots the BFF in `Tajeer:Mode=InMemory`, POSTs `/dev/save-contract`,
+then synthesises a `contract.create` webhook with the dummy shared secret to flip the lease
+to Active, then asserts via `sqlcmd`. Switch to real staging is a one-flag flip (`-RealTajeer`)
+after the user pastes real Tajeer Rabet credentials into `dotnet user-secrets`.
+
+### 6. ✅ DELIVERED — Governance recommendation update
+
+`.github/SETUP-GITHUB.md` now marks **Option B (public repo)** as the recommended path for
+unblocking L.G2/L.G3 at $0 cost, with a pre-flight checklist of the (verified) secret/PII
+surfaces. Option A (GitHub Pro) preserved for the NDA case.
 
 ### 5. Architectural follow-ups (Week 2+ — not blockers, write down so they don't drift)
 
@@ -292,4 +319,6 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
 
 ## Last updated
 
-2026-05-24 after PR #1 merge. CI is green, `main` is up-to-date at `8864aec`.
+2026-05-24 — added Week 2 UI scaffold, local Tajeer smoke script (`scripts/local-smoke.ps1`),
+and marked Option B (public repo) as the recommended L.G2/L.G3 unblock path. Previous
+checkpoint: PR #1 merge at `8864aec` (CI green).
