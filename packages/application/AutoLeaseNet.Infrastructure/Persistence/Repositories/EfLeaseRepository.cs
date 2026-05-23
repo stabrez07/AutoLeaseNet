@@ -22,4 +22,15 @@ public sealed class EfLeaseRepository(AutoLeaseNetDbContext db) : ILeaseReposito
             l => l.TenantId == tenantId && l.TajeerContractNumber == tajeerContractNumber,
             ct);
     }
+
+    public Task<Lease?> GetByTajeerContractNumberAcrossTenantsAsync(
+        long tajeerContractNumber,
+        CancellationToken ct)
+    {
+        // Unique filtered index on (TenantId, TajeerContractNumber WHERE NOT NULL) plus the
+        // single-tenant Phase-1 invariant means SingleOrDefault is safe globally too.
+        return db.Leases.SingleOrDefaultAsync(
+            l => l.TajeerContractNumber == tajeerContractNumber,
+            ct);
+    }
 }

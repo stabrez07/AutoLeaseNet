@@ -136,15 +136,15 @@ A working `POST /api/v1/dev/save-contract` endpoint running locally (Docker Comp
 
 ### Day 6 — Tajeer webhook receiver
 
-- [ ] **T6.1** Add `WebhookLog` entity (`Id`, `TenantId`, `Source`, `EventType`, `Signature`, `Payload (encrypted at rest later)`, `ReceivedAt`, `ProcessedAt?`, `DedupKey`). **Verify**: migration `Add_WebhookLog` generated + applied.
-- [ ] **T6.2** Endpoint `POST /api/v1/webhooks/tajeer` accepting raw body, returns 200 quickly. **Verify**: returns 200 with empty body in <100ms (work happens async).
-- [ ] **T6.3** Signature verification helper — compare HMAC of body using shared secret from `TajeerOptions.WebhookSecret`. **Verify**: unit test: valid sig → ok, tampered body → reject.
-- [ ] **T6.4** Permissive log-only mode flag `Tajeer:Webhook:LogOnly` defaulting `true` for first run. **Verify**: with flag on, signature mismatch logs but does not reject (covered by test).
-- [ ] **T6.5** Dedup by `DedupKey = source + eventId`; second arrival → 200 no-op. **Verify**: integration test posts same payload twice, only one `Lease` update.
-- [ ] **T6.6** On `LeaseIssued` event, update `Lease.Status = Issued`, set `IssuedAt`. **Verify**: integration test posts canned issued-event → row updated.
-- [ ] **T6.7** Set up ngrok (or Azure dev URL placeholder) and register webhook URL with Tajeer staging. Document in `notes.md`. **Verify**: ngrok URL captured; record process for re-registration.
-- [ ] **T6.8** End-to-end smoke from Day 5: POST `dev/save-contract` → wait for real webhook → assert `Lease.Status = Issued`. **Verify**: smoke passes against staging.
-- [ ] **T6.9** Flip `Tajeer:Webhook:LogOnly = false` once first real webhook signature verified. **Verify**: real callback now requires valid HMAC; test re-runs green.
+- [x] **T6.1** Add `WebhookLog` entity (`Id`, `TenantId`, `Source`, `EventType`, `Signature`, `Payload`, `ReceivedAt`, `ProcessedAt?`, `DedupKey`). ✅ Day 6 part 1 (commit `a20b5dc`). Migration `Add_WebhookLog` generated + applied. Unique index on (Source, ExternalEventId) is the dedup primitive.
+- [x] **T6.2** Endpoint `POST /api/v1/webhooks/tajeer` accepting raw body, returns 200 quickly. ✅ Day 6 part 2 — `TajeerWebhookEndpoints.cs` Minimal-API, `AllowAnonymous()`, inline dispatch for Phase 1 (BackgroundService drain pattern arrives later).
+- [x] **T6.3** Signature verification helper — compare to shared secret from `TajeerOptions.WebhookSharedSecret`. ✅ Day 6 part 1 — `WebhookSignatureValidator.IsValid` uses `CryptographicOperations.FixedTimeEquals` (constant-time, length-mismatch short-circuit). 8 unit tests cover matches / mismatches / null+empty table / length differs. NOTE: Tajeer's auth model is **shared-secret header** not HMAC-of-body per Spec 03 §12.2 — used the spec's model since it matches what Tajeer actually sends.
+- [x] **T6.4** Permissive log-only mode flag `Tajeer:Webhook:LogOnly` defaulting `true` for first run. ✅ Day 6 part 1 — `TajeerWebhookOptions` bound from `Tajeer:Webhook`. Day 6 part 2 endpoint test confirms LogOnly=true → invalid sig accepted + persisted with `SignatureValid=false`; LogOnly=false → 401.
+- [x] **T6.5** Dedup; second arrival → 200 no-op. ✅ Day 6 part 2 — optimistic `IWebhookLogRepository.ExistsAsync` probe + `DbUpdateException` catch on the unique-index race. 1 endpoint test asserts second POST returns 200 + `WebhookLogs.Count == 1` + Lease still Active (single transition).
+- [x] **T6.6** On `LeaseIssued` event, update `Lease.Status = Active`, set `IssuedAtUtc`. ✅ Day 6 part 2 — handler dispatches via `Lease.MarkIssued` for event types `contract.create` / `contract.issued` / `contract.issue` (Tajeer fires several variants). Endpoint test seeds a PendingIssuance lease + posts the event → asserts `Status == Active`, `IssuedAtUtc` set, `WebhookLog.ProcessedAtUtc` set.
+- [ ] **T6.7** Set up ngrok (or Azure dev URL placeholder) and register webhook URL with Tajeer staging. Document in `notes.md`. **Verify**: ngrok URL captured; record process for re-registration. ⏳ awaits the manual staging exercise (depends on real Tajeer staging credentials + ngrok account).
+- [ ] **T6.8** End-to-end smoke from Day 5: POST `dev/save-contract` → wait for real webhook → assert `Lease.Status = Active`. **Verify**: smoke passes against staging. ⏳ depends on T5.7 + T6.7.
+- [ ] **T6.9** Flip `Tajeer:Webhook:LogOnly = false` once first real webhook signature verified. **Verify**: real callback now requires valid HMAC; test re-runs green. ⏳ depends on T6.8 success.
 
 ### Day 7 — SMS dispatch + integration test
 

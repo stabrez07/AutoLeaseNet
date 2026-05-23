@@ -38,6 +38,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBranchRepository, EfBranchRepository>();
         services.AddScoped<IRentPolicyRepository, EfRentPolicyRepository>();
         services.AddScoped<IExtendedCoverageRepository, EfExtendedCoverageRepository>();
+        services.AddScoped<IWebhookLogRepository, EfWebhookLogRepository>();
 
         return services;
     }

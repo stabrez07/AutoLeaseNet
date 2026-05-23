@@ -38,6 +38,11 @@ public static class ServiceCollectionExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        // Day 6 — webhook receiver tunables (LogOnly default true until staging round-trip).
+        services
+            .AddOptions<TajeerWebhookOptions>()
+            .Bind(configurationSection.GetSection("Webhook"));
+
         services.AddTransient<TajeerAuthHandler>();
 
         services
