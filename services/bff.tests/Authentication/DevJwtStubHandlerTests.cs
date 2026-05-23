@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace AutoLeaseNet.Bff.Tests.Authentication;
@@ -121,5 +122,22 @@ public sealed class DevWebApplicationFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+        builder.ConfigureAppConfiguration((_, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:AutoLeaseNet"] = "Server=ignored;Database=ignored;",
+                ["Tajeer:BaseUrl"] = "https://tajeer-stg.api.elm.sa",
+                ["Tajeer:IssuanceUrlBase"] = "https://tajeerstg.logisti.sa",
+                ["Tajeer:AppId"] = "test-app",
+                ["Tajeer:AppKey"] = "test-key",
+                ["Tajeer:AuthorizationToken"] = "Basic test",
+                ["Tajeer:BranchId"] = "1",
+                ["Tajeer:TimeoutSeconds"] = "10",
+                ["Tajeer:WebhookSharedSecret"] = "test-secret",
+                ["Tajeer:Mode"] = "InMemory",
+                ["Seed:Mode"] = "Empty",
+            });
+        });
     }
 }

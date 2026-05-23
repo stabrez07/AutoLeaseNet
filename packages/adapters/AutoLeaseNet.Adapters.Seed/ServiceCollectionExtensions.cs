@@ -22,16 +22,19 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configurationSection);
 
-        var options = configurationSection.Get<SeedOptions>() ?? new SeedOptions();
-        services.AddSingleton(options);
+        services.AddSingleton(_ => configurationSection.Get<SeedOptions>() ?? new SeedOptions());
 
-        services.AddScoped<IDataSeeder>(sp => options.Mode switch
+        services.AddScoped<IDataSeeder>(sp =>
         {
-            SeedMode.Demo => ActivatorUtilities.CreateInstance<BogusDataSeeder>(sp),
-            SeedMode.Empty => new EmptyDataSeeder(options),
-            SeedMode.ImportedFile => throw new NotImplementedException(
-                "Seed:Mode = ImportedFile reserved for the future data-management module."),
-            _ => new EmptyDataSeeder(options),
+            var options = sp.GetRequiredService<SeedOptions>();
+            return options.Mode switch
+            {
+                SeedMode.Demo => ActivatorUtilities.CreateInstance<BogusDataSeeder>(sp),
+                SeedMode.Empty => new EmptyDataSeeder(options),
+                SeedMode.ImportedFile => throw new NotImplementedException(
+                    "Seed:Mode = ImportedFile reserved for the future data-management module."),
+                _ => new EmptyDataSeeder(options),
+            };
         });
 
         return services;

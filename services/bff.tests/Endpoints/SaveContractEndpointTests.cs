@@ -4,6 +4,7 @@ using System.Text.Json;
 using AutoLeaseNet.Adapters.Tajeer.Contracts;
 using AutoLeaseNet.Adapters.Tajeer.Contracts.Dtos;
 using AutoLeaseNet.Adapters.Tajeer.InMemory.Contracts;
+using AutoLeaseNet.Application.Ports.Seeding;
 using AutoLeaseNet.Infrastructure.Persistence;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
@@ -221,18 +222,27 @@ public sealed class SaveContractEndpointFactory : WebApplicationFactory<Program>
         // startup hook awaits `seeder.SeedAsync(...)` before app.Run(), so the seed
         // should be complete by the time CreateClient() returns; the polling below
         // is defensive against any future startup-timing race.
-        // Timeout 30s — Bogus generation of ~173 rows on a Linux runner (1 vCPU)
-        // takes longer than the 5s the local Windows dev box needed.
+        // Timeout 120s — Demo seed generation (Bogus + full aggregate graph) can
+        // exceed 30s on constrained or contended test runners.
         using var probe = CreateClient();
         using var scope = Services.CreateScope();
+        var seeder = scope.ServiceProvider.GetRequiredService<IDataSeeder>();
+        await seeder.SeedAsync(CancellationToken.None);
+
         var db = scope.ServiceProvider.GetRequiredService<AutoLeaseNetDbContext>();
-        var deadline = DateTime.UtcNow.AddSeconds(30);
+        var deadline = DateTime.UtcNow.AddSeconds(120);
         while (DateTime.UtcNow < deadline)
         {
             if (await db.Customers.AnyAsync()) { _seedFinished = true; return; }
             await Task.Delay(100);
         }
-        throw new InvalidOperationException("Seeder did not populate Customers within 30s.");
+
+        var mode = scope.ServiceProvider
+            .GetRequiredService<IConfiguration>()
+            .GetValue<string>("Seed:Mode") ?? "(null)";
+        var customerCount = await db.Customers.CountAsync();
+        throw new InvalidOperationException(
+            $"Seeder did not populate Customers within 120s. SeederType={seeder.GetType().Name}; Seed:Mode={mode}; Customers={customerCount}; DbName={_dbName}.");
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

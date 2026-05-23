@@ -34,15 +34,15 @@ it first; update it after every meaningful change.
 
 ## Where to find things (don't paraphrase the repo — read these)
 
-| Need | Read |
-|---|---|
-| Project constitution + rules | [`CLAUDE.md`](./CLAUDE.md) |
-| Domain + state machines + adapter design | [`Specs/`](./Specs/) — `01`–`08` + ADRs |
-| Week-by-week MVP plan | [`Plans/02-phase-1-mvp-week-by-week.md`](./Plans/02-phase-1-mvp-week-by-week.md) |
-| Week 1 workstream (closed code-side) | [`Plans/workstreams/2026-05-17-week-1-foundation-tajeer-happy-path/`](./Plans/workstreams/2026-05-17-week-1-foundation-tajeer-happy-path/) — `plan.md` + `notes.md` + `retrospective.md` + `STAGING-SMOKE.md` |
-| Domain Deepening workstream (closed) | [`Plans/workstreams/2026-05-24-domain-deepening-production-seed/`](./Plans/workstreams/2026-05-24-domain-deepening-production-seed/) |
-| GitHub CI setup runbook | [`.github/SETUP-GITHUB.md`](./.github/SETUP-GITHUB.md) |
-| Production data rule (BI granularity + KSA-shaped seed) | Captured as a memory and applied repo-wide |
+| Need                                                    | Read                                                                                                                                                                                                          |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project constitution + rules                            | [`CLAUDE.md`](./CLAUDE.md)                                                                                                                                                                                    |
+| Domain + state machines + adapter design                | [`Specs/`](./Specs/) — `01`–`08` + ADRs                                                                                                                                                                       |
+| Week-by-week MVP plan                                   | [`Plans/02-phase-1-mvp-week-by-week.md`](./Plans/02-phase-1-mvp-week-by-week.md)                                                                                                                              |
+| Week 1 workstream (closed code-side)                    | [`Plans/workstreams/2026-05-17-week-1-foundation-tajeer-happy-path/`](./Plans/workstreams/2026-05-17-week-1-foundation-tajeer-happy-path/) — `plan.md` + `notes.md` + `retrospective.md` + `STAGING-SMOKE.md` |
+| Domain Deepening workstream (closed)                    | [`Plans/workstreams/2026-05-24-domain-deepening-production-seed/`](./Plans/workstreams/2026-05-24-domain-deepening-production-seed/)                                                                          |
+| GitHub CI setup runbook                                 | [`.github/SETUP-GITHUB.md`](./.github/SETUP-GITHUB.md)                                                                                                                                                        |
+| Production data rule (BI granularity + KSA-shaped seed) | Captured as a memory and applied repo-wide                                                                                                                                                                    |
 
 ## Architecture decisions (locked)
 
@@ -106,19 +106,19 @@ it first; update it after every meaningful change.
 
 ## API contracts (current)
 
-| Verb | Path | Auth | Body | Returns |
-|---|---|---|---|---|
-| `GET` | `/health/liveness` | none | — | 200 always |
-| `GET` | `/health/readiness` | none | — | 200 if SQL reachable, 503 otherwise |
-| `GET` | `/api/v1/dev/whoami` | dev JWT stub | — | claims echo + resolved `ITenantContext` |
-| `POST` | `/api/v1/dev/save-contract` | dev JWT stub + `Idempotency-Key` header | domain-shaped `SaveContractDevRequest` | 202 `{leaseId, tajeerContractNumber, issuanceUrl}` ; 400 / 422 / 503 on failure |
-| `POST` | `/api/v1/webhooks/tajeer` | `secret-key` header | Tajeer V9.7 payload | 200 `{status: "received"|"duplicate-ignored"}` ; 401 on bad sig (unless LogOnly) ; 400 on malformed body |
-| `GET` | `/api/v1/lookups/branches` | dev JWT stub | — | `BranchDto[]` |
-| `GET` | `/api/v1/lookups/rent-policies` | dev JWT stub | — | `RentPolicyDto[]` |
-| `GET` | `/api/v1/lookups/extended-coverages` | dev JWT stub | — | `ExtendedCoverageDto[]` |
-| `GET` | `/api/v1/lookups/customers` | dev JWT stub | `?page=1&pageSize=50&search=` | `PagedResult<CustomerSummaryDto>` |
-| `GET` | `/api/v1/lookups/vehicles` | dev JWT stub | `?page=1&pageSize=50&search=&status=1` | `PagedResult<VehicleSummaryDto>` |
-| `GET` | `/api/v1/lookups/drivers` | dev JWT stub | `?page=1&pageSize=50&search=` | `PagedResult<DriverSummaryDto>` |
+| Verb   | Path                                 | Auth                                    | Body                                   | Returns                                                                         |
+| ------ | ------------------------------------ | --------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `GET`  | `/health/liveness`                   | none                                    | —                                      | 200 always                                                                      |
+| `GET`  | `/health/readiness`                  | none                                    | —                                      | 200 if SQL reachable, 503 otherwise                                             |
+| `GET`  | `/api/v1/dev/whoami`                 | dev JWT stub                            | —                                      | claims echo + resolved `ITenantContext`                                         |
+| `POST` | `/api/v1/dev/save-contract`          | dev JWT stub + `Idempotency-Key` header | domain-shaped `SaveContractDevRequest` | 202 `{leaseId, tajeerContractNumber, issuanceUrl}` ; 400 / 422 / 503 on failure |
+| `POST` | `/api/v1/webhooks/tajeer`            | `secret-key` header                     | Tajeer V9.7 payload                    | 200 `{status: "received"                                                        | "duplicate-ignored"}` ; 401 on bad sig (unless LogOnly) ; 400 on malformed body |
+| `GET`  | `/api/v1/lookups/branches`           | dev JWT stub                            | —                                      | `BranchDto[]`                                                                   |
+| `GET`  | `/api/v1/lookups/rent-policies`      | dev JWT stub                            | —                                      | `RentPolicyDto[]`                                                               |
+| `GET`  | `/api/v1/lookups/extended-coverages` | dev JWT stub                            | —                                      | `ExtendedCoverageDto[]`                                                         |
+| `GET`  | `/api/v1/lookups/customers`          | dev JWT stub                            | `?page=1&pageSize=50&search=`          | `PagedResult<CustomerSummaryDto>`                                               |
+| `GET`  | `/api/v1/lookups/vehicles`           | dev JWT stub                            | `?page=1&pageSize=50&search=&status=1` | `PagedResult<VehicleSummaryDto>`                                                |
+| `GET`  | `/api/v1/lookups/drivers`            | dev JWT stub                            | `?page=1&pageSize=50&search=`          | `PagedResult<DriverSummaryDto>`                                                 |
 
 ## Current repo state
 
@@ -131,7 +131,7 @@ it first; update it after every meaningful change.
 
 ## TODOs — in priority order
 
-### 1. ⚠️ HOT — CI failing on `appsettings.Development.json` being gitignored
+### 1. ⚠️ HOT — CI failing on `appsettings.Development.json` being gitignored (patch applied locally, CI pending)
 
 **Root cause**: `HealthTestFactory` (services/bff.tests/Health/HealthEndpointsTests.cs)
 and `DevWebApplicationFactory` (services/bff.tests/Authentication/DevJwtStubHandlerTests.cs)
@@ -145,11 +145,11 @@ AuthorizationToken / BranchId / WebhookSharedSecret.
 **Two fix options**:
 
 a) **Update the two test factories to inject Tajeer dummy config inline** (matches
-   the pattern in `SaveContractEndpointFactory` and `DevJwtStubProductionGuardTests`).
-   Cleanest; production stays fail-loud when Tajeer config is missing.
+the pattern in `SaveContractEndpointFactory` and `DevJwtStubProductionGuardTests`).
+Cleanest; production stays fail-loud when Tajeer config is missing.
 
 b) **Add an `appsettings.Testing.json` (committed) and have test factories use
-   `UseEnvironment("Testing")`** — single file, all current + future factories pick it up.
+`UseEnvironment("Testing")`** — single file, all current + future factories pick it up.
 
 **Recommendation: option (a)**. It's already the pattern for the other two factories;
 extending it to two more keeps the codebase consistent.
@@ -177,13 +177,46 @@ builder.ConfigureAppConfiguration((_, config) =>
 ```
 
 Files to update:
+
 - `services/bff.tests/Health/HealthEndpointsTests.cs` — `HealthTestFactory` class
   (~line 66) and `BrokenSqlHealthTestFactory` (~line 75).
 - `services/bff.tests/Authentication/DevJwtStubHandlerTests.cs` — `DevWebApplicationFactory`
   class (find at top or bottom of file).
 
-After fixing: push to a feature branch + PR (or push to main if free-tier branch
-protection isn't yet in place), watch the CI run, expect 153/153 green.
+**2026-05-24 implementation update**:
+
+- Applied option (a) inline-config fix in:
+  - `services/bff.tests/Health/HealthEndpointsTests.cs`
+  - `services/bff.tests/Authentication/DevJwtStubHandlerTests.cs`
+- Added the same required `Tajeer:*` dummy keys used by other factories so
+  `TajeerOptions.ValidateOnStart()` no longer depends on gitignored
+  `appsettings.Development.json`.
+- Kept the local-ready SQL connection in `HealthTestFactory` so the existing
+  SQL-reachable integration health test remains valid on Windows dev boxes.
+- Validation run:
+  - `dotnet test services/bff.tests/AutoLeaseNet.Bff.Tests.csproj --filter "FullyQualifiedName~HealthEndpointsTests|FullyQualifiedName~DevJwtStubHandlerTests"` ✅ (8/8)
+
+**2026-05-24 follow-up fix (same TODO #1 lane)**:
+
+- While validating full non-integration tests, SaveContract/Lookup endpoint tests still failed with
+  `Seeder did not populate Customers`.
+- Root cause: `AddSeed(...)` in `Adapters.Seed` eagerly materialized `SeedOptions` at DI-registration time.
+  In test-host composition, this could lock in pre-override values and resolve `IDataSeeder` as `EmptyDataSeeder`
+  instead of `BogusDataSeeder` even when tests supplied `Seed:Mode=Demo`.
+- Fix: changed seed registration to resolve `SeedOptions` lazily from `IConfigurationSection` at runtime
+  (`AddSingleton(_ => configurationSection.Get<SeedOptions>() ?? new SeedOptions())`), and kept seeder selection
+  inside the scoped `IDataSeeder` factory.
+- Additional hardening: `SaveContractEndpointFactory.EnsureSeededAsync` now explicitly resolves
+  `IDataSeeder` and calls `SeedAsync(...)` (idempotent by design) before polling, removing dependency
+  on Development startup-hook ordering in parallelized test-host runs.
+- Added better diagnostics in `SaveContractEndpointFactory.EnsureSeededAsync` (120s wait + mode/count/db details)
+  to make future CI triage fast if seeding regresses.
+- Validation runs after fix:
+  - `dotnet test services/bff.tests/AutoLeaseNet.Bff.Tests.csproj --filter "FullyQualifiedName~SaveContractEndpointTests.POST_save_contract_with_valid_body_returns_202_and_writes_a_Lease"` ✅
+  - `dotnet test services/bff.tests/AutoLeaseNet.Bff.Tests.csproj --filter "Trait!=Integration"` ✅
+  - `dotnet test AutoLeaseNet.sln --filter Trait!=Integration` ✅ (all projects green locally)
+
+Next: push + run GitHub CI to confirm Linux runner is green.
 
 **Don't ship until CI is green.** This is the gate before anything else.
 
