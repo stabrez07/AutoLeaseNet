@@ -82,10 +82,10 @@ it first; update it after every meaningful change.
    via `SeedOptions.RandomSeed`.
 10. **`[LoggerMessage]` source generators everywhere** to satisfy CA1848. Event ID
     ranges: 5xxx SaveContract, 6xxx Webhook, 7xxx SMS, 9xxx Seed.
-11. **`.runsettings` at repo root filters `Category!=Smoke`** by default. Smoke tests
-    (`Category=Smoke`) only run when explicitly filtered IN. They gracefully early-
-    return when staging credentials aren't configured, so CI stays green without
-    secrets.
+11. **`.runsettings` at repo root filters `Category!=Smoke&Category!=Integration`**
+    by default. Smoke tests (`Category=Smoke`) and local-dependency integration tests
+    (`Category=Integration`) run only when explicitly filtered IN, so CI stays green
+    without vendor secrets or local SQL.
 
 ## Domain rules
 
@@ -122,16 +122,14 @@ it first; update it after every meaningful change.
 
 ## Current repo state
 
-- **Branch**: `main` at commit `3a37716` (CI test-timeout fix, pushed but CI still failing — see TODO #1 below).
-- **Test count on a local Windows dev box**: 153 / 153 green (smoke excluded).
-- **CI status**: ❌ failing on Linux runner due to gitignored `appsettings.Development.json`
-  not being available — see TODO #1.
-- **Open commits since Day 7**: `88e67ad` retrospective → `02cbfbb` STAGING-SMOKE.md →
-  `6a89fcc` CI tightening + SETUP-GITHUB.md → `3a37716` CI test-timeout fix.
+- **Branch**: `main` at commit `8864aec` (`fix(bff-tests): stabilize CI config and deterministic seeding (#1)`).
+- **PR status**: PR #1 merged (squash) with merge commit `8864aec2c30d822872d8bb0c7d4494ccc654d896`.
+- **CI status**: ✅ green for PR #1 (`.NET` + `JS` checks successful; staging smoke skipped as designed).
+- **Current blocker profile**: no active code/CI blockers on Week-1 code. Remaining work is staging execution and external onboarding dependencies.
 
 ## TODOs — in priority order
 
-### 1. ⚠️ HOT — CI failing on `appsettings.Development.json` being gitignored (patch applied locally, CI pending)
+### 1. ✅ RESOLVED — CI stabilization for test-host config + seeding
 
 **Root cause**: `HealthTestFactory` (services/bff.tests/Health/HealthEndpointsTests.cs)
 and `DevWebApplicationFactory` (services/bff.tests/Authentication/DevJwtStubHandlerTests.cs)
@@ -219,9 +217,9 @@ Files to update:
   - `dotnet test services/bff.tests/AutoLeaseNet.Bff.Tests.csproj --filter "Trait!=Integration"` ✅
   - `dotnet test AutoLeaseNet.sln --filter Trait!=Integration` ✅ (all projects green locally)
 
-Next: push + run GitHub CI to confirm Linux runner is green.
+Outcome: fixes are merged in `main` via PR #1 and CI is green.
 
-**Don't ship until CI is green.** This is the gate before anything else.
+Next actionable work moved to TODO #2 (manual staging exercise) and TODO #4 (`design.md` for Week 2 UI).
 
 ### 2. Manual Tajeer staging exercise — closes 7 Week-1 boxes in one session
 
@@ -234,7 +232,7 @@ Closes T3.7 + T5.7 + T5.8 + T6.7 + T6.8 + T6.9 + T7.8 in ~45-90 minutes.
 Blocked on GitHub Pro upgrade ($4/mo) OR repo going public. Once unblocked, follow
 [`.github/SETUP-GITHUB.md`](./.github/SETUP-GITHUB.md).
 
-### 4. design.md from user — unlocks Week 2 UI work
+### 4. design.md from user — unlocks Week 2 UI work (still missing)
 
 Days 11–14 of Week 2 are entirely Next.js / shadcn / form work that can't start
 without it. Days 8–10 are already pre-done via the Domain Deepening workstream
@@ -294,5 +292,4 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
 
 ## Last updated
 
-2026-05-24, in the conversation where the user adopted the working rules above and
-requested `/compact`. CI was red at the time of writing — see TODO #1.
+2026-05-24 after PR #1 merge. CI is green, `main` is up-to-date at `8864aec`.
