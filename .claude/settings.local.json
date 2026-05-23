@@ -35,7 +35,19 @@
       "Bash(git push *)",
       "PowerShell($env:SQLCMDPASSWORD = $null; sqlcmd -S localhost -E -d AutoLeaseNet_Dev -Q \"SELECT TOP 0 Id, TenantId, TajeerContractNumber, Status FROM Leases; SELECT MigrationId FROM __EFMigrationsHistory\" -h -1 -W 2>&1 | Select-Object -Last 8)",
       "Bash(git commit *)",
-      "Bash(rm .git/COMMIT_MSG_DAY5.txt)"
+      "Bash(rm .git/COMMIT_MSG_DAY5.txt)",
+      "PowerShell($env:SQLCMDPASSWORD = $null; sqlcmd -S localhost -E -d AutoLeaseNet_Dev -Q \"DELETE FROM Leases; SELECT @@ROWCOUNT AS deleted\" -h -1 -W 2>&1 | Select-Object -Last 5)",
+      "PowerShell($env:SQLCMDPASSWORD = $null; sqlcmd -S localhost -E -d AutoLeaseNet_Dev -I -Q \"DELETE FROM Leases; SELECT @@ROWCOUNT AS deleted\" -h -1 -W 2>&1 | Select-Object -Last 5)",
+      "PowerShell($env:SQLCMDPASSWORD = $null; sqlcmd -S localhost -E -d AutoLeaseNet_Dev -I -Q \"SELECT name FROM sys.tables WHERE name IN \\('Customers','Vehicles','Drivers','Branches','RentPolicies','ExtendedCoverages','Leases','WebhookLogs'\\) ORDER BY name\" -h -1 -W 2>&1 | Select-Object -Last 12)",
+      "PowerShell(Get-Process -Name AutoLeaseNet.Bff -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Force)",
+      "Bash(git reset *)",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(gh api *)",
+      "Bash(gh secret *)",
+      "Bash(python -c \"import yaml,sys; yaml.safe_load\\(open\\('.github/workflows/ci.yml'\\)\\); print\\('YAML valid'\\)\")",
+      "Bash(gh run *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Administrator\\Desktop\\AutoLeaseNet\\.git"
