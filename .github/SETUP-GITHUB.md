@@ -2,11 +2,11 @@
 
 Loop-back tasks from the Week 1 plan, scoped to a single owner-action runbook.
 
-| Task | Status | Owner |
-|---|---|---|
-| **L.G1** GitHub Actions `ci.yml` (restore → build -warnaserror → test → pnpm) | ✅ Done (in `.github/workflows/ci.yml`) | — |
-| **L.G2** Branch protection on `main` (CI green + 1 review required) | ⛔ Blocked on **GitHub Pro** OR **public repo** | You |
-| **L.G3** CI secrets (Tajeer creds, ZATCA CSID, Azure deploy SP) | ⛔ Blocked on same | You |
+| Task                                                                          | Status                                          | Owner |
+| ----------------------------------------------------------------------------- | ----------------------------------------------- | ----- |
+| **L.G1** GitHub Actions `ci.yml` (restore → build -warnaserror → test → pnpm) | ✅ Done (in `.github/workflows/ci.yml`)         | —     |
+| **L.G2** Branch protection on `main` (CI green + 1 review required)           | ⛔ Blocked on **GitHub Pro** OR **public repo** | You   |
+| **L.G3** CI secrets (Tajeer creds, ZATCA CSID, Azure deploy SP)               | ⛔ Blocked on same                              | You   |
 
 ## Why L.G2 / L.G3 are blocked today
 
@@ -17,27 +17,38 @@ gh api repos/stabrez07/AutoLeaseNet/branches/main/protection
 # {"message":"Upgrade to GitHub Pro or make this repository public to enable this feature.","status":"403"}
 ```
 
-You have two paths. Pick one then run the matching section below.
+You have two paths. **Recommended: Option B (public repo) — $0 cost, immediate unblock.** Reasoning:
+
+- Phase-1 vendor surface in `Adapters.Tajeer/` is built off the **public** Tajeer V9.7 spec; no proprietary contract leaks.
+- All secrets (Tajeer creds, ZATCA CSID, webhook shared secret) live in `dotnet user-secrets` + GitHub Secrets — never in source.
+- `services/bff/appsettings.json` and every committed sample have been audited (see Option B checklist below).
+- We can revert to private + Pro later if a vendor NDA constrains us; the cutover is one `gh repo edit` command.
+
+Pick one then run the matching section below.
 
 ---
 
 ## Option A — Upgrade to GitHub Pro ($4/month)
 
-Best when the repo must stay private (which it should until Phase 1 ships and the Tajeer adapter is reviewed for vendor-spec leakage).
+Choose only if vendor NDA or business policy mandates a private repo. Otherwise prefer Option B (recommended).
 
 1. Visit [github.com/settings/billing/plans](https://github.com/settings/billing/plans) → upgrade to Pro.
 2. Once active, run the §"Apply L.G2 + L.G3" commands below.
 
-## Option B — Make the repo public
+## Option B — Make the repo public **← recommended**
 
-Cheapest, but exposes the codebase. Defer until after a security review of:
-- `services/bff/appsettings.json` (no real credentials should ever be tracked there — verified)
-- `packages/adapters/AutoLeaseNet.Adapters.Tajeer/Webhooks/WebhookSignatureValidator.cs` (constant-time compare, no secret leaked)
-- Every committed JSON sample (we checked; the only contract-number values are seed `1_000_000_001+seq`, not real Tajeer numbers)
+$0 cost, immediate. Pre-flight checklist (all verified — re-confirm before flipping):
+
+- `services/bff/appsettings.json` — no real credentials tracked.
+- `packages/adapters/AutoLeaseNet.Adapters.Tajeer/Webhooks/WebhookSignatureValidator.cs` — constant-time compare, secret never logged.
+- Every committed JSON sample uses seed contract numbers `1_000_000_001+seq`, never a real Tajeer number.
+- `.env` / `appsettings.Development.json` / user-secrets are gitignored.
 
 ```pwsh
 gh repo edit stabrez07/AutoLeaseNet --visibility public --accept-visibility-change-consequences
 ```
+
+After the flip, run §"Apply L.G2" and §"Apply L.G3" below.
 
 ---
 
@@ -56,6 +67,7 @@ gh api -X PUT repos/stabrez07/AutoLeaseNet/branches/main/protection `
 ```
 
 What this enforces:
+
 - Every `main` change must come through a PR.
 - The `.NET (build -warnaserror + test)` job from `ci.yml` must be green before merge.
 - One approving review required; stale reviews dismissed on new commits.
@@ -119,6 +131,7 @@ gh run list -R stabrez07/AutoLeaseNet --limit 3
 ```
 
 Expected on the first push of this commit:
+
 - **`.NET (build -warnaserror + test)`** → ✅ (153 tests pass)
 - **`JS (lint + typecheck + test + build) — best-effort until UI lands`** → ✅ (steps run with `continue-on-error: true`)
 - **`Tajeer staging smoke (Category=Smoke)`** → ✅ if `secrets.TAJEER_APPKEY` is set OR ✅ skipped clean (the smoke test early-returns when `Tajeer:AppId` env var is missing). On a free private repo without L.G3 applied, the secret will be empty and the smoke test will silently pass.
