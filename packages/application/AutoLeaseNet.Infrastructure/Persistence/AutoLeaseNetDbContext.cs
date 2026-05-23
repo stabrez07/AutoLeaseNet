@@ -1,4 +1,5 @@
 using AutoLeaseNet.Domain.Leases;
+using AutoLeaseNet.Domain.Webhooks;
 using Microsoft.EntityFrameworkCore;
 
 namespace AutoLeaseNet.Infrastructure.Persistence;
@@ -11,6 +12,7 @@ namespace AutoLeaseNet.Infrastructure.Persistence;
 public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> options) : DbContext(options)
 {
     public DbSet<Lease> Leases => Set<Lease>();
+    public DbSet<WebhookLog> WebhookLogs => Set<WebhookLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
