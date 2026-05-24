@@ -9,6 +9,7 @@ using AutoLeaseNet.Application.Leases.Notifications;
 using AutoLeaseNet.Application.Ports.Messaging;
 using AutoLeaseNet.Domain.Customers;
 using AutoLeaseNet.Domain.Leases;
+using AutoLeaseNet.Infrastructure;
 using AutoLeaseNet.Infrastructure.Persistence;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
@@ -209,11 +210,7 @@ internal sealed class SmsE2EFactory : WebApplicationFactory<Program>
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<DbContextOptions<AutoLeaseNetDbContext>>();
-            services.AddDbContext<AutoLeaseNetDbContext>((sp, opt) =>
-            {
-                opt.UseInMemoryDatabase(databaseName: _dbName);
-                opt.AddInterceptors(sp.GetRequiredService<AutoLeaseNet.Infrastructure.Persistence.Interceptors.DomainEventDispatchInterceptor>());
-            });
+            services.AddAutoLeaseNetDbContext(opt => opt.UseInMemoryDatabase(databaseName: _dbName));
 
             services.RemoveAll<ITajeerContractClient>();
             services.RemoveAll<InMemoryTajeerContractClient>();

@@ -5,6 +5,7 @@ using AutoLeaseNet.Adapters.Tajeer.Contracts;
 using AutoLeaseNet.Adapters.Tajeer.Contracts.Dtos;
 using AutoLeaseNet.Adapters.Tajeer.InMemory.Contracts;
 using AutoLeaseNet.Application.Ports.Seeding;
+using AutoLeaseNet.Infrastructure;
 using AutoLeaseNet.Infrastructure.Persistence;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
@@ -272,11 +273,7 @@ public sealed class SaveContractEndpointFactory : WebApplicationFactory<Program>
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<DbContextOptions<AutoLeaseNetDbContext>>();
-            services.AddDbContext<AutoLeaseNetDbContext>((sp, opt) =>
-            {
-                opt.UseInMemoryDatabase(databaseName: _dbName);
-                opt.AddInterceptors(sp.GetRequiredService<AutoLeaseNet.Infrastructure.Persistence.Interceptors.DomainEventDispatchInterceptor>());
-            });
+            services.AddAutoLeaseNetDbContext(opt => opt.UseInMemoryDatabase(databaseName: _dbName));
 
             services.RemoveAll<ITajeerContractClient>();
             services.RemoveAll<InMemoryTajeerContractClient>();
