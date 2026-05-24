@@ -122,10 +122,12 @@ it first; update it after every meaningful change.
 
 ## Current repo state
 
-- **Branch**: `main` at commit `8864aec` (`fix(bff-tests): stabilize CI config and deterministic seeding (#1)`).
-- **PR status**: PR #1 merged (squash) with merge commit `8864aec2c30d822872d8bb0c7d4494ccc654d896`.
-- **CI status**: ✅ green for PR #1 (`.NET` + `JS` checks successful; staging smoke skipped as designed).
-- **Current blocker profile**: no active code/CI blockers on Week-1 code. Remaining work is staging execution and external onboarding dependencies.
+- **Branch**: `main` at commit `709c094` (`ci(github): gate Tajeer smoke job + fix secret names so dummies don't trigger real Tajeer call (#5)`).
+- **CI on main**: ✅ all three jobs green — `.NET (build -warnaserror + test)`, `JS (lint + typecheck + build)`, `Tajeer staging smoke (Category=Smoke)` (cleanly skipped via the `TAJEER_REAL_SMOKE_ENABLED` gate).
+- **Merged PRs since checkpoint `35ecbae`**: #1 (CI test-host config + seeding), #2 (web-portal Tailwind + AR/EN + Save Contract form), #3 (governance: repo public + branch protection + 5 dummy `TAJEER_*` secrets), #4 (Dev-only CORS + local-SQL runbook), #5 (smoke gate + secret name fix).
+- **Branch protection**: enforced on `main`. Direct push blocked; every change is `gh pr create` → `gh pr merge --squash --delete-branch`.
+- **Repo visibility**: public. L.G2/L.G3 closed at $0 cost.
+- **Current blocker profile**: no active code/CI blockers. Remaining work is the manual staging exercise (T3.7/T5.7/T5.8/T6.7/T6.8/T6.9/T7.8) and external onboarding (Azure / Entra / Unifonic).
 
 ## TODOs — in priority order
 
@@ -379,9 +381,15 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
 
 ## Last updated
 
-2026-05-24 (evening) — wired Development-only CORS policy on the BFF so the Next.js
-portals at `:3000`/`:3001` can call `:5000`; documented the Docker-free local-SQL runbook
-(Windows auth → `STABREZ-LAPTOP.AutoLeaseNet_Dev`, `Seed:Mode=Empty` to preserve the
-curated 20-customer / 60-vehicle / 80-driver / 10-lease seed). Both portal and BFF
-verified live end-to-end against the existing seed data. Previous checkpoint:
-`docs(governance)` admin-merge at `eed7dac`.
+2026-05-24 (late evening) — PR #5 merged: smoke job now gated by `TAJEER_REAL_SMOKE_ENABLED`
+secret and reads the correctly-named `TAJEER_AUTHORIZATION_TOKEN` / `TAJEER_BRANCH_ID` /
+`TAJEER_WEBHOOK_SHARED_SECRET` (previously mismatched, three of five env vars resolved
+to empty, causing the smoke test to call real Tajeer with the two dummy values that
+DID resolve, and 401). CI on `main` (`709c094`) now fully green for the first time
+on the public repo. Previous checkpoint: PR #4 merge at `547a077` (Dev CORS + local-SQL
+runbook).
+
+**Outstanding nit (not blocking)**: a stray `AutoLeaseNet/` subfolder at the repo root
+appeared during the VSCode shift — it's a nested clone with its own `.git/` pointing at
+the same origin. Untracked today; should be either deleted or added to `.gitignore`
+before someone IDE-opens it and gets confused about which copy is canonical.
