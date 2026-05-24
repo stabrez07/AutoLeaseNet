@@ -127,9 +127,9 @@ it first; update it after every meaningful change.
 
 ## Current repo state
 
-- **Branch**: `main` at commit `63f88f4` (`feat(infra): DbContext interceptor for domain-event dispatch (#7)`).
+- **Branch**: `main` at commit `3638137` (`chore: remove stray AutoLeaseNet/ nested clone + add gitignore guard (#10)`).
 - **CI on main**: ✅ all three jobs green — `.NET (build -warnaserror + test)`, `JS (lint + typecheck + build)`, `Tajeer staging smoke (Category=Smoke)` (cleanly skipped via the `TAJEER_REAL_SMOKE_ENABLED` gate).
-- **Merged PRs since checkpoint `35ecbae`**: #1 (CI test-host config + seeding), #2 (web-portal Tailwind + AR/EN + Save Contract form), #3 (governance: repo public + branch protection + 5 dummy `TAJEER_*` secrets), #4 (Dev-only CORS + local-SQL runbook), #5 (smoke gate + secret name fix), #6 (ai_context refresh), #7 (DbContext interceptor for domain-event dispatch).
+- **Merged PRs since checkpoint `35ecbae`**: #1 (CI test-host config + seeding), #2 (web-portal Tailwind + AR/EN + Save Contract form), #3 (governance: repo public + branch protection + 5 dummy `TAJEER_*` secrets), #4 (Dev-only CORS + local-SQL runbook), #5 (smoke gate + secret name fix), #6 (ai_context refresh), #7 (DbContext interceptor for domain-event dispatch), #8 (ai_context refresh after #7), #9 (`AddAutoLeaseNetDbContext` helper extraction), #10 (stray nested clone removed + gitignore guard).
 - **Branch protection**: enforced on `main`. Direct push blocked; every change is `gh pr create` → `gh pr merge --squash --delete-branch`.
 - **Repo visibility**: public. L.G2/L.G3 closed at $0 cost.
 - **Current blocker profile**: no active code/CI blockers. Remaining work is the manual staging exercise (T3.7/T5.7/T5.8/T6.7/T6.8/T6.9/T7.8) and external onboarding (Azure / Entra / Unifonic).
@@ -339,10 +339,11 @@ user-secret connection string only overrides on this specific machine.
   wrappers (e.g. `LeaseIssuedNotification`) retired in favour of generic
   `DomainEventNotification<TEvent>`. See workstream
   [`2026-05-25-dbcontext-interceptor-domain-events/`](./Plans/workstreams/2026-05-25-dbcontext-interceptor-domain-events/).
-  Caveat captured: test factories that swap `DbContextOptions<AutoLeaseNetDbContext>`
-  to EF Core InMemory must re-bind the interceptor via the `(sp, opt) =>`
-  `AddDbContext` overload — `RemoveAll<DbContextOptions<...>>` clears the production
-  binding.
+  Test factories swapping `DbContextOptions<AutoLeaseNetDbContext>` to EF Core
+  InMemory once had to re-bind the interceptor inline; PR #9 extracted
+  `services.AddAutoLeaseNetDbContext(configureProvider)` so prod + tests both
+  flow through one place. Adding a new interceptor in Week 2 Day 9 (RLS /
+  SESSION_CONTEXT) now lands in exactly one method.
 - Add a `BackgroundService` worker for webhook async dispatch. Phase-1 inline
   dispatch was fine for one event/sec; Spec 03 §12.3 calls for an async drain pattern.
 - Wire RLS policies on every domain table (Week 2 Day 9 per the existing plan).
@@ -392,15 +393,15 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
 
 ## Last updated
 
-2026-05-25 — PR #7 merged at `63f88f4`. `DomainEventDispatchInterceptor`
-workstream closed: domain-event dispatch moved off the hand-rolled scan in
-`TajeerWebhookEndpoints` into a `SaveChangesInterceptor` on the EF Core DbContext;
-per-event MediatR wrappers collapsed into a single generic
-`DomainEventNotification<TEvent>`. Three test factories (`SmsE2EFactory`,
-`WebhookFactory`, `SaveContractEndpointFactory`) re-bind the interceptor via the
-`(sp, opt) =>` `AddDbContext` overload after swapping to EF Core InMemory. 151
-tests green locally; CI on `main` green. Previous checkpoint: PR #5 at `709c094`
-— smoke-job gated by `TAJEER_REAL_SMOKE_ENABLED`.
+2026-05-25 — PRs #9 + #10 merged. **#9 (`233a5e2`)** extracts
+`services.AddAutoLeaseNetDbContext(configureProvider)` so production and test
+factories both wire the DbContext + every AutoLeaseNet-owned interceptor in
+one place — Week 2 Day 9 RLS interceptor will land in exactly that method and
+zero test factories. **#10 (`3638137`)** deletes the stray `./AutoLeaseNet/`
+nested clone that appeared during the 2026-05-22 VSCode shift and adds a
+root-anchored `/AutoLeaseNet/` `.gitignore` guard. Repo at `3638137`; CI on
+`main` green. Outstanding-nit list now empty. Previous checkpoint: PR #7
+(`63f88f4`) — DbContext interceptor for domain-event dispatch.
 
 **Outstanding nit (not blocking)**: a stray `AutoLeaseNet/` subfolder at the repo root
 appeared during the VSCode shift — it's a nested clone with its own `.git/` pointing at
