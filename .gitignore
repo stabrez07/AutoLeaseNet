@@ -76,3 +76,10 @@ compose/data/
 *.log
 *.tmp
 *.bak
+
+# === Stray nested clone guard ===
+# A duplicate clone of this repo appeared at the root as ./AutoLeaseNet/ during
+# the 2026-05-22 VSCode shift; the root-anchored rule blocks any future
+# self-named nested clone without affecting legitimately-named subfolders
+# elsewhere in the tree.
+/AutoLeaseNet/
