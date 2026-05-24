@@ -101,11 +101,19 @@ jobs:
         continue-on-error: true
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Tajeer staging smoke — runs only on pushes to main AND only when the
-  # repository secrets are populated. Free private repos can't set secrets
-  # via the API today — once the user upgrades to Pro OR makes the repo
-  # public AND runs the `gh secret set` commands from SETUP-GITHUB.md,
-  # this job lights up automatically. Until then it is skipped cleanly.
+  # Tajeer staging smoke — calls real Tajeer Rabet staging from CI.
+  #
+  # GATED BY THE `TAJEER_REAL_SMOKE_ENABLED` SECRET so dummy seeded
+  # credentials never accidentally drive a real-vendor call. When the user
+  # has rotated the placeholder secrets to real Tajeer Rabet credentials
+  # (per Plans/.../STAGING-SMOKE.md), set the gate secret to "true":
+  #
+  #   gh secret set TAJEER_REAL_SMOKE_ENABLED -R stabrez07/AutoLeaseNet
+  #   # paste: true
+  #
+  # Until then the step echoes "smoke skipped" and exits 0 so CI stays
+  # green. Note: secret names below MUST match what was seeded in PR #3
+  # (`_TOKEN`, `_ID`, `_SHARED_SECRET` suffixes) — previously mismatched.
   # ─────────────────────────────────────────────────────────────────────────
   tajeer-staging-smoke:
     name: Tajeer staging smoke (Category=Smoke)
@@ -125,14 +133,21 @@ jobs:
           dotnet restore packages/adapters/AutoLeaseNet.Adapters.Tajeer.Tests/AutoLeaseNet.Adapters.Tajeer.Tests.csproj
           dotnet build packages/adapters/AutoLeaseNet.Adapters.Tajeer.Tests/AutoLeaseNet.Adapters.Tajeer.Tests.csproj -c Release --no-restore
 
-      - name: Run smoke (gracefully skips when secrets absent)
+      - name: Gate check + run smoke (or skip when gate not set)
         env:
+          GATE: ${{ secrets.TAJEER_REAL_SMOKE_ENABLED }}
           TAJEER_TAJEER__APPID: ${{ secrets.TAJEER_APPID }}
           TAJEER_TAJEER__APPKEY: ${{ secrets.TAJEER_APPKEY }}
-          TAJEER_TAJEER__AUTHORIZATIONTOKEN: ${{ secrets.TAJEER_AUTHORIZATION }}
-          TAJEER_TAJEER__BRANCHID: ${{ secrets.TAJEER_BRANCHID }}
-          TAJEER_TAJEER__WEBHOOKSHAREDSECRET: ${{ secrets.TAJEER_WEBHOOKSECRET }}
+          TAJEER_TAJEER__AUTHORIZATIONTOKEN: ${{ secrets.TAJEER_AUTHORIZATION_TOKEN }}
+          TAJEER_TAJEER__BRANCHID: ${{ secrets.TAJEER_BRANCH_ID }}
+          TAJEER_TAJEER__WEBHOOKSHAREDSECRET: ${{ secrets.TAJEER_WEBHOOK_SHARED_SECRET }}
         run: |
+          if [ "${GATE}" != "true" ]; then
+            echo "TAJEER_REAL_SMOKE_ENABLED is not 'true' (got: '${GATE:-<unset>}'). Skipping smoke."
+            echo "To enable: gh secret set TAJEER_REAL_SMOKE_ENABLED -R stabrez07/AutoLeaseNet  # value: true"
+            echo "Also ensure real Tajeer Rabet credentials are in TAJEER_APPID / TAJEER_APPKEY / TAJEER_AUTHORIZATION_TOKEN / TAJEER_BRANCH_ID / TAJEER_WEBHOOK_SHARED_SECRET."
+            exit 0
+          fi
           dotnet test packages/adapters/AutoLeaseNet.Adapters.Tajeer.Tests \
             -c Release --no-build --filter Category=Smoke \
             --logger "console;verbosity=normal"
