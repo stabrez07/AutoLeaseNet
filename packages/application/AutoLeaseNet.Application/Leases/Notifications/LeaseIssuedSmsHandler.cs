@@ -1,23 +1,25 @@
+using AutoLeaseNet.Application.Notifications;
 using AutoLeaseNet.Application.Ports.Messaging;
 using AutoLeaseNet.Application.Ports.Persistence;
 using AutoLeaseNet.Domain.Customers;
+using AutoLeaseNet.Domain.Leases;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
 namespace AutoLeaseNet.Application.Leases.Notifications;
 
 /// <summary>
-/// On <see cref="LeaseIssuedNotification"/>: look up the renter Customer, render the
-/// SMS in their preferred language, dispatch via <see cref="ISmsSender"/>. SMS failures
-/// are logged but never re-thrown — a customer-facing notification is best-effort and
-/// must not roll back the issuance transaction.
+/// On <see cref="LeaseIssuedDomainEvent"/> (wrapped as <see cref="DomainEventNotification{TEvent}"/>):
+/// look up the renter Customer, render the SMS in their preferred language, dispatch via
+/// <see cref="ISmsSender"/>. SMS failures are logged but never re-thrown — a customer-facing
+/// notification is best-effort and must not roll back the issuance transaction.
 /// </summary>
 public sealed partial class LeaseIssuedSmsHandler(
     ICustomerRepository customers,
     ISmsSender sms,
-    ILogger<LeaseIssuedSmsHandler> logger) : INotificationHandler<LeaseIssuedNotification>
+    ILogger<LeaseIssuedSmsHandler> logger) : INotificationHandler<DomainEventNotification<LeaseIssuedDomainEvent>>
 {
-    public async Task Handle(LeaseIssuedNotification notification, CancellationToken cancellationToken)
+    public async Task Handle(DomainEventNotification<LeaseIssuedDomainEvent> notification, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(notification);
         var evt = notification.Event;

@@ -272,8 +272,11 @@ public sealed class SaveContractEndpointFactory : WebApplicationFactory<Program>
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<DbContextOptions<AutoLeaseNetDbContext>>();
-            services.AddDbContext<AutoLeaseNetDbContext>(opt =>
-                opt.UseInMemoryDatabase(databaseName: _dbName));
+            services.AddDbContext<AutoLeaseNetDbContext>((sp, opt) =>
+            {
+                opt.UseInMemoryDatabase(databaseName: _dbName);
+                opt.AddInterceptors(sp.GetRequiredService<AutoLeaseNet.Infrastructure.Persistence.Interceptors.DomainEventDispatchInterceptor>());
+            });
 
             services.RemoveAll<ITajeerContractClient>();
             services.RemoveAll<InMemoryTajeerContractClient>();
