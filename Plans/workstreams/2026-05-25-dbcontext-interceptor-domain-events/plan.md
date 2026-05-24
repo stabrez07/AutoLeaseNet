@@ -71,9 +71,12 @@ sites will raise events.
   production interceptor binding, so each factory now uses the `(sp, opt) =>`
   overload and re-adds `DomainEventDispatchInterceptor` from DI. Captured in the
   retrospective as a known cost of factory-level DbContext swaps.
-- [ ] **T9** — Open PR; merge after CI green.
-- [ ] **T10** — Update `ai_context.md`: flip the architectural-followup bullet to
-  ✅ delivered; record interceptor as the canonical dispatch path.
+- [x] **T9** — PR #7 opened, CI green (`.NET` + `JS` jobs pass; smoke skipping
+  because it's PR-only on push-to-main), squash-merged as `63f88f4`,
+  branch auto-deleted.
+- [x] **T10** — `ai_context.md` updated: §"Architecture decisions" #5 now describes
+  the interceptor as canonical; §"Architectural follow-ups" bullet 1 flipped to
+  ✅ DONE; §"Current repo state" advanced to `63f88f4`; §"Last updated" stamped.
 
 ## Definition of done
 
