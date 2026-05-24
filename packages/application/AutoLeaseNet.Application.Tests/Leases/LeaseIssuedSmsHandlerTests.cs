@@ -1,5 +1,6 @@
 using AutoLeaseNet.Adapters.Sms.InMemory;
 using AutoLeaseNet.Application.Leases.Notifications;
+using AutoLeaseNet.Application.Notifications;
 using AutoLeaseNet.Application.Ports.Messaging;
 using AutoLeaseNet.Application.Ports.Persistence;
 using AutoLeaseNet.Domain.Customers;
@@ -58,7 +59,7 @@ public sealed class LeaseIssuedSmsHandlerTests
         public void Dispose() => Db.Dispose();
     }
 
-    private static LeaseIssuedNotification BuildNotification(Guid? customerId, long contractNumber = 4242) =>
+    private static DomainEventNotification<LeaseIssuedDomainEvent> BuildNotification(Guid? customerId, long contractNumber = 4242) =>
         new(new LeaseIssuedDomainEvent(
             LeaseId: Guid.NewGuid(),
             TenantId: TenantId,

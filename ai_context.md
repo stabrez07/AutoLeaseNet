@@ -63,9 +63,14 @@ it first; update it after every meaningful change.
    result type. `Success` / `Value` / `IsTransient` / `ErrorCode` / `ErrorMessage`. All
    Pattern B adapters return it. Polly handles retry; the adapter classifies the
    final outcome.
-5. **`Lease.MarkIssued` raises `LeaseIssuedDomainEvent`.** The BFF webhook handler
-   scans `lease.DomainEvents` after `SaveChangesAsync` and switch-publishes to
-   MediatR. Future evolution → DbContext interceptor for transparent dispatch.
+5. **Domain events dispatched by a DbContext interceptor.** `Lease.MarkIssued` raises
+   `LeaseIssuedDomainEvent`. `DomainEventDispatchInterceptor` (Infrastructure) hooks
+   `SavedChangesAsync` (post-commit), walks `ChangeTracker.Entries<Entity>()`, and
+   publishes each event via MediatR as `DomainEventNotification<TEvent>` — the generic
+   wrapper lives in Application so Domain stays MediatR-free. Per-event wrapper classes
+   are no longer needed; handlers register as
+   `INotificationHandler<DomainEventNotification<TConcreteEvent>>`. Any caller of
+   `SaveChangesAsync` (sagas, dev endpoints, future workers) gets transparent dispatch.
 6. **Webhook receiver is anonymous** (no JWT — Tajeer doesn't carry one). Auth is via
    `secret-key` header validated by `WebhookSignatureValidator.IsValid` with
    `CryptographicOperations.FixedTimeEquals`. **Spec model is shared-secret header
@@ -329,9 +334,15 @@ user-secret connection string only overrides on this specific machine.
 
 ### 5. Architectural follow-ups (Week 2+ — not blockers, write down so they don't drift)
 
-- Replace inline domain-event dispatch with a DbContext interceptor. Today the
-  webhook handler hand-rolls `DispatchDomainEventsAsync`. Saga work in Week 2 should
-  formalize this into an interceptor that runs on every `SaveChanges`.
+- ✅ **DONE 2026-05-25** — Replaced inline domain-event dispatch with
+  `DomainEventDispatchInterceptor` hooked into `SavedChangesAsync`. Per-event
+  wrappers (e.g. `LeaseIssuedNotification`) retired in favour of generic
+  `DomainEventNotification<TEvent>`. See workstream
+  [`2026-05-25-dbcontext-interceptor-domain-events/`](./Plans/workstreams/2026-05-25-dbcontext-interceptor-domain-events/).
+  Caveat captured: test factories that swap `DbContextOptions<AutoLeaseNetDbContext>`
+  to EF Core InMemory must re-bind the interceptor via the `(sp, opt) =>`
+  `AddDbContext` overload — `RemoveAll<DbContextOptions<...>>` clears the production
+  binding.
 - Add a `BackgroundService` worker for webhook async dispatch. Phase-1 inline
   dispatch was fine for one event/sec; Spec 03 §12.3 calls for an async drain pattern.
 - Wire RLS policies on every domain table (Week 2 Day 9 per the existing plan).
@@ -381,13 +392,14 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
 
 ## Last updated
 
-2026-05-24 (late evening) — PR #5 merged: smoke job now gated by `TAJEER_REAL_SMOKE_ENABLED`
-secret and reads the correctly-named `TAJEER_AUTHORIZATION_TOKEN` / `TAJEER_BRANCH_ID` /
-`TAJEER_WEBHOOK_SHARED_SECRET` (previously mismatched, three of five env vars resolved
-to empty, causing the smoke test to call real Tajeer with the two dummy values that
-DID resolve, and 401). CI on `main` (`709c094`) now fully green for the first time
-on the public repo. Previous checkpoint: PR #4 merge at `547a077` (Dev CORS + local-SQL
-runbook).
+2026-05-25 — `DomainEventDispatchInterceptor` workstream closed. Domain-event
+dispatch moved off the hand-rolled scan in `TajeerWebhookEndpoints` into a
+`SaveChangesInterceptor` on the EF Core DbContext; per-event MediatR wrappers
+collapsed into a single generic `DomainEventNotification<TEvent>`. Test factories
+that swap to EF Core InMemory updated to re-bind the interceptor. 151 tests green
+(45+20+3+43+40 across Adapters.Tajeer / Adapters.Common / Infrastructure /
+Application / Bff). PR pending. Previous checkpoint: PR #5 at `709c094` —
+smoke-job gated by `TAJEER_REAL_SMOKE_ENABLED`.
 
 **Outstanding nit (not blocking)**: a stray `AutoLeaseNet/` subfolder at the repo root
 appeared during the VSCode shift — it's a nested clone with its own `.git/` pointing at

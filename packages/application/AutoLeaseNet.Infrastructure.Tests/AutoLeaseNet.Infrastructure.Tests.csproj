@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AutoLeaseNet.Infrastructure\AutoLeaseNet.Infrastructure.csproj" />
+    <ProjectReference Include="..\AutoLeaseNet.Application\AutoLeaseNet.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -20,6 +21,9 @@
     </PackageReference>
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="NSubstitute" />
   </ItemGroup>
 
 </Project>

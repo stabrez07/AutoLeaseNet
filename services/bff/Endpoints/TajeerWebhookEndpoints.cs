@@ -2,12 +2,9 @@ using System.Net;
 using System.Text.Json;
 using AutoLeaseNet.Adapters.Tajeer.Configuration;
 using AutoLeaseNet.Adapters.Tajeer.Webhooks;
-using AutoLeaseNet.Application.Leases.Notifications;
 using AutoLeaseNet.Application.Ports.Persistence;
 using AutoLeaseNet.Application.Ports.Time;
-using AutoLeaseNet.Domain.Leases;
 using AutoLeaseNet.Domain.Webhooks;
-using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -54,7 +51,6 @@ public static class TajeerWebhookEndpoints
         ILeaseRepository leases,
         IUnitOfWork uow,
         IClock clock,
-        IPublisher publisher,
         ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
@@ -165,6 +161,9 @@ public static class TajeerWebhookEndpoints
             log.MarkFailed($"No local Lease for contract number {payload.ReferenceId}.", nowUtc);
         }
 
+        // Domain events raised during the transition (e.g. LeaseIssued for SMS dispatch)
+        // are published post-commit by DomainEventDispatchInterceptor wired into the
+        // DbContext, so SaveChangesAsync below transparently fans them out.
         try
         {
             await uow.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -175,35 +174,7 @@ public static class TajeerWebhookEndpoints
             return Results.Ok(new { status = "duplicate-ignored" });
         }
 
-        // Day 7 — publish domain events raised during the transition (e.g. LeaseIssued
-        // for SMS dispatch). Run after commit so subscribers see the persisted state;
-        // wrap each event so MediatR.IPublisher gets a strongly-typed INotification.
-        if (lease is not null)
-        {
-            await DispatchDomainEventsAsync(lease, publisher, ct).ConfigureAwait(false);
-        }
-
         return Results.Ok(new { status = "received", webhookLogId = log.Id });
-    }
-
-    private static async Task DispatchDomainEventsAsync(
-        Lease lease,
-        IPublisher publisher,
-        CancellationToken ct)
-    {
-        if (lease.DomainEvents.Count == 0) return;
-        var snapshot = lease.DomainEvents.ToArray();
-        lease.ClearDomainEvents();
-        foreach (var evt in snapshot)
-        {
-            switch (evt)
-            {
-                case LeaseIssuedDomainEvent issued:
-                    await publisher.Publish(new LeaseIssuedNotification(issued), ct).ConfigureAwait(false);
-                    break;
-                // Future events: LeaseClosed, LeaseSuspended, etc. — add cases as handlers land.
-            }
-        }
     }
 }
 

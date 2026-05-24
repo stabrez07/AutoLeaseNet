@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using AutoLeaseNet.Application.Ports.Persistence;
 using AutoLeaseNet.Application.Ports.Time;
 using AutoLeaseNet.Infrastructure.Persistence;
+using AutoLeaseNet.Infrastructure.Persistence.Interceptors;
 using AutoLeaseNet.Infrastructure.Persistence.Repositories;
 
 namespace AutoLeaseNet.Infrastructure;
@@ -21,12 +22,17 @@ public static class ServiceCollectionExtensions
         var connectionString = configuration.GetConnectionString("AutoLeaseNet")
             ?? throw new InvalidOperationException("Missing connection string 'AutoLeaseNet'");
 
-        services.AddDbContext<AutoLeaseNetDbContext>(opt =>
+        services.AddScoped<DomainEventDispatchInterceptor>();
+
+        services.AddDbContext<AutoLeaseNetDbContext>((sp, opt) =>
+        {
             opt.UseSqlServer(connectionString, sql =>
             {
                 sql.EnableRetryOnFailure(maxRetryCount: 3, TimeSpan.FromSeconds(2), errorNumbersToAdd: null);
                 sql.MigrationsAssembly(typeof(AutoLeaseNetDbContext).Assembly.FullName);
-            }));
+            });
+            opt.AddInterceptors(sp.GetRequiredService<DomainEventDispatchInterceptor>());
+        });
 
         services.AddScoped<IUnitOfWork>(sp => new EfUnitOfWork(sp.GetRequiredService<AutoLeaseNetDbContext>()));
         services.AddSingleton<IClock, SystemClock>();

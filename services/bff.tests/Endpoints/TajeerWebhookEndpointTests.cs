@@ -291,8 +291,11 @@ internal sealed class WebhookFactory : WebApplicationFactory<Program>
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<DbContextOptions<AutoLeaseNetDbContext>>();
-            services.AddDbContext<AutoLeaseNetDbContext>(opt =>
-                opt.UseInMemoryDatabase(databaseName: _dbName));
+            services.AddDbContext<AutoLeaseNetDbContext>((sp, opt) =>
+            {
+                opt.UseInMemoryDatabase(databaseName: _dbName);
+                opt.AddInterceptors(sp.GetRequiredService<AutoLeaseNet.Infrastructure.Persistence.Interceptors.DomainEventDispatchInterceptor>());
+            });
 
             // Provide a no-op ITajeerContractClient so DI resolves cleanly.
             services.RemoveAll<ITajeerContractClient>();
