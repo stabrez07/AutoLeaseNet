@@ -43,6 +43,22 @@ builder.Services
     .AddDevJwtStub(builder.Environment);
 builder.Services.AddAuthorization();
 
+// === CORS (Development only — allows the Next.js portals at :3000/:3001 to call the BFF) ===
+const string DevCorsPolicy = "DevPortals";
+if (builder.Environment.IsDevelopment())
+{
+    var devOrigins = builder.Configuration.GetSection("Cors:DevOrigins").Get<string[]>()
+        ?? new[] { "http://localhost:3000", "http://localhost:3001" };
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy(DevCorsPolicy, policy => policy
+            .WithOrigins(devOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials());
+    });
+}
+
 // === Tenancy (ITenantContext resolved from current request claims) ===
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, ClaimsTenantContext>();
@@ -84,6 +100,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors(DevCorsPolicy);
+}
 app.UseTenancy();
 
 // Liveness = "process is up" (no downstream checks). Readiness = "ready to serve traffic"

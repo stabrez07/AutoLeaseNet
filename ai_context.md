@@ -278,6 +278,53 @@ after the user pastes real Tajeer Rabet credentials into `dotnet user-secrets`.
 unblocking L.G2/L.G3 at $0 cost, with a pre-flight checklist of the (verified) secret/PII
 surfaces. Option A (GitHub Pro) preserved for the NDA case.
 
+### 7. ✅ DELIVERED — Dev CORS policy for portals → BFF
+
+The Next.js portals at `http://localhost:3000` and `:3001` were getting `Failed to fetch`
+on every BFF call because no CORS policy was registered. Fix (Development-only):
+
+- `services/bff/Program.cs` registers a `DevPortals` CORS policy when
+  `builder.Environment.IsDevelopment()` is true. Origins come from
+  `Cors:DevOrigins` (string[]) and default to `http://localhost:3000` + `http://localhost:3001`.
+  Policy: `WithOrigins(...).AllowAnyHeader().AllowAnyMethod().AllowCredentials()`.
+- `app.UseCors(DevPortals)` is inserted between `UseAuthorization()` and `UseTenancy()`,
+  also Dev-only. Production environments do **not** register the policy — by design,
+  same fail-loud posture as `DevJwtStubHandler`. Real CORS for prod portals will be a
+  Phase-2 task (paired with Entra External ID + the real public BFF hostname).
+- Verified: `OPTIONS /api/v1/lookups/branches` with `Origin: http://localhost:3000` →
+  `204` + `Access-Control-Allow-Origin: http://localhost:3000` +
+  `Access-Control-Allow-Headers: x-dev-tenant-id,x-dev-user-type`.
+
+### 8. ✅ DELIVERED — Local-SQL runbook (Docker-free path)
+
+Docker Desktop refused to start on this workstation, blocking the standard `pnpm infra:up`
+path. Confirmed working alternative using the user's pre-existing local SQL Server default
+instance (`STABREZ-LAPTOP`, Windows auth, database `AutoLeaseNet_Dev` already at the
+latest migration `20260523163430_Add_Core_Aggregates` with realistic seed data —
+20 customers / 60 vehicles / 80 drivers / 3 branches / 10 leases / 4 rent policies /
+3 extended coverages — under tenant `a1a1a1a1-0001-0000-0000-000000000001`).
+
+BFF user-secrets configured for this machine (no code change, no commit):
+
+- `ConnectionStrings:AutoLeaseNet = Server=.;Database=AutoLeaseNet_Dev;Trusted_Connection=True;TrustServerCertificate=true;Encrypt=false`
+- `Seed:Mode = Empty` — **critical**: keep this `Empty` so the existing curated seed
+  data is never disturbed. If the DB ever needs to be re-seeded from scratch, drop
+  the DB, recreate it, run `dotnet ef database update`, then flip to
+  `Seed:Mode=Demo` for one BFF startup, then flip back to `Empty`.
+- `Tajeer:Mode = InMemory` + dummy `Tajeer:AppId/AppKey/AuthorizationToken/BranchId/WebhookSharedSecret = dummy-webhook-secret`
+  - `Tajeer:Webhook:LogOnly = false`.
+- `Seed:TenantId = a1a1a1a1-0001-0000-0000-000000000001`.
+
+Start-up sequence (this machine, Docker-free):
+
+1. `pnpm --filter @autoleasenet/web-portal dev` → http://localhost:3000
+2. `$env:ASPNETCORE_URLS='http://localhost:5000'; $env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project services/bff/AutoLeaseNet.Bff.csproj --no-launch-profile`
+   → http://localhost:5000 (user-secrets above already on disk; no further config needed).
+
+When Docker comes back online OR when running on a different machine, the standard path
+(`scripts/local-smoke.ps1` → SQL Edge on 1433 with SA auth) still works unchanged — the
+user-secret connection string only overrides on this specific machine.
+
 ### 5. Architectural follow-ups (Week 2+ — not blockers, write down so they don't drift)
 
 - Replace inline domain-event dispatch with a DbContext interceptor. Today the
@@ -332,6 +379,9 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
 
 ## Last updated
 
-2026-05-24 — added Week 2 UI scaffold, local Tajeer smoke script (`scripts/local-smoke.ps1`),
-and marked Option B (public repo) as the recommended L.G2/L.G3 unblock path. Previous
-checkpoint: PR #1 merge at `8864aec` (CI green).
+2026-05-24 (evening) — wired Development-only CORS policy on the BFF so the Next.js
+portals at `:3000`/`:3001` can call `:5000`; documented the Docker-free local-SQL runbook
+(Windows auth → `STABREZ-LAPTOP.AutoLeaseNet_Dev`, `Seed:Mode=Empty` to preserve the
+curated 20-customer / 60-vehicle / 80-driver / 10-lease seed). Both portal and BFF
+verified live end-to-end against the existing seed data. Previous checkpoint:
+`docs(governance)` admin-merge at `eed7dac`.
