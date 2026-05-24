@@ -127,9 +127,9 @@ it first; update it after every meaningful change.
 
 ## Current repo state
 
-- **Branch**: `main` at commit `709c094` (`ci(github): gate Tajeer smoke job + fix secret names so dummies don't trigger real Tajeer call (#5)`).
+- **Branch**: `main` at commit `63f88f4` (`feat(infra): DbContext interceptor for domain-event dispatch (#7)`).
 - **CI on main**: ✅ all three jobs green — `.NET (build -warnaserror + test)`, `JS (lint + typecheck + build)`, `Tajeer staging smoke (Category=Smoke)` (cleanly skipped via the `TAJEER_REAL_SMOKE_ENABLED` gate).
-- **Merged PRs since checkpoint `35ecbae`**: #1 (CI test-host config + seeding), #2 (web-portal Tailwind + AR/EN + Save Contract form), #3 (governance: repo public + branch protection + 5 dummy `TAJEER_*` secrets), #4 (Dev-only CORS + local-SQL runbook), #5 (smoke gate + secret name fix).
+- **Merged PRs since checkpoint `35ecbae`**: #1 (CI test-host config + seeding), #2 (web-portal Tailwind + AR/EN + Save Contract form), #3 (governance: repo public + branch protection + 5 dummy `TAJEER_*` secrets), #4 (Dev-only CORS + local-SQL runbook), #5 (smoke gate + secret name fix), #6 (ai_context refresh), #7 (DbContext interceptor for domain-event dispatch).
 - **Branch protection**: enforced on `main`. Direct push blocked; every change is `gh pr create` → `gh pr merge --squash --delete-branch`.
 - **Repo visibility**: public. L.G2/L.G3 closed at $0 cost.
 - **Current blocker profile**: no active code/CI blockers. Remaining work is the manual staging exercise (T3.7/T5.7/T5.8/T6.7/T6.8/T6.9/T7.8) and external onboarding (Azure / Entra / Unifonic).
@@ -392,14 +392,15 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
 
 ## Last updated
 
-2026-05-25 — `DomainEventDispatchInterceptor` workstream closed. Domain-event
-dispatch moved off the hand-rolled scan in `TajeerWebhookEndpoints` into a
-`SaveChangesInterceptor` on the EF Core DbContext; per-event MediatR wrappers
-collapsed into a single generic `DomainEventNotification<TEvent>`. Test factories
-that swap to EF Core InMemory updated to re-bind the interceptor. 151 tests green
-(45+20+3+43+40 across Adapters.Tajeer / Adapters.Common / Infrastructure /
-Application / Bff). PR pending. Previous checkpoint: PR #5 at `709c094` —
-smoke-job gated by `TAJEER_REAL_SMOKE_ENABLED`.
+2026-05-25 — PR #7 merged at `63f88f4`. `DomainEventDispatchInterceptor`
+workstream closed: domain-event dispatch moved off the hand-rolled scan in
+`TajeerWebhookEndpoints` into a `SaveChangesInterceptor` on the EF Core DbContext;
+per-event MediatR wrappers collapsed into a single generic
+`DomainEventNotification<TEvent>`. Three test factories (`SmsE2EFactory`,
+`WebhookFactory`, `SaveContractEndpointFactory`) re-bind the interceptor via the
+`(sp, opt) =>` `AddDbContext` overload after swapping to EF Core InMemory. 151
+tests green locally; CI on `main` green. Previous checkpoint: PR #5 at `709c094`
+— smoke-job gated by `TAJEER_REAL_SMOKE_ENABLED`.
 
 **Outstanding nit (not blocking)**: a stray `AutoLeaseNet/` subfolder at the repo root
 appeared during the VSCode shift — it's a nested clone with its own `.git/` pointing at
