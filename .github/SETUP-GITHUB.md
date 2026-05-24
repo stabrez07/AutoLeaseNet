@@ -83,15 +83,22 @@ gh api repos/stabrez07/AutoLeaseNet/branches/main/protection --jq '{required_sta
 
 ## Apply L.G3 — repository secrets
 
-Five secrets the `tajeer-staging-smoke` job in `ci.yml` reads. Set each via `gh secret set` (it prompts for the value so the secret never lands in your shell history):
+Six secrets the `tajeer-staging-smoke` job in `ci.yml` reads. Set each via `gh secret set` (it prompts for the value so the secret never lands in your shell history):
 
 ```pwsh
-gh secret set TAJEER_APPID          -R stabrez07/AutoLeaseNet
-gh secret set TAJEER_APPKEY         -R stabrez07/AutoLeaseNet
-gh secret set TAJEER_AUTHORIZATION  -R stabrez07/AutoLeaseNet   # value includes "Basic " prefix
-gh secret set TAJEER_BRANCHID       -R stabrez07/AutoLeaseNet
-gh secret set TAJEER_WEBHOOKSECRET  -R stabrez07/AutoLeaseNet
+gh secret set TAJEER_APPID                -R stabrez07/AutoLeaseNet
+gh secret set TAJEER_APPKEY               -R stabrez07/AutoLeaseNet
+gh secret set TAJEER_AUTHORIZATION_TOKEN  -R stabrez07/AutoLeaseNet   # value includes "Basic " prefix
+gh secret set TAJEER_BRANCH_ID            -R stabrez07/AutoLeaseNet
+gh secret set TAJEER_WEBHOOK_SHARED_SECRET -R stabrez07/AutoLeaseNet
+gh secret set TAJEER_REAL_SMOKE_ENABLED   -R stabrez07/AutoLeaseNet   # value: "true" to enable the CI smoke job
 ```
+
+> **Gate**: the smoke job won't actually drive a real-vendor call until
+> `TAJEER_REAL_SMOKE_ENABLED == "true"`. This prevents dummy seeded values
+> from hitting Tajeer staging with bad credentials and failing CI noisily.
+> Leave the gate unset (or any value other than `"true"`) for the dummy-
+> credentials state; the step then echoes a skip message and exits 0.
 
 Confirm:
 
