@@ -10,8 +10,8 @@ namespace AutoLeaseNet.Bff.Endpoints;
 /// <summary>
 /// Day-19 check-in saga endpoint. Wraps <see cref="CheckInLeaseCommand"/> behind a
 /// dev-JWT-stub-authenticated POST that requires <c>Idempotency-Key</c> (CLAUDE.md §8).
-/// Tajeer <c>CalculateContractPayment</c> + <c>CloseContract</c> calls land later;
-/// this endpoint is the local-only commit slice for the saga.
+/// The handler calls Tajeer <c>CalculatePayment</c> + <c>CloseContract</c> before
+/// the local commit; the money preview comes back in the response <c>payment</c> block.
 /// </summary>
 public static class LeaseEndpoints
 {
@@ -73,6 +73,10 @@ public static class LeaseEndpoints
             ReturnConditionNotes = body.ReturnConditionNotes,
             ClosureMainReasonCode = body.ClosureMainReasonCode,
             ClosureSubReasonCode = body.ClosureSubReasonCode,
+            ExtraKm = body.ExtraKm,
+            AdditionalCharges = body.AdditionalCharges,
+            DiscountAmount = body.DiscountAmount,
+            FinalPaidAmount = body.FinalPaidAmount,
         };
 
         var result = await mediator.Send(command, ct);
@@ -81,6 +85,7 @@ public static class LeaseEndpoints
             var status = result.ErrorCode switch
             {
                 "lease.not_found" => StatusCodes.Status404NotFound,
+                "tajeer.calculate.transient" or "tajeer.close.transient" => StatusCodes.Status503ServiceUnavailable,
                 _ => StatusCodes.Status422UnprocessableEntity,
             };
             return Results.Problem(title: result.ErrorCode ?? "lease.check_in.error", detail: result.ErrorMessage, statusCode: status);
@@ -91,6 +96,19 @@ public static class LeaseEndpoints
             leaseId = result.LeaseId,
             inspectionId = result.InspectionId,
             status = result.LeaseStatus,
+            payment = result.Payment is null ? null : new
+            {
+                rentAmount = result.Payment.RentAmount,
+                paidAmount = result.Payment.PaidAmount,
+                lateHoursFee = result.Payment.LateHoursFee,
+                extraKmFee = result.Payment.ExtraKmFee,
+                damagesFee = result.Payment.DamagesFee,
+                discountAmount = result.Payment.DiscountAmount,
+                totalDue = result.Payment.TotalDue,
+                vatAmount = result.Payment.VatAmount,
+                grandTotal = result.Payment.GrandTotal,
+                finalPaidAmount = result.Payment.FinalPaidAmount,
+            },
         });
     }
 }
@@ -117,4 +135,13 @@ public sealed record CheckInLeaseRequest
     public string? ReturnConditionNotes { get; init; }
     public required int ClosureMainReasonCode { get; init; }
     public int? ClosureSubReasonCode { get; init; }
+
+    /// <summary>Caller-declared extra-km overage. Optional — Tajeer can compute from contract allowance.</summary>
+    public int? ExtraKm { get; init; }
+    /// <summary>Caller-declared additional charges (damages, cleaning, refuelling, etc.).</summary>
+    public decimal? AdditionalCharges { get; init; }
+    /// <summary>Discount applied at close — Tajeer validates server-side.</summary>
+    public decimal? DiscountAmount { get; init; }
+    /// <summary>What ops actually collected at the counter — passed to Tajeer's CloseContract.</summary>
+    public decimal? FinalPaidAmount { get; init; }
 }

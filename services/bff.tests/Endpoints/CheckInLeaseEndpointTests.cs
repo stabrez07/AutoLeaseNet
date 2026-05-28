@@ -49,6 +49,13 @@ public sealed class CheckInLeaseEndpointTests
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(JsonOpts);
         body.GetProperty("status").GetString().Should().Be(nameof(LeaseStatus.Closed));
 
+        // Tajeer Calculate + Close ran — payment block must be present (InMemory adapter
+        // gives a deterministic shape: 0 base rent, 15% VAT on caller-declared fees).
+        var payment = body.GetProperty("payment");
+        payment.ValueKind.Should().Be(JsonValueKind.Object);
+        payment.GetProperty("finalPaidAmount").GetDecimal().Should().BeGreaterThanOrEqualTo(0m);
+        payment.GetProperty("grandTotal").GetDecimal().Should().BeGreaterThanOrEqualTo(0m);
+
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AutoLeaseNetDbContext>();
         var lease = await db.Leases.AsNoTracking().SingleAsync(l => l.Id == leaseId);

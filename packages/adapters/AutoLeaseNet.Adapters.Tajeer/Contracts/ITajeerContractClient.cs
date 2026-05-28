@@ -4,15 +4,27 @@ using AutoLeaseNet.Adapters.Tajeer.Contracts.Dtos;
 namespace AutoLeaseNet.Adapters.Tajeer.Contracts;
 
 /// <summary>
-/// Pattern B sub-client (Spec 04 §3) for Tajeer contract lifecycle endpoints. Phase 1 /
-/// Week 1 ships <see cref="SaveAsync"/> only; remaining methods (Get, Extend, Suspend,
-/// Close, Cancel, UpdatePaidAmount, CalculatePayment) land in later workstreams.
+/// Pattern B sub-client (Spec 04 §3) for Tajeer contract lifecycle endpoints. Phase 1
+/// ships <see cref="SaveAsync"/>, <see cref="CalculatePaymentAsync"/>, and
+/// <see cref="CloseAsync"/> — the minimum surface needed by the Day-19 check-in saga
+/// (Spec 02 §6.4). Remaining methods (Get, Extend, Suspend, Cancel, UpdatePaidAmount)
+/// land in later workstreams.
 ///
 /// Implementations:
 /// - <c>TajeerContractClient</c> in this package (real HTTP).
 /// - <c>InMemoryTajeerContractClient</c> in <c>AutoLeaseNet.Adapters.Tajeer.InMemory</c>.
 /// Mode is chosen via <c>Tajeer:Mode</c> (<c>Real</c> | <c>InMemory</c>) — see
 /// <see cref="ServiceCollectionExtensions.AddTajeer"/>.
+///
+/// <para>
+/// <b>Failure semantics</b> are uniform across all methods:
+/// <list type="bullet">
+///   <item>2xx with valid body → <c>Success</c></item>
+///   <item>2xx / 4xx with <c>errorKey</c> in body → <c>Failure(isTransient=false, errorCode="tajeer.vendor.{errorKey}")</c> — business rule violation</item>
+///   <item>5xx / 408 / 429 → handled by the named-client Polly pipeline; if exhausted → <c>Failure(isTransient=true)</c></item>
+///   <item>Network / timeout / JSON parse failures → mapped to dedicated error codes (see implementation)</item>
+/// </list>
+/// </para>
 /// </summary>
 public interface ITajeerContractClient
 {
@@ -20,16 +32,26 @@ public interface ITajeerContractClient
     /// POST a new draft contract to Tajeer. Returns the assigned <c>contractNumber</c> +
     /// <c>issuanceURL</c> the renter follows to complete issuance.
     /// </summary>
-    /// <remarks>
-    /// Failure semantics:
-    /// <list type="bullet">
-    ///   <item>2xx with valid body → <c>Success</c></item>
-    ///   <item>2xx / 4xx with <c>errorKey</c> in body → <c>Failure(isTransient=false, errorCode="tajeer.vendor.{errorKey}")</c> — business rule violation</item>
-    ///   <item>5xx / 408 / 429 → handled by the named-client Polly pipeline; if exhausted → <c>Failure(isTransient=true)</c></item>
-    ///   <item>Network / timeout / JSON parse failures → mapped to dedicated error codes (see implementation)</item>
-    /// </list>
-    /// </remarks>
     Task<IntegrationResult<SaveContractResponse>> SaveAsync(
         SaveContractRequest request,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Non-destructive preview of the money breakdown for a check-in close (Spec 02 §6.4
+    /// box 4). Tajeer recomputes server-side from the contract's current state + the
+    /// supplied return readings; the response feeds the ops preview and the eventual
+    /// <see cref="CloseAsync"/> call.
+    /// </summary>
+    Task<IntegrationResult<CalculatePaymentResponse>> CalculatePaymentAsync(
+        CalculatePaymentRequest request,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Destructive vendor commit — flips the Tajeer contract to <c>contractStatusCode = 2</c>
+    /// (Closed). Spec 02 §6.4 box 7. Tajeer is responsible for idempotency at its end;
+    /// callers should also wrap this with their own idempotency cache.
+    /// </summary>
+    Task<IntegrationResult<CloseContractResponse>> CloseAsync(
+        CloseContractRequest request,
         CancellationToken ct = default);
 }

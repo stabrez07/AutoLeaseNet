@@ -131,7 +131,7 @@ it first; update it after every meaningful change.
 | `POST` | `/api/v1/inspections/{id}/abandon`   | dev JWT stub + `Idempotency-Key` header | `AbandonInspectionRequest`             | 200 `{id, status: Abandoned}` ; 404 / 409 / 422 on failure                      |
 | `GET`  | `/api/v1/inspections/{id}`           | dev JWT stub                            | —                                      | `InspectionDetailDto` (with photos + damage markers) ; 404 if unknown           |
 | `GET`  | `/api/v1/lookups/inspections`        | dev JWT stub                            | `?page=1&pageSize=50&vehicleId=&leaseId=&type=&status=` | `PagedResult<InspectionSummaryDto>`                |
-| `POST` | `/api/v1/leases/{id}/check-in`       | dev JWT stub + `Idempotency-Key` header | `CheckInLeaseRequest`                  | 200 `{leaseId, inspectionId, status: Closed}` ; 404 unknown ; 422 invalid state / odometer regression |
+| `POST` | `/api/v1/leases/{id}/check-in`       | dev JWT stub + `Idempotency-Key` header | `CheckInLeaseRequest`                  | 200 `{leaseId, inspectionId, status: Closed, payment: {rentAmount, paidAmount, lateHoursFee, extraKmFee, damagesFee, discountAmount, totalDue, vatAmount, grandTotal, finalPaidAmount}}` ; 404 unknown ; 422 invalid state / odometer regression / Tajeer non-transient ; 503 Tajeer transient |
 
 ## Current repo state
 
@@ -400,6 +400,23 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
    IS red — see TODO #1.
 
 ## Last updated
+
+2026-05-28 — Tajeer Close Saga workstream shipped. The Day-19 check-in saga is
+now a true vendor commit, not local-only. `ITajeerContractClient` gained
+`CalculatePaymentAsync` + `CloseAsync` (real client `PUT`s to
+`/api/contracts/calculate-payment` + `/api/contracts/closure`; InMemory sibling
+records calls + accepts per-method override factories). `CheckInLeaseCommandHandler`
+now calls Tajeer Calculate → Tajeer Close → local commit; vendor failure
+short-circuits before any local mutation, so the inconsistency window is
+scoped to "Tajeer 200 → local SaveChanges" (self-heals on idempotent replay).
+Endpoint response gained a `payment` block and a 503 mapping for transient
+Tajeer failures. **Outbox + BackgroundService drain still deferred** — runbook
+note in [`Plans/workstreams/2026-05-28-tajeer-close-saga/plan.md`](./Plans/workstreams/2026-05-28-tajeer-close-saga/plan.md).
+Real-client envelope/error-mapping spine refactored into a shared
+`SendAsync<TReq,TRes>` helper so all three contract methods (Save / Calculate
+/ Close) share one set of vendor-error / HTTP / network / timeout / JSON-parse
+branches. **214 tests green** (+17: 7 real-client + 6 InMemory + 4 handler;
+endpoint test extended for `payment` block).
 
 2026-05-25 — Day-19 check-in saga (local slice) shipped. New
 `CheckInLeaseCommand` + `POST /api/v1/leases/{id}/check-in` create the

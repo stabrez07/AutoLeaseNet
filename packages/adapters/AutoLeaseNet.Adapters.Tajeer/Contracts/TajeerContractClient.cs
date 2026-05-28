@@ -13,16 +13,13 @@ namespace AutoLeaseNet.Adapters.Tajeer.Contracts;
 /// </summary>
 public sealed partial class TajeerContractClient : ITajeerContractClient
 {
-    // Phase 1 endpoint — the canonical path is confirmed during Day 5 smoke against
-    // staging; centralising it here makes the eventual correction a one-line change.
+    // Phase 1 endpoint paths — canonical values are confirmed during the first staging
+    // round-trip; centralising them here keeps the eventual correction a one-line change.
     private const string SavePath = "/api/contracts/save";
+    private const string CalculatePaymentPath = "/api/contracts/calculate-payment";
+    private const string ClosePath = "/api/contracts/closure";
 
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        // Tajeer fields use camelCase already, but defending against null-on-required
-        // and DTOs that flow strings-as-numbers happens at the response level via
-        // record validation. Keep the defaults simple here.
-    };
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<TajeerContractClient> _logger;
@@ -35,33 +32,68 @@ public sealed partial class TajeerContractClient : ITajeerContractClient
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task<IntegrationResult<SaveContractResponse>> SaveAsync(
+    public Task<IntegrationResult<SaveContractResponse>> SaveAsync(
         SaveContractRequest request,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        return SendAsync<SaveContractRequest, SaveContractResponse>(
+            HttpMethod.Post, SavePath, request, "SaveContract", ct);
+    }
 
+    public Task<IntegrationResult<CalculatePaymentResponse>> CalculatePaymentAsync(
+        CalculatePaymentRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return SendAsync<CalculatePaymentRequest, CalculatePaymentResponse>(
+            HttpMethod.Put, CalculatePaymentPath, request, "CalculatePayment", ct);
+    }
+
+    public Task<IntegrationResult<CloseContractResponse>> CloseAsync(
+        CloseContractRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return SendAsync<CloseContractRequest, CloseContractResponse>(
+            HttpMethod.Put, ClosePath, request, "CloseContract", ct);
+    }
+
+    /// <summary>
+    /// Shared request/response/error-mapping spine. Every Tajeer contract method maps
+    /// failures identically — vendor envelope on 2xx, vendor envelope on 4xx, HTTP-only
+    /// transient on 5xx/408/429, then network/timeout/JSON parse below.
+    /// </summary>
+    private async Task<IntegrationResult<TResponse>> SendAsync<TRequest, TResponse>(
+        HttpMethod method,
+        string path,
+        TRequest body,
+        string operationName,
+        CancellationToken ct)
+        where TRequest : class
+        where TResponse : class
+    {
         var client = _httpClientFactory.CreateClient(ServiceCollectionExtensions.TajeerHttpClientName);
 
         try
         {
-            using var response = await client
-                .PostAsJsonAsync(SavePath, request, JsonOptions, ct)
-                .ConfigureAwait(false);
+            using var request = new HttpRequestMessage(method, path)
+            {
+                Content = JsonContent.Create(body, options: JsonOptions),
+            };
+            using var response = await client.SendAsync(request, ct).ConfigureAwait(false);
 
             var statusCode = (int)response.StatusCode;
-            var rawBody = await response.Content
-                .ReadAsStringAsync(ct)
-                .ConfigureAwait(false);
+            var rawBody = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
-            // Defensive: Tajeer occasionally returns 200 + error envelope. Inspect the body
-            // first regardless of HTTP status — only treat a clean 2xx with no errorKey as
-            // success. (Spec 03 §8.1 Q4.)
+            // Defensive: Tajeer occasionally returns 200 + error envelope. Inspect the
+            // body first regardless of HTTP status — only treat a clean 2xx with no
+            // errorKey as success. (Spec 03 §8.1 Q4.)
             var vendorError = TryReadErrorEnvelope(rawBody);
             if (vendorError is { HasError: true })
             {
-                LogVendorBusinessError(statusCode, vendorError.ErrorKey!, vendorError.ErrorCode ?? 0);
-                return IntegrationResult<SaveContractResponse>.Failure(
+                LogVendorBusinessError(operationName, statusCode, vendorError.ErrorKey!, vendorError.ErrorCode ?? 0);
+                return IntegrationResult<TResponse>.Failure(
                     errorCode: $"tajeer.vendor.{vendorError.ErrorKey}",
                     errorMessage: vendorError.RawMessage ?? vendorError.Message ?? "Tajeer business error.",
                     isTransient: false);
@@ -69,49 +101,47 @@ public sealed partial class TajeerContractClient : ITajeerContractClient
 
             if (!response.IsSuccessStatusCode)
             {
-                var isTransient = statusCode >= 500
-                    || statusCode == 408   // Request Timeout
-                    || statusCode == 429;  // Too Many Requests
-                LogNonSuccessStatus(statusCode);
-                return IntegrationResult<SaveContractResponse>.Failure(
+                var isTransient = statusCode >= 500 || statusCode == 408 || statusCode == 429;
+                LogNonSuccessStatus(operationName, statusCode);
+                return IntegrationResult<TResponse>.Failure(
                     errorCode: $"tajeer.http.{statusCode}",
-                    errorMessage: $"Tajeer POST {SavePath} returned HTTP {statusCode}.",
+                    errorMessage: $"Tajeer {method} {path} returned HTTP {statusCode}.",
                     isTransient: isTransient);
             }
 
-            var parsed = JsonSerializer.Deserialize<SaveContractResponse>(rawBody, JsonOptions);
+            var parsed = JsonSerializer.Deserialize<TResponse>(rawBody, JsonOptions);
             if (parsed is null)
             {
-                LogEmptyBody();
-                return IntegrationResult<SaveContractResponse>.Failure(
+                LogEmptyBody(operationName);
+                return IntegrationResult<TResponse>.Failure(
                     errorCode: "tajeer.deserialization",
-                    errorMessage: "Tajeer returned an empty/null body on Save Contract.",
+                    errorMessage: $"Tajeer returned an empty/null body on {operationName}.",
                     isTransient: false);
             }
-            return IntegrationResult<SaveContractResponse>.Success(parsed);
+            return IntegrationResult<TResponse>.Success(parsed);
         }
         catch (HttpRequestException ex)
         {
-            LogNetworkFailure(ex);
-            return IntegrationResult<SaveContractResponse>.Failure(
+            LogNetworkFailure(operationName, ex);
+            return IntegrationResult<TResponse>.Failure(
                 errorCode: "tajeer.network",
                 errorMessage: $"Network failure calling Tajeer: {ex.Message}",
                 isTransient: true);
         }
         catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
         {
-            LogTimeout(ex);
-            return IntegrationResult<SaveContractResponse>.Failure(
+            LogTimeout(operationName, ex);
+            return IntegrationResult<TResponse>.Failure(
                 errorCode: "tajeer.timeout",
-                errorMessage: "Tajeer SaveContract timed out.",
+                errorMessage: $"Tajeer {operationName} timed out.",
                 isTransient: true);
         }
         catch (JsonException ex)
         {
-            LogDeserializationFailure(ex);
-            return IntegrationResult<SaveContractResponse>.Failure(
+            LogDeserializationFailure(operationName, ex);
+            return IntegrationResult<TResponse>.Failure(
                 errorCode: "tajeer.deserialization",
-                errorMessage: $"Failed to parse Tajeer SaveContract response: {ex.Message}",
+                errorMessage: $"Failed to parse Tajeer {operationName} response: {ex.Message}",
                 isTransient: false);
         }
     }
@@ -131,26 +161,26 @@ public sealed partial class TajeerContractClient : ITajeerContractClient
     }
 
     [LoggerMessage(EventId = 4001, Level = LogLevel.Warning,
-        Message = "Tajeer SaveContract returned vendor business error {ErrorKey} (vendor code {VendorCode}) on HTTP {StatusCode}")]
-    partial void LogVendorBusinessError(int statusCode, string errorKey, int vendorCode);
+        Message = "Tajeer {Operation} returned vendor business error {ErrorKey} (vendor code {VendorCode}) on HTTP {StatusCode}")]
+    partial void LogVendorBusinessError(string operation, int statusCode, string errorKey, int vendorCode);
 
     [LoggerMessage(EventId = 4002, Level = LogLevel.Warning,
-        Message = "Tajeer SaveContract returned non-success status {StatusCode}")]
-    partial void LogNonSuccessStatus(int statusCode);
+        Message = "Tajeer {Operation} returned non-success status {StatusCode}")]
+    partial void LogNonSuccessStatus(string operation, int statusCode);
 
     [LoggerMessage(EventId = 4003, Level = LogLevel.Warning,
-        Message = "Tajeer SaveContract network failure")]
-    partial void LogNetworkFailure(Exception ex);
+        Message = "Tajeer {Operation} network failure")]
+    partial void LogNetworkFailure(string operation, Exception ex);
 
     [LoggerMessage(EventId = 4004, Level = LogLevel.Warning,
-        Message = "Tajeer SaveContract timed out")]
-    partial void LogTimeout(Exception ex);
+        Message = "Tajeer {Operation} timed out")]
+    partial void LogTimeout(string operation, Exception ex);
 
     [LoggerMessage(EventId = 4005, Level = LogLevel.Error,
-        Message = "Tajeer SaveContract returned non-JSON or invalid payload")]
-    partial void LogDeserializationFailure(Exception ex);
+        Message = "Tajeer {Operation} returned non-JSON or invalid payload")]
+    partial void LogDeserializationFailure(string operation, Exception ex);
 
     [LoggerMessage(EventId = 4006, Level = LogLevel.Error,
-        Message = "Tajeer SaveContract returned empty body on 2xx")]
-    partial void LogEmptyBody();
+        Message = "Tajeer {Operation} returned empty body on 2xx")]
+    partial void LogEmptyBody(string operation);
 }
