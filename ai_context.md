@@ -131,6 +131,7 @@ it first; update it after every meaningful change.
 | `POST` | `/api/v1/inspections/{id}/abandon`   | dev JWT stub + `Idempotency-Key` header | `AbandonInspectionRequest`             | 200 `{id, status: Abandoned}` ; 404 / 409 / 422 on failure                      |
 | `GET`  | `/api/v1/inspections/{id}`           | dev JWT stub                            | —                                      | `InspectionDetailDto` (with photos + damage markers) ; 404 if unknown           |
 | `GET`  | `/api/v1/lookups/inspections`        | dev JWT stub                            | `?page=1&pageSize=50&vehicleId=&leaseId=&type=&status=` | `PagedResult<InspectionSummaryDto>`                |
+| `POST` | `/api/v1/leases/{id}/check-in`       | dev JWT stub + `Idempotency-Key` header | `CheckInLeaseRequest`                  | 200 `{leaseId, inspectionId, status: Closed}` ; 404 unknown ; 422 invalid state / odometer regression |
 
 ## Current repo state
 
@@ -399,6 +400,16 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
    IS red — see TODO #1.
 
 ## Last updated
+
+2026-05-25 — Day-19 check-in saga (local slice) shipped. New
+`CheckInLeaseCommand` + `POST /api/v1/leases/{id}/check-in` create the
+CHECK_IN inspection, link it via the now-broadened `Inspection.LinkToLease`,
+close the lease (`Lease.MarkClosed`), and return the vehicle
+(`Vehicle.Return`) — all in one UoW commit. Seed adapter updated to walk
+Vehicle through Reserve/StartRental/Return so seeded Active/Extended/
+Suspended/Closed leases reflect realistic Vehicle state. **197 tests green**
+(+10: 1 domain + 6 handler + 3 endpoint). Tajeer adapter calls
+(CalculateContractPayment + CloseContract) deferred to the next workstream.
 
 2026-05-25 — Day-18 check-out saga (slim slice) shipped. New domain method
 `Inspection.LinkToLease(leaseId, nowUtc)` enforces COMPLETED + CheckOut/PreDelivery

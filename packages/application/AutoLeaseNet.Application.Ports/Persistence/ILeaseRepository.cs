@@ -11,6 +11,9 @@ public interface ILeaseRepository
 {
     void Add(Lease lease);
 
+    /// <summary>Tenant-scoped lookup by aggregate id (Day 19 check-in saga).</summary>
+    Task<Lease?> GetByIdAsync(Guid tenantId, Guid leaseId, CancellationToken ct);
+
     Task<Lease?> GetByTajeerContractNumberAsync(
         Guid tenantId,
         long tajeerContractNumber,

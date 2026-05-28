@@ -165,9 +165,9 @@ public sealed class Inspection : Entity
         if (Status != InspectionStatus.Completed)
             throw new InvalidOperationException(
                 $"Cannot link Inspection {Id} to a Lease: status is {Status}; only COMPLETED inspections gate Lease.MarkIssued.");
-        if (Type != InspectionType.CheckOut && Type != InspectionType.PreDelivery)
+        if (Type != InspectionType.CheckOut && Type != InspectionType.PreDelivery && Type != InspectionType.CheckIn)
             throw new InvalidOperationException(
-                $"Cannot link Inspection {Id} to a Lease: Type is {Type}; only CheckOut + PreDelivery qualify.");
+                $"Cannot link Inspection {Id} to a Lease: Type is {Type}; only CheckOut/PreDelivery/CheckIn qualify.");
 
         LeaseId = leaseId;
         LeaseLinkedAtUtc = nowUtc;
