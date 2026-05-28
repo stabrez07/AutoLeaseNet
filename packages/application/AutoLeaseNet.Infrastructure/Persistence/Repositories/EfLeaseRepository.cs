@@ -13,6 +13,11 @@ public sealed class EfLeaseRepository(AutoLeaseNetDbContext db) : ILeaseReposito
         db.Leases.Add(lease);
     }
 
+    public Task<Lease?> GetByIdAsync(Guid tenantId, Guid leaseId, CancellationToken ct)
+    {
+        return db.Leases.SingleOrDefaultAsync(l => l.TenantId == tenantId && l.Id == leaseId, ct);
+    }
+
     public Task<Lease?> GetByTajeerContractNumberAsync(
         Guid tenantId,
         long tajeerContractNumber,

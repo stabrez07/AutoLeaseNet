@@ -314,14 +314,27 @@ public sealed class InspectionTests
     }
 
     [Fact]
-    public void LinkToLease_rejects_when_Type_is_not_a_check_out_kind()
+    public void LinkToLease_rejects_when_Type_is_not_a_check_out_or_check_in_kind()
     {
         var i = NewInProgress(InspectionType.Periodic);
         i.Complete(T0.AddMinutes(5));
 
         var bad = () => i.LinkToLease(Guid.NewGuid(), T0.AddMinutes(10));
 
-        bad.Should().Throw<InvalidOperationException>(because: "only CheckOut + PreDelivery inspections gate Lease.MarkIssued");
+        bad.Should().Throw<InvalidOperationException>(because: "only CheckOut/PreDelivery/CheckIn inspections justify a Lease state transition");
+    }
+
+    [Fact]
+    public void LinkToLease_accepts_CheckIn_for_Day_19_close_saga()
+    {
+        var i = NewInProgress(InspectionType.CheckIn);
+        i.Complete(T0.AddMinutes(5));
+        var leaseId = Guid.Parse("e5e5e5e5-0000-0000-0000-000000000060");
+
+        i.LinkToLease(leaseId, T0.AddMinutes(10));
+
+        i.LeaseId.Should().Be(leaseId);
+        i.LeaseLinkedAtUtc.Should().Be(T0.AddMinutes(10));
     }
 
     [Fact]

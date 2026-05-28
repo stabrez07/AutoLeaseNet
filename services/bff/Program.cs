@@ -116,6 +116,7 @@ var v1 = app.MapGroup("/api/v1");
 v1.MapHealthRoot();
 v1.MapLookupEndpoints();
 v1.MapInspectionEndpoints();
+v1.MapLeaseEndpoints();
 v1.MapTajeerWebhookEndpoints();
 
 if (app.Environment.IsDevelopment())

@@ -396,19 +396,24 @@ public sealed partial class BogusDataSeeder(
             {
                 case LeaseStatus.Active:
                     lease.MarkIssued(veh.CurrentKm, 4, "Clean handover", savedAt.AddMinutes(30));
+                    EnsureVehicleOnRent(veh, savedAt.AddMinutes(30));
                     break;
                 case LeaseStatus.Extended:
                     lease.MarkIssued(veh.CurrentKm, 4, null, savedAt.AddMinutes(30));
+                    EnsureVehicleOnRent(veh, savedAt.AddMinutes(30));
                     lease.IncrementExtension(endUtc.AddDays(7), savedAt.AddDays(1));
                     break;
                 case LeaseStatus.Suspended:
                     lease.MarkIssued(veh.CurrentKm, 4, null, savedAt.AddMinutes(30));
+                    EnsureVehicleOnRent(veh, savedAt.AddMinutes(30));
                     lease.MarkSuspended(2, savedAt.AddHours(3));
                     break;
                 case LeaseStatus.Closed:
                     lease.MarkIssued(veh.CurrentKm, 4, null, savedAt.AddMinutes(30));
+                    EnsureVehicleOnRent(veh, savedAt.AddMinutes(30));
                     lease.MarkClosed(1, null, veh.CurrentKm + 320, 3,
                         "Returned clean", null, savedAt.AddDays(2));
+                    veh.Return(veh.CurrentKm + 320, savedAt.AddDays(2));
                     break;
                 case LeaseStatus.Cancelled:
                     lease.MarkCancelled("Renter cancelled before issuance", savedAt.AddHours(2));
@@ -526,6 +531,15 @@ public sealed partial class BogusDataSeeder(
     }
 
     private sealed record SeededLease(Lease Lease, Vehicle Vehicle, Driver Driver, DateTimeOffset SavedAt);
+
+    // Lifts a Vehicle from Available → Reserved → OnRent so seeded Active/Extended/
+    // Suspended/Closed leases reflect realistic vehicle state for downstream check-in
+    // tests. Idempotent against being called when the vehicle is already past Available.
+    private static void EnsureVehicleOnRent(Vehicle veh, DateTimeOffset at)
+    {
+        if (veh.Status == VehicleStatus.Available) { veh.Reserve(at); veh.StartRental(at); }
+        else if (veh.Status == VehicleStatus.Reserved) { veh.StartRental(at); }
+    }
 
     // Lightweight transliteration helper — for demo seed only, not production-grade.
     private static string TransliterateRough(string arabic, int salt)
