@@ -1,4 +1,7 @@
 using AutoLeaseNet.Adapters.Cache.InMemory;
+using AutoLeaseNet.Adapters.Common.Result;
+using AutoLeaseNet.Adapters.Tajeer.Contracts.Dtos;
+using AutoLeaseNet.Adapters.Tajeer.InMemory.Contracts;
 using AutoLeaseNet.Application.Leases;
 using AutoLeaseNet.Application.Ports.Idempotency;
 using AutoLeaseNet.Application.Ports.Persistence;
@@ -36,8 +39,13 @@ public sealed class CheckInLeaseCommandHandlerTests
         public CheckInLeaseCommandHandler Sut { get; }
         public Lease Lease { get; }
         public Vehicle Vehicle { get; }
+        public InMemoryTajeerContractClient Tajeer { get; }
 
-        public Harness(LeaseStatus startingStatus = LeaseStatus.Active, int currentKm = 50_000)
+        public Harness(
+            LeaseStatus startingStatus = LeaseStatus.Active,
+            int currentKm = 50_000,
+            Func<CalculatePaymentRequest, IntegrationResult<CalculatePaymentResponse>>? calculateFactory = null,
+            Func<CloseContractRequest, IntegrationResult<CloseContractResponse>>? closeFactory = null)
         {
             Db = new AutoLeaseNetDbContext(new DbContextOptionsBuilder<AutoLeaseNetDbContext>()
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -87,8 +95,12 @@ public sealed class CheckInLeaseCommandHandlerTests
             var tenant = new StubTenantContext(TenantId);
             var clock = new FixedClock(Now);
 
+            Tajeer = new InMemoryTajeerContractClient(
+                calculateFactory: calculateFactory,
+                closeFactory: closeFactory);
+
             Sut = new CheckInLeaseCommandHandler(leaseRepo, vehicleRepo, inspectionRepo,
-                uow, idempotency, tenant, clock,
+                uow, idempotency, tenant, clock, Tajeer,
                 NullLogger<CheckInLeaseCommandHandler>.Instance);
         }
 
@@ -212,5 +224,99 @@ public sealed class CheckInLeaseCommandHandlerTests
         first.Success.Should().BeTrue();
         second.Should().BeEquivalentTo(first, because: "idempotent replay returns the cached envelope");
         (await h.Db.Inspections.CountAsync()).Should().Be(1, because: "second call must not write another CHECK_IN row");
+        h.Tajeer.CalculateCalls.Should().HaveCount(1, because: "replay must not re-hit Tajeer");
+        h.Tajeer.CloseCalls.Should().HaveCount(1, because: "replay must not re-hit Tajeer");
+    }
+
+    [Fact]
+    public async Task Handle_happy_path_calls_Tajeer_Calculate_then_Close_then_commits_locally()
+    {
+        using var h = new Harness(startingStatus: LeaseStatus.Active);
+        var cmd = h.BuildCommand("k-tajeer-happy") with
+        {
+            ExtraKm = 50,
+            AdditionalCharges = 80m,
+            DiscountAmount = 20m,
+        };
+
+        var result = await h.Sut.Handle(cmd, CancellationToken.None);
+
+        result.Success.Should().BeTrue(because: $"error was {result.ErrorCode} — {result.ErrorMessage}");
+        result.Payment.Should().NotBeNull();
+        h.Tajeer.CalculateCalls.Should().HaveCount(1);
+        h.Tajeer.CloseCalls.Should().HaveCount(1);
+        h.Tajeer.CalculateCalls[0].ContractNumber.Should().Be(5000L);
+        h.Tajeer.CalculateCalls[0].ExtraKm.Should().Be(50);
+        h.Tajeer.CalculateCalls[0].AdditionalCharges.Should().Be(80m);
+        h.Tajeer.CloseCalls[0].ContractNumber.Should().Be(5000L);
+        h.Tajeer.CloseCalls[0].ClosureMainReasonCode.Should().Be(1);
+        // Calculate-then-Close — preview.GrandTotal feeds CloseContract.finalPaidAmount.
+        h.Tajeer.CloseCalls[0].FinalPaidAmount.Should().Be(result.Payment!.GrandTotal);
+    }
+
+    [Fact]
+    public async Task Handle_aborts_on_Tajeer_calculate_transient_failure_without_calling_Close_or_committing()
+    {
+        using var h = new Harness(
+            startingStatus: LeaseStatus.Active,
+            calculateFactory: _ => IntegrationResult<CalculatePaymentResponse>.Failure(
+                errorCode: "tajeer.http.503",
+                errorMessage: "upstream down",
+                isTransient: true));
+
+        var result = await h.Sut.Handle(h.BuildCommand("k-calc-fail"), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be("tajeer.calculate.transient");
+        h.Tajeer.CalculateCalls.Should().HaveCount(1);
+        h.Tajeer.CloseCalls.Should().BeEmpty(because: "Close must not run if Calculate failed");
+        (await h.Db.Inspections.CountAsync()).Should().Be(0, because: "no CHECK_IN row should be persisted on Tajeer failure");
+        var lease = await h.Db.Leases.SingleAsync();
+        lease.Status.Should().Be(LeaseStatus.Active, because: "local Lease must stay put when Tajeer aborted");
+        var vehicle = await h.Db.Vehicles.SingleAsync();
+        vehicle.Status.Should().Be(VehicleStatus.OnRent);
+    }
+
+    [Fact]
+    public async Task Handle_aborts_on_Tajeer_close_non_transient_failure_without_committing_locally()
+    {
+        using var h = new Harness(
+            startingStatus: LeaseStatus.Active,
+            closeFactory: _ => IntegrationResult<CloseContractResponse>.Failure(
+                errorCode: "tajeer.vendor.server.error.contract.already_closed",
+                errorMessage: "Already closed",
+                isTransient: false));
+
+        var result = await h.Sut.Handle(h.BuildCommand("k-close-fail"), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be("tajeer.close.failure");
+        h.Tajeer.CalculateCalls.Should().HaveCount(1, because: "Calculate was still attempted before Close failed");
+        h.Tajeer.CloseCalls.Should().HaveCount(1);
+        (await h.Db.Inspections.CountAsync()).Should().Be(0);
+        var lease = await h.Db.Leases.SingleAsync();
+        lease.Status.Should().Be(LeaseStatus.Active);
+        var vehicle = await h.Db.Vehicles.SingleAsync();
+        vehicle.Status.Should().Be(VehicleStatus.OnRent);
+    }
+
+    [Fact]
+    public async Task Handle_short_circuits_when_TajeerContractNumber_is_missing()
+    {
+        using var h = new Harness(startingStatus: LeaseStatus.Active);
+        // Force the lease's TajeerContractNumber to null via a direct DB rewrite so we can
+        // exercise the guard; in real life this can't happen (CreatePending requires it).
+        var lease = await h.Db.Leases.SingleAsync();
+        var prop = typeof(Lease).GetProperty(nameof(Lease.TajeerContractNumber))!;
+        prop.SetValue(lease, null);
+        await h.Db.SaveChangesAsync();
+        h.Db.ChangeTracker.Clear();
+
+        var result = await h.Sut.Handle(h.BuildCommand("k-no-contract"), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be("tajeer.contract_number_missing");
+        h.Tajeer.CalculateCalls.Should().BeEmpty();
+        h.Tajeer.CloseCalls.Should().BeEmpty();
     }
 }

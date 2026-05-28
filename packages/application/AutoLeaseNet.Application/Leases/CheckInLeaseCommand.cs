@@ -4,10 +4,11 @@ using MediatR;
 namespace AutoLeaseNet.Application.Leases;
 
 /// <summary>
-/// Day-19 check-in saga (local slice). Ops returns the vehicle, records the CHECK_IN
-/// inspection, closes the Lease, and frees the Vehicle — all in one transactional
-/// command. Tajeer <c>CalculateContractPayment</c> + <c>Close Contract</c> calls are
-/// deferred to the saga's vendor-commit step (next workstream).
+/// Day-19 check-in saga. Ops returns the vehicle, the BFF calls Tajeer's
+/// <c>CalculateContractPayment</c> for the money preview, then <c>CloseContract</c> for
+/// the vendor commit, then mirrors the result locally (Lease → Closed, Vehicle →
+/// Available, CHECK_IN inspection completed). See
+/// <see href="../../../../Plans/workstreams/2026-05-28-tajeer-close-saga/plan.md">workstream plan</see>.
 /// </summary>
 public sealed record CheckInLeaseCommand : IRequest<CheckInLeaseCommandResult>
 {
@@ -40,6 +41,18 @@ public sealed record CheckInLeaseCommand : IRequest<CheckInLeaseCommandResult>
     /// <summary>Tajeer closure main reason code (Spec 03 §7.3).</summary>
     public required int ClosureMainReasonCode { get; init; }
     public int? ClosureSubReasonCode { get; init; }
+
+    /// <summary>Caller-declared extra-km overage; null = let Tajeer compute from contract allowance.</summary>
+    public int? ExtraKm { get; init; }
+
+    /// <summary>Caller-declared additional charges (damages, refuelling, cleaning, etc.).</summary>
+    public decimal? AdditionalCharges { get; init; }
+
+    /// <summary>Discount applied at close (server-validated by Tajeer).</summary>
+    public decimal? DiscountAmount { get; init; }
+
+    /// <summary>What ops collected at the counter — passed to Tajeer's CloseContract as <c>finalPaidAmount</c>.</summary>
+    public decimal? FinalPaidAmount { get; init; }
 }
 
 public sealed record CheckInLeaseCommandResult(
@@ -48,4 +61,22 @@ public sealed record CheckInLeaseCommandResult(
     Guid? InspectionId,
     string? LeaseStatus,
     string? ErrorCode,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    CheckInPaymentBreakdown? Payment = null);
+
+/// <summary>
+/// Internal projection of Tajeer's <c>CalculatePayment</c> + <c>CloseContract</c> responses
+/// — surfaced to the BFF so the ops UI can show the breakdown next to the close
+/// confirmation. All amounts in SAR.
+/// </summary>
+public sealed record CheckInPaymentBreakdown(
+    decimal RentAmount,
+    decimal PaidAmount,
+    decimal LateHoursFee,
+    decimal ExtraKmFee,
+    decimal DamagesFee,
+    decimal DiscountAmount,
+    decimal TotalDue,
+    decimal VatAmount,
+    decimal GrandTotal,
+    decimal FinalPaidAmount);

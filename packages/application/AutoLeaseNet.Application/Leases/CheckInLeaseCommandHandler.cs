@@ -1,3 +1,5 @@
+using AutoLeaseNet.Adapters.Tajeer.Contracts;
+using AutoLeaseNet.Adapters.Tajeer.Contracts.Dtos;
 using AutoLeaseNet.Application.Ports.Idempotency;
 using AutoLeaseNet.Application.Ports.Persistence;
 using AutoLeaseNet.Application.Ports.Tenancy;
@@ -11,11 +13,17 @@ using Microsoft.Extensions.Logging;
 namespace AutoLeaseNet.Application.Leases;
 
 /// <summary>
-/// Handler for <see cref="CheckInLeaseCommand"/>. Validates Lease + Vehicle states,
-/// creates and completes the CHECK_IN inspection, links it to the lease, calls
+/// Handler for <see cref="CheckInLeaseCommand"/>. Validates Lease + Vehicle state,
+/// calls Tajeer <c>CalculatePayment</c> for the preview, calls Tajeer <c>CloseContract</c>
+/// for the vendor commit, then mirrors the result locally — CHECK_IN inspection +
 /// <c>Lease.MarkClosed</c> + <c>Vehicle.Return</c>, all in one unit-of-work commit.
-/// Failures along the way return a stable error code (no partial state leaks because
-/// the UoW only commits if every step succeeded).
+///
+/// <para>
+/// <b>Vendor-first ordering</b> keeps the inconsistency window scoped to "Tajeer 200
+/// CLOSED → local SaveChanges". A crash inside that window self-heals on the next
+/// idempotent replay (Tajeer is idempotent at its end too). Full outbox pattern is
+/// deferred per the workstream plan.
+/// </para>
 /// </summary>
 public sealed partial class CheckInLeaseCommandHandler(
     ILeaseRepository leases,
@@ -25,6 +33,7 @@ public sealed partial class CheckInLeaseCommandHandler(
     IIdempotencyStore idempotency,
     ITenantContext tenant,
     IClock clock,
+    ITajeerContractClient tajeer,
     ILogger<CheckInLeaseCommandHandler> logger)
     : IRequestHandler<CheckInLeaseCommand, CheckInLeaseCommandResult>
 {
@@ -46,7 +55,7 @@ public sealed partial class CheckInLeaseCommandHandler(
             return cached;
         }
 
-        // 1. Resolve the lease (we need it for VehicleId + status check).
+        // 1. Resolve the lease (we need it for VehicleId + status check + TajeerContractNumber).
         var lease = await leases.GetByIdAsync(tenantId, request.LeaseId, ct).ConfigureAwait(false);
         if (lease is null) return Fail("lease.not_found", $"Lease {request.LeaseId} not found.");
         if (lease.Status != LeaseStatus.Active && lease.Status != LeaseStatus.Extended && lease.Status != LeaseStatus.Suspended)
@@ -54,6 +63,9 @@ public sealed partial class CheckInLeaseCommandHandler(
                 $"Lease {request.LeaseId} status is {lease.Status}; must be Active, Extended, or Suspended.");
         if (lease.VehicleId is not { } vehicleId)
             return Fail("lease.no_vehicle", $"Lease {request.LeaseId} has no Vehicle reference; cannot check in.");
+        if (lease.TajeerContractNumber is not { } contractNumber)
+            return Fail("tajeer.contract_number_missing",
+                $"Lease {request.LeaseId} has no TajeerContractNumber; cannot close at vendor.");
 
         // 2. Resolve the vehicle so we can transition it.
         var vehicle = await vehicles.GetByIdAsync(tenantId, vehicleId, ct).ConfigureAwait(false);
@@ -69,8 +81,57 @@ public sealed partial class CheckInLeaseCommandHandler(
                 $"OdometerKm {request.OdometerKm} is less than vehicle.CurrentKm {vehicle.CurrentKm}; odometer cannot decrease.");
 
         var nowUtc = clock.UtcNow;
+        var tajeerTimestamp = nowUtc.UtcDateTime.ToString("yyyy-MM-ddTHH:mm", System.Globalization.CultureInfo.InvariantCulture);
+        var fuelCode = (int)request.FuelLevel;
 
-        // 4. Build the CHECK_IN inspection, complete it, link it.
+        // 4. Tajeer CalculatePayment (preview — non-destructive).
+        var calculateRequest = new CalculatePaymentRequest
+        {
+            ContractNumber = contractNumber,
+            ReturnDate = tajeerTimestamp,
+            ReturnedKm = request.OdometerKm,
+            ReturnedFuelLevelCode = fuelCode,
+            ExtraKm = request.ExtraKm,
+            AdditionalCharges = request.AdditionalCharges,
+            DiscountAmount = request.DiscountAmount,
+        };
+        var calculateResult = await tajeer.CalculatePaymentAsync(calculateRequest, ct).ConfigureAwait(false);
+        if (!calculateResult.IsSuccess)
+        {
+            LogTajeerCalculateFailure(contractNumber, calculateResult.ErrorCode ?? "unknown", calculateResult.IsTransient);
+            return Fail(
+                code: calculateResult.IsTransient ? "tajeer.calculate.transient" : "tajeer.calculate.failure",
+                message: $"Tajeer CalculatePayment failed for contract {contractNumber}: {calculateResult.ErrorMessage}");
+        }
+        var preview = calculateResult.Value!;
+
+        // 5. Tajeer CloseContract (vendor commit). Use the preview's GrandTotal as the
+        //    finalPaidAmount unless the caller declared one explicitly.
+        var finalPaid = request.FinalPaidAmount ?? preview.GrandTotal;
+        var closeRequest = new CloseContractRequest
+        {
+            ContractNumber = contractNumber,
+            ClosureMainReasonCode = request.ClosureMainReasonCode,
+            ClosureSubReasonCode = request.ClosureSubReasonCode,
+            ReturnDate = tajeerTimestamp,
+            ReturnedKm = request.OdometerKm,
+            ReturnedFuelLevelCode = fuelCode,
+            ReturnConditionNotes = request.ReturnConditionNotes,
+            DamagesObserved = request.DamagesObserved,
+            FinalPaidAmount = finalPaid,
+            DiscountAmount = request.DiscountAmount,
+        };
+        var closeResult = await tajeer.CloseAsync(closeRequest, ct).ConfigureAwait(false);
+        if (!closeResult.IsSuccess)
+        {
+            LogTajeerCloseFailure(contractNumber, closeResult.ErrorCode ?? "unknown", closeResult.IsTransient);
+            return Fail(
+                code: closeResult.IsTransient ? "tajeer.close.transient" : "tajeer.close.failure",
+                message: $"Tajeer CloseContract failed for contract {contractNumber}: {closeResult.ErrorMessage}");
+        }
+        var vendorClose = closeResult.Value!;
+
+        // 6. Build the CHECK_IN inspection, complete it, link it.
         var inspection = Inspection.Start(new StartInspectionInput
         {
             TenantId = tenantId,
@@ -100,14 +161,14 @@ public sealed partial class CheckInLeaseCommandHandler(
         inspection.LinkToLease(lease.Id, nowUtc);
         inspections.Add(inspection);
 
-        // 5. Close the lease + return the vehicle.
+        // 7. Close the lease + return the vehicle.
         try
         {
             lease.MarkClosed(
                 closureMainReasonCode: request.ClosureMainReasonCode,
                 closureSubReasonCode: request.ClosureSubReasonCode,
                 endKm: request.OdometerKm,
-                returnFuelLevelCode: (int)request.FuelLevel,
+                returnFuelLevelCode: fuelCode,
                 returnConditionNotes: request.ReturnConditionNotes,
                 damagesObserved: request.DamagesObserved,
                 nowUtc: nowUtc);
@@ -120,15 +181,28 @@ public sealed partial class CheckInLeaseCommandHandler(
 
         await uow.SaveChangesAsync(ct).ConfigureAwait(false);
 
+        var payment = new CheckInPaymentBreakdown(
+            RentAmount: preview.RentAmount,
+            PaidAmount: preview.PaidAmount,
+            LateHoursFee: preview.LateHoursFee,
+            ExtraKmFee: preview.ExtraKmFee,
+            DamagesFee: preview.DamagesFee,
+            DiscountAmount: preview.DiscountAmount,
+            TotalDue: preview.TotalDue,
+            VatAmount: preview.VatAmount,
+            GrandTotal: preview.GrandTotal,
+            FinalPaidAmount: vendorClose.FinalPaidAmount);
+
         var result = new CheckInLeaseCommandResult(
             Success: true,
             LeaseId: lease.Id,
             InspectionId: inspection.Id,
             LeaseStatus: lease.Status.ToString(),
             ErrorCode: null,
-            ErrorMessage: null);
+            ErrorMessage: null,
+            Payment: payment);
         await idempotency.SetAsync(idemKey, result, IdempotencyTtl, ct).ConfigureAwait(false);
-        LogClosed(lease.Id, inspection.Id);
+        LogClosed(lease.Id, inspection.Id, contractNumber);
         return result;
     }
 
@@ -138,6 +212,12 @@ public sealed partial class CheckInLeaseCommandHandler(
     [LoggerMessage(EventId = 5101, Level = LogLevel.Information, Message = "CheckIn idempotency replay for key {IdempotencyKey}")]
     partial void LogReplay(string idempotencyKey);
 
-    [LoggerMessage(EventId = 5102, Level = LogLevel.Information, Message = "Lease {LeaseId} closed via check-in; Inspection {InspectionId}")]
-    partial void LogClosed(Guid leaseId, Guid inspectionId);
+    [LoggerMessage(EventId = 5102, Level = LogLevel.Information, Message = "Lease {LeaseId} closed via check-in; Inspection {InspectionId}; Tajeer contract {ContractNumber}")]
+    partial void LogClosed(Guid leaseId, Guid inspectionId, long contractNumber);
+
+    [LoggerMessage(EventId = 5103, Level = LogLevel.Warning, Message = "Tajeer CalculatePayment failed for contract {ContractNumber}: {ErrorCode} (transient={Transient})")]
+    partial void LogTajeerCalculateFailure(long contractNumber, string errorCode, bool transient);
+
+    [LoggerMessage(EventId = 5104, Level = LogLevel.Warning, Message = "Tajeer CloseContract failed for contract {ContractNumber}: {ErrorCode} (transient={Transient})")]
+    partial void LogTajeerCloseFailure(long contractNumber, string errorCode, bool transient);
 }

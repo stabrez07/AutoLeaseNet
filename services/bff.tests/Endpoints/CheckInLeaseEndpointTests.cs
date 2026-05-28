@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using AutoLeaseNet.Adapters.Tajeer.Contracts;
+using AutoLeaseNet.Adapters.Tajeer.InMemory.Contracts;
 using AutoLeaseNet.Bff.Endpoints;
 using AutoLeaseNet.Domain.Leases;
 using AutoLeaseNet.Domain.Operations;
@@ -48,6 +50,13 @@ public sealed class CheckInLeaseEndpointTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(JsonOpts);
         body.GetProperty("status").GetString().Should().Be(nameof(LeaseStatus.Closed));
+
+        // Tajeer Calculate + Close ran — payment block must be present (InMemory adapter
+        // gives a deterministic shape: 0 base rent, 15% VAT on caller-declared fees).
+        var payment = body.GetProperty("payment");
+        payment.ValueKind.Should().Be(JsonValueKind.Object);
+        payment.GetProperty("finalPaidAmount").GetDecimal().Should().BeGreaterThanOrEqualTo(0m);
+        payment.GetProperty("grandTotal").GetDecimal().Should().BeGreaterThanOrEqualTo(0m);
 
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AutoLeaseNetDbContext>();
@@ -182,6 +191,17 @@ internal sealed class CheckInFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<DbContextOptions<AutoLeaseNetDbContext>>();
             services.AddAutoLeaseNetDbContext(opt => opt.UseInMemoryDatabase(databaseName: _dbName));
+
+            // Explicit InMemory Tajeer swap — matches the SaveContract / Webhook factory
+            // pattern. The Tajeer:Mode config-driven switch in Program.cs uses
+            // services.Replace which doesn't always supersede the original Scoped
+            // registration under WebApplicationFactory; CI showed Calculate hitting the
+            // real HTTP client when only the config switch was relied on.
+            services.RemoveAll<ITajeerContractClient>();
+            services.RemoveAll<InMemoryTajeerContractClient>();
+            var stub = new InMemoryTajeerContractClient();
+            services.AddSingleton(stub);
+            services.AddSingleton<ITajeerContractClient>(_ => stub);
         });
     }
 }

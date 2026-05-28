@@ -15,23 +15,36 @@ namespace AutoLeaseNet.Adapters.Tajeer.InMemory.Contracts;
 public sealed class InMemoryTajeerContractClient : ITajeerContractClient
 {
     private readonly Func<SaveContractRequest, IntegrationResult<SaveContractResponse>>? _saveFactoryOverride;
+    private readonly Func<CalculatePaymentRequest, IntegrationResult<CalculatePaymentResponse>>? _calculateFactoryOverride;
+    private readonly Func<CloseContractRequest, IntegrationResult<CloseContractResponse>>? _closeFactoryOverride;
+
     private readonly List<SaveContractRequest> _saveCalls = new();
+    private readonly List<CalculatePaymentRequest> _calculateCalls = new();
+    private readonly List<CloseContractRequest> _closeCalls = new();
 
-    /// <summary>Default factory — returns a deterministic success response.</summary>
-    public InMemoryTajeerContractClient()
-    {
-        _saveFactoryOverride = null;
-    }
-
-    /// <summary>Override the response per request for negative-path tests.</summary>
+    /// <summary>
+    /// Construct with optional per-method failure injections. Pass <c>null</c> (or omit) for
+    /// any factory you want to leave on the default success path. The parameterless form
+    /// (<c>new InMemoryTajeerContractClient()</c>) keeps all three on defaults.
+    /// </summary>
     public InMemoryTajeerContractClient(
-        Func<SaveContractRequest, IntegrationResult<SaveContractResponse>> saveFactory)
+        Func<SaveContractRequest, IntegrationResult<SaveContractResponse>>? saveFactory = null,
+        Func<CalculatePaymentRequest, IntegrationResult<CalculatePaymentResponse>>? calculateFactory = null,
+        Func<CloseContractRequest, IntegrationResult<CloseContractResponse>>? closeFactory = null)
     {
-        _saveFactoryOverride = saveFactory ?? throw new ArgumentNullException(nameof(saveFactory));
+        _saveFactoryOverride = saveFactory;
+        _calculateFactoryOverride = calculateFactory;
+        _closeFactoryOverride = closeFactory;
     }
 
     /// <summary>All <see cref="SaveAsync"/> calls observed since construction.</summary>
     public IReadOnlyList<SaveContractRequest> SaveCalls => _saveCalls;
+
+    /// <summary>All <see cref="CalculatePaymentAsync"/> calls observed since construction.</summary>
+    public IReadOnlyList<CalculatePaymentRequest> CalculateCalls => _calculateCalls;
+
+    /// <summary>All <see cref="CloseAsync"/> calls observed since construction.</summary>
+    public IReadOnlyList<CloseContractRequest> CloseCalls => _closeCalls;
 
     public Task<IntegrationResult<SaveContractResponse>> SaveAsync(
         SaveContractRequest request,
@@ -43,6 +56,34 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
         var result = _saveFactoryOverride is not null
             ? _saveFactoryOverride(request)
             : DefaultSaveResponse(request, _saveCalls.Count);
+
+        return Task.FromResult(result);
+    }
+
+    public Task<IntegrationResult<CalculatePaymentResponse>> CalculatePaymentAsync(
+        CalculatePaymentRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        _calculateCalls.Add(request);
+
+        var result = _calculateFactoryOverride is not null
+            ? _calculateFactoryOverride(request)
+            : DefaultCalculateResponse(request);
+
+        return Task.FromResult(result);
+    }
+
+    public Task<IntegrationResult<CloseContractResponse>> CloseAsync(
+        CloseContractRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        _closeCalls.Add(request);
+
+        var result = _closeFactoryOverride is not null
+            ? _closeFactoryOverride(request)
+            : DefaultCloseResponse(request);
 
         return Task.FromResult(result);
     }
@@ -71,6 +112,42 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
             MainPaymentDetails = summary,
             OtherPaymentDetails = new PaymentSummary(),
             TotalPaymentDetails = summary,
+        });
+    }
+
+    private static IntegrationResult<CalculatePaymentResponse> DefaultCalculateResponse(CalculatePaymentRequest request)
+    {
+        // Deterministic preview: no late hours, no damages by default; extra-km is echoed
+        // back at a flat SAR 0.50/km synthetic rate; VAT = 15% of TotalDue.
+        var extraKmFee = (request.ExtraKm ?? 0) * 0.5m;
+        var damagesFee = request.AdditionalCharges ?? 0m;
+        var discount = request.DiscountAmount ?? 0m;
+        var totalDue = Math.Max(0m, extraKmFee + damagesFee - discount);
+        var vat = Math.Round(totalDue * 0.15m, 2);
+
+        return IntegrationResult<CalculatePaymentResponse>.Success(new CalculatePaymentResponse
+        {
+            ContractNumber = request.ContractNumber,
+            RentAmount = 0m,                   // the in-memory adapter doesn't know base rent
+            PaidAmount = 0m,
+            LateHoursFee = 0m,
+            ExtraKmFee = extraKmFee,
+            DamagesFee = damagesFee,
+            DiscountAmount = discount,
+            TotalDue = totalDue,
+            VatAmount = vat,
+            GrandTotal = totalDue + vat,
+        });
+    }
+
+    private static IntegrationResult<CloseContractResponse> DefaultCloseResponse(CloseContractRequest request)
+    {
+        return IntegrationResult<CloseContractResponse>.Success(new CloseContractResponse
+        {
+            ContractNumber = request.ContractNumber,
+            ContractStatusCode = 2, // Tajeer status code for Closed
+            ClosedAt = request.ReturnDate,
+            FinalPaidAmount = request.FinalPaidAmount,
         });
     }
 }
