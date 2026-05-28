@@ -144,12 +144,16 @@ it first; update it after every meaningful change.
 
 ## Current repo state
 
-- **Branch**: `main` at commit `3638137` (`chore: remove stray AutoLeaseNet/ nested clone + add gitignore guard (#10)`).
+- **Branch**: `main` at commit `a42cf41` (`feat(operations): Day-21 Incident aggregate (foundation) (#17)`).
 - **CI on main**: ✅ all three jobs green — `.NET (build -warnaserror + test)`, `JS (lint + typecheck + build)`, `Tajeer staging smoke (Category=Smoke)` (cleanly skipped via the `TAJEER_REAL_SMOKE_ENABLED` gate).
-- **Merged PRs since checkpoint `35ecbae`**: #1 (CI test-host config + seeding), #2 (web-portal Tailwind + AR/EN + Save Contract form), #3 (governance: repo public + branch protection + 5 dummy `TAJEER_*` secrets), #4 (Dev-only CORS + local-SQL runbook), #5 (smoke gate + secret name fix), #6 (ai_context refresh), #7 (DbContext interceptor for domain-event dispatch), #8 (ai_context refresh after #7), #9 (`AddAutoLeaseNetDbContext` helper extraction), #10 (stray nested clone removed + gitignore guard).
+- **Tests**: 256 green across 5 test projects (Adapters.Common 20, Adapters.Tajeer 66, Infrastructure 3, Application 107, Bff 60). Run via `dotnet test --filter "Category!=Smoke&Category!=Integration"`.
+- **Merged PRs since checkpoint `35ecbae`**: #1–#10 covered Week-1 stabilisation, governance, scaffold, and seed plumbing (see git log for individual titles). #11 (ai_context refresh after #9 + #10), #12 (Inspection aggregate — Week-3 E-Check foundation), #13 (Day-18 CHECK_OUT → Lease link via SaveContract), #14 (Day-19 check-in saga local close), #15 (Tajeer Calculate + Close — saga vendor commit), #16 (Day-20 Extend + Suspend endpoints), #17 (Day-21 Incident aggregate).
+- **Active aggregates**: Lease, Customer, Vehicle, Driver, Branch, RentPolicy, ExtendedCoverage, WebhookLog, Inspection (+ children), Incident.
+- **`ITajeerContractClient` surface**: `SaveAsync`, `CalculatePaymentAsync`, `CloseAsync`, `ExtendAsync`, `SuspendAsync` (5 methods; all share the `SendAsync<TReq,TRes>` error-mapping spine). InMemory sibling honours per-method override factories for negative-path tests.
+- **EF migrations applied to local `AutoLeaseNet_Dev`** (latest): `20260528205440_Add_Incident_Aggregate` (this commit's), preceded by `20260528131820_Add_Inspection_Aggregate` (PR #12) and `20260523163430_Add_Core_Aggregates`.
 - **Branch protection**: enforced on `main`. Direct push blocked; every change is `gh pr create` → `gh pr merge --squash --delete-branch`.
 - **Repo visibility**: public. L.G2/L.G3 closed at $0 cost.
-- **Current blocker profile**: no active code/CI blockers. Remaining work is the manual staging exercise (T3.7/T5.7/T5.8/T6.7/T6.8/T6.9/T7.8) and external onboarding (Azure / Entra / Unifonic).
+- **Current blocker profile**: no active code/CI blockers. Remaining external work: manual Tajeer Rabet staging exercise (needs creds + ngrok), Azure / Entra / Unifonic onboarding. Internal next workstreams (any order): Outbox + BackgroundService drain, Vehicle Replacement Saga (subscribes to `IncidentReportedDomainEvent`), Lease lifecycle domain events → invoicing trigger (Week 4), Reconciliation job (15-min scheduled).
 
 ## TODOs — in priority order
 
@@ -378,17 +382,33 @@ When you (Copilot / Claude / future me) sit down next:
 1. **First**: `git log --oneline -10` + `git status` + `git diff HEAD` to see what
    actually moved.
 2. **Read this file top to bottom.**
-3. **Read** `Plans/workstreams/2026-05-17-week-1-foundation-tajeer-happy-path/plan.md`
-   for the unchecked boxes if you've forgotten where Week 1 ended.
-4. **If user says "continue Week 1"**: address TODO #1 (CI red) FIRST. Then offer
-   TODO #2 (manual staging) and Week 2 entry (TODO #4).
-5. **If user says "continue Week 2"**: confirm `design.md` exists; if not, surface
-   that blocker and ask. Don't generate UI without it.
-6. **If user mentions a new external dep is unblocked** (Azure / Entra / Unifonic /
-   Pro upgrade / public repo): light up the corresponding loop-back tasks from
-   `Plans/workstreams/2026-05-17-week-1-foundation-tajeer-happy-path/plan.md` §6.
-7. **Every meaningful change → update this file**. Don't keep architecture or status
-   in chat memory.
+3. **Read** the latest workstream under `Plans/workstreams/` (sorted by date) — its
+   retrospective lists carry-forward items the way the conversation thread does.
+   Today's tip-of-tree: [`2026-05-28-day-21-incident-aggregate`](./Plans/workstreams/2026-05-28-day-21-incident-aggregate/).
+4. **If user says "continue"** with no other context: propose options via
+   `AskUserQuestion` from the deferred carry-forward list (recommended first), then
+   start the chosen workstream. The established pattern from PRs #12 → #17 is one
+   PR per workstream: open a `Plans/workstreams/{YYYY-MM-DD-slug}/plan.md`, branch,
+   ship the slice, write `retrospective.md`, bump this file, squash-merge.
+5. **Currently deferred carry-forward** (any of these is a legit "next"):
+   - **Outbox + BackgroundService drain** — closes the cross-system inconsistency
+     window for all four Tajeer-touching commands (Save / Close / Extend / Suspend).
+   - **Vehicle Replacement Saga** (Spec 02 §6.5) — subscribes to
+     `IncidentReportedDomainEvent` filtered on `RequiresReplacement = true`.
+   - **`LeaseClosed` / `LeaseExtended` / `LeaseSuspended` domain events** → Week-4
+     invoicing trigger. The aggregates don't raise them yet; thin layer to add.
+   - **Reconciliation job** (15-min scheduled) — Day-20 master-plan note; needs a
+     hosted-service skeleton.
+   - **Day 9 RLS + Always Encrypted PII** (Vehicle Replacement Saga is independent
+     of this; PII columns include PoliceReportNumber + InsuranceClaimNumber from
+     PR #17's Incident aggregate).
+6. **If user says "continue Week 2 UI"**: confirm `design.md` exists; if not,
+   surface that blocker and ask. Don't generate UI without it.
+7. **If user mentions a new external dep is unblocked** (Azure / Entra / Unifonic):
+   look for the corresponding placeholder in the latest workstream retrospective
+   or in Plan 05 (`Plans/05-dependency-onboarding-checklist.md`).
+8. **Every meaningful change → update this file**. Don't keep architecture or
+   status in chat memory.
 
 ## Working pattern for any non-trivial change
 
