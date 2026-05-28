@@ -8,6 +8,7 @@ using AutoLeaseNet.Application.Ports.Time;
 using AutoLeaseNet.Domain.Customers;
 using AutoLeaseNet.Domain.Drivers;
 using AutoLeaseNet.Domain.Leases;
+using AutoLeaseNet.Domain.Operations;
 using AutoLeaseNet.Domain.Vehicles;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -39,6 +40,7 @@ public sealed partial class SaveContractCommandHandler(
     IRentPolicyRepository rentPolicies,
     IExtendedCoverageRepository extendedCoverages,
     IBranchRepository branches,
+    IInspectionRepository inspections,
     IUnitOfWork uow,
     IIdempotencyStore idempotency,
     ITenantContext tenant,
@@ -135,6 +137,39 @@ public sealed partial class SaveContractCommandHandler(
                     $"AuthorizedDriver {aid} TAMM status is {authorizedDriver.TammAuthorizationStatus}.");
         }
 
+        // 2b. Resolve the CHECK_OUT inspection that justifies this Lease (Day 18 / Spec 01
+        //     §invariant 2). Explicit id → strict validation; omitted → best-effort
+        //     auto-lookup of the most recent un-linked CHECK_OUT for this vehicle.
+        //     Phase 1.x keeps the link optional; if neither path finds an inspection, the
+        //     Lease is still created (the field flips to required in Phase 1.y when the
+        //     web portal drives the full saga end-to-end).
+        Inspection? checkOutInspection = null;
+        if (command.CheckOutInspectionId is { } explicitId)
+        {
+            checkOutInspection = await inspections.GetByIdAsync(tenantId, explicitId, ct).ConfigureAwait(false);
+            if (checkOutInspection is null)
+                return BusinessError("checkout_inspection.not_found",
+                    $"CHECK_OUT Inspection {explicitId} not found for tenant {tenantId}.");
+            if (checkOutInspection.VehicleId != vehicle.Id)
+                return BusinessError("checkout_inspection.vehicle_mismatch",
+                    $"CHECK_OUT Inspection {explicitId} is for vehicle {checkOutInspection.VehicleId}, not {vehicle.Id}.");
+            if (checkOutInspection.Status != InspectionStatus.Completed)
+                return BusinessError("checkout_inspection.not_completed",
+                    $"CHECK_OUT Inspection {explicitId} status is {checkOutInspection.Status}; must be Completed.");
+            if (checkOutInspection.Type != InspectionType.CheckOut && checkOutInspection.Type != InspectionType.PreDelivery)
+                return BusinessError("checkout_inspection.wrong_type",
+                    $"Inspection {explicitId} type is {checkOutInspection.Type}; must be CheckOut or PreDelivery.");
+            if (checkOutInspection.LeaseId is not null)
+                return BusinessError("checkout_inspection.already_linked",
+                    $"CHECK_OUT Inspection {explicitId} is already linked to Lease {checkOutInspection.LeaseId}.");
+        }
+        else
+        {
+            checkOutInspection = await inspections.GetLatestUnlinkedCheckOutForVehicleAsync(
+                tenantId, vehicle.Id, ct).ConfigureAwait(false);
+            // Phase 1.x: a missing inspection is non-fatal — Lease still gets created.
+        }
+
         // 3. Build the Tajeer V9.7 DTO from looked-up data.
         var tajeerRequest = BuildTajeerRequest(
             command, customer, vehicle, primaryDriver, extraDriver, authorizedDriver,
@@ -208,6 +243,9 @@ public sealed partial class SaveContractCommandHandler(
         {
             vehicle.Reserve(nowUtc);
         }
+
+        // Link the resolved CHECK_OUT inspection — same UoW, same transaction.
+        checkOutInspection?.LinkToLease(lease.Id, nowUtc);
 
         await uow.SaveChangesAsync(ct).ConfigureAwait(false);
 

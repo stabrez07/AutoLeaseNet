@@ -400,6 +400,19 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
 
 ## Last updated
 
+2026-05-25 — Day-18 check-out saga (slim slice) shipped. New domain method
+`Inspection.LinkToLease(leaseId, nowUtc)` enforces COMPLETED + CheckOut/PreDelivery
++ no-existing-link invariants; new `LeaseLinkedAtUtc` audit timestamp.
+`SaveContractCommand` gained optional `CheckOutInspectionId` — handler validates
+4 negative paths (not-found / vehicle-mismatch / not-completed / wrong-type /
+already-linked → `lease.checkout_inspection.{code}`) and auto-looks-up the most
+recent un-linked CHECK_OUT for the vehicle when the id is omitted. Phase 1.x
+keeps the link **optional** (existing seed + test callers unaffected); flips to
+required in Phase 1.y once the web portal drives the full saga. Seed adapter
+now drives the link via `Inspection.LinkToLease` for parity with production flow.
+**187 tests green** (+12: 7 domain + 5 SaveContract integration). Previous:
+PR #12 Inspection aggregate.
+
 2026-05-25 — Inspection aggregate workstream closed. First Week-3 slice:
 `Inspection` aggregate + `InspectionPhoto` + `InspectionDamageMarker` with the
 full Spec 01 §5.6 field surface; state machine per Spec 02 §4.6 (IN_PROGRESS →

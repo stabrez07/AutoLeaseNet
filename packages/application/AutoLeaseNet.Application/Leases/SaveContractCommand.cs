@@ -62,6 +62,17 @@ public sealed record SaveContractCommand : IRequest<SaveContractCommandResult>
     public required int PaymentMethodCode { get; init; }
     public int? DiscountType { get; init; }
     public decimal? DiscountValue { get; init; }
+
+    /// <summary>
+    /// Day-18 check-out saga: optional explicit pointer at the CHECK_OUT (or PRE_DELIVERY)
+    /// <see cref="AutoLeaseNet.Domain.Operations.Inspection"/> that justifies this Lease.
+    /// When supplied, the handler validates it (exists, COMPLETED, right vehicle, not
+    /// already linked) and links on success. When omitted, the handler auto-looks-up the
+    /// most recent un-linked CHECK_OUT for the same vehicle and links it if present.
+    /// Phase 1.x leaves linking optional — Phase 1.y flips it to required once the web
+    /// portal drives the full check-out flow end-to-end.
+    /// </summary>
+    public Guid? CheckOutInspectionId { get; init; }
 }
 
 /// <summary>

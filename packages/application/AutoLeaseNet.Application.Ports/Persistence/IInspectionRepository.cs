@@ -28,6 +28,18 @@ public interface IInspectionRepository
         int page,
         int pageSize,
         CancellationToken ct);
+
+    /// <summary>
+    /// Day-18 check-out saga: find the most recent COMPLETED + un-linked
+    /// <see cref="InspectionType.CheckOut"/> (or PreDelivery) for a vehicle within
+    /// the given tenant. Returned aggregate is change-tracked so the SaveContract
+    /// handler can call <see cref="Domain.Operations.Inspection.LinkToLease"/> on
+    /// it and have the link persist in the same unit of work.
+    /// </summary>
+    Task<Inspection?> GetLatestUnlinkedCheckOutForVehicleAsync(
+        Guid tenantId,
+        Guid vehicleId,
+        CancellationToken ct);
 }
 
 /// <summary>Single page of an <see cref="IInspectionRepository.SearchAsync"/> call.</summary>

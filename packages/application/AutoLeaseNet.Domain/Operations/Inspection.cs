@@ -33,6 +33,8 @@ public sealed class Inspection : Entity
     public DateTimeOffset? CompletedAtUtc { get; private set; }
     public DateTimeOffset? AbandonedAtUtc { get; private set; }
     public string? AbandonedReason { get; private set; }
+    /// <summary>Audit timestamp for when <see cref="LinkToLease"/> first set <see cref="LeaseId"/>.</summary>
+    public DateTimeOffset? LeaseLinkedAtUtc { get; private set; }
 
     // ─── Mandatory state snapshot ───────────────────────────────────────────
     public int OdometerKm { get; private set; }
@@ -143,6 +145,33 @@ public sealed class Inspection : Entity
             Type: Type,
             PerformedAtUtc: PerformedAtUtc,
             CompletedAtUtc: nowUtc));
+    }
+
+    /// <summary>
+    /// Day-18 check-out saga: link a COMPLETED <see cref="InspectionType.CheckOut"/> or
+    /// <see cref="InspectionType.PreDelivery"/> inspection to the Lease it justifies.
+    /// Idempotent on re-link to the same Lease; rejects re-link to a different Lease
+    /// (the link is permanent once set — that's the invariant the receipt of CHECK_OUT
+    /// at issuance time enforces per Spec 01 §invariant 2).
+    /// </summary>
+    public void LinkToLease(Guid leaseId, DateTimeOffset nowUtc)
+    {
+        if (leaseId == Guid.Empty)
+            throw new ArgumentException("LeaseId required.", nameof(leaseId));
+        if (LeaseId == leaseId) return; // idempotent re-entry
+        if (LeaseId is not null)
+            throw new InvalidOperationException(
+                $"Inspection {Id} is already linked to Lease {LeaseId}; cannot re-link to {leaseId}.");
+        if (Status != InspectionStatus.Completed)
+            throw new InvalidOperationException(
+                $"Cannot link Inspection {Id} to a Lease: status is {Status}; only COMPLETED inspections gate Lease.MarkIssued.");
+        if (Type != InspectionType.CheckOut && Type != InspectionType.PreDelivery)
+            throw new InvalidOperationException(
+                $"Cannot link Inspection {Id} to a Lease: Type is {Type}; only CheckOut + PreDelivery qualify.");
+
+        LeaseId = leaseId;
+        LeaseLinkedAtUtc = nowUtc;
+        UpdatedAtUtc = nowUtc;
     }
 
     public void Abandon(string reason, DateTimeOffset nowUtc)

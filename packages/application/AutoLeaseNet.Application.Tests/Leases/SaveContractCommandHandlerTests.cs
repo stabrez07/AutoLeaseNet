@@ -115,6 +115,7 @@ public sealed class SaveContractCommandHandlerTests
             var rentPolicies = new EfRentPolicyRepository(Db);
             var coverages = new EfExtendedCoverageRepository(Db);
             var branches = new EfBranchRepository(Db);
+            Inspections = new EfInspectionRepository(Db);
             var uow = new InMemoryUow(Db);
             var memoryCache = new MemoryCache(new MemoryCacheOptions());
             IIdempotencyStore idempotency = new InMemoryIdempotencyStore(memoryCache);
@@ -123,9 +124,11 @@ public sealed class SaveContractCommandHandlerTests
 
             Sut = new SaveContractCommandHandler(
                 Tajeer, leases, customers, vehicles, drivers, rentPolicies, coverages, branches,
-                uow, idempotency, tenant, clock,
+                Inspections, uow, idempotency, tenant, clock,
                 NullLogger<SaveContractCommandHandler>.Instance);
         }
+
+        public EfInspectionRepository Inspections { get; private set; } = null!;
 
         public SaveContractCommand BuildCommand(string idempotencyKey = "idem-001") => new()
         {
@@ -324,5 +327,99 @@ public sealed class SaveContractCommandHandlerTests
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*authenticated tenant context*");
+    }
+
+    // ─── Day 18: CHECK_OUT inspection linking ─────────────────────────────────
+
+    [Fact]
+    public async Task Handle_links_explicit_CheckOutInspection_on_success()
+    {
+        using var harness = new Harness();
+        var insp = SeedCompletedCheckOut(harness);
+
+        var cmd = harness.BuildCommand("idem-link-explicit") with { CheckOutInspectionId = insp.Id };
+        var result = await harness.Sut.Handle(cmd, CancellationToken.None);
+
+        result.Success.Should().BeTrue(because: $"error was {result.ErrorCode} — {result.ErrorMessage}");
+        var reread = await harness.Db.Inspections.SingleAsync(i => i.Id == insp.Id);
+        reread.LeaseId.Should().Be(result.LeaseId);
+        reread.LeaseLinkedAtUtc.Should().Be(Now);
+    }
+
+    [Fact]
+    public async Task Handle_auto_links_most_recent_unlinked_CheckOut_when_id_omitted()
+    {
+        using var harness = new Harness();
+        SeedCompletedCheckOut(harness); // un-linked CHECK_OUT for the same vehicle
+
+        var result = await harness.Sut.Handle(harness.BuildCommand("idem-link-auto"), CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        var linked = await harness.Db.Inspections.SingleAsync();
+        linked.LeaseId.Should().Be(result.LeaseId);
+    }
+
+    [Fact]
+    public async Task Handle_returns_422_when_explicit_CheckOutInspection_not_found()
+    {
+        using var harness = new Harness();
+        var cmd = harness.BuildCommand("idem-link-missing") with { CheckOutInspectionId = Guid.NewGuid() };
+
+        var result = await harness.Sut.Handle(cmd, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be("lease.checkout_inspection.not_found");
+        (await harness.Db.Leases.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Handle_returns_422_when_explicit_CheckOutInspection_is_for_wrong_vehicle()
+    {
+        using var harness = new Harness();
+        var otherVehicle = AutoLeaseNet.Domain.Vehicles.Vehicle.Create(new AutoLeaseNet.Domain.Vehicles.VehicleCreateInput
+        {
+            TenantId = harness.Customer.TenantId,
+            PlateNumber = "9999", PlateLetters = "ا ب ج", PlateTypeCode = 1,
+            Vin = "OTHERVIN123456789", Make = "Toyota", Model = "Camry", ModelYear = 2024,
+            OwnerBranchId = harness.Branch.Id, NowUtc = Now,
+        });
+        harness.Db.Vehicles.Add(otherVehicle);
+        harness.Db.SaveChanges();
+        var inspForOther = SeedCompletedCheckOut(harness, vehicleId: otherVehicle.Id);
+
+        var cmd = harness.BuildCommand("idem-link-wrong-vehicle") with { CheckOutInspectionId = inspForOther.Id };
+        var result = await harness.Sut.Handle(cmd, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be("lease.checkout_inspection.vehicle_mismatch");
+    }
+
+    [Fact]
+    public async Task Handle_succeeds_without_inspection_when_none_exists_Phase_1_x()
+    {
+        using var harness = new Harness();
+
+        var result = await harness.Sut.Handle(harness.BuildCommand("idem-no-inspection"), CancellationToken.None);
+
+        result.Success.Should().BeTrue(because: "Phase 1.x keeps the link optional; missing inspection is non-fatal");
+        (await harness.Db.Inspections.CountAsync()).Should().Be(0);
+    }
+
+    private static AutoLeaseNet.Domain.Operations.Inspection SeedCompletedCheckOut(Harness harness, Guid? vehicleId = null)
+    {
+        var insp = AutoLeaseNet.Domain.Operations.Inspection.Start(new AutoLeaseNet.Domain.Operations.StartInspectionInput
+        {
+            TenantId = harness.Customer.TenantId,
+            VehicleId = vehicleId ?? harness.Vehicle.Id,
+            Type = AutoLeaseNet.Domain.Operations.InspectionType.CheckOut,
+            PerformedByUserId = harness.Driver.Id,
+            OdometerKm = harness.Vehicle.CurrentKm,
+            FuelLevel = AutoLeaseNet.Domain.Operations.FuelLevel.Full,
+            NowUtc = Now.AddMinutes(-5),
+        });
+        insp.Complete(Now.AddMinutes(-3));
+        harness.Db.Inspections.Add(insp);
+        harness.Db.SaveChanges();
+        return insp;
     }
 }

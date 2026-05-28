@@ -105,6 +105,7 @@ public static class DevEndpoints
                     PaymentMethodCode = body.PaymentMethodCode,
                     DiscountType = body.DiscountType,
                     DiscountValue = body.DiscountValue,
+                    CheckOutInspectionId = body.CheckOutInspectionId,
                 };
                 var result = await mediator.Send(command, ct);
 
@@ -164,4 +165,10 @@ public sealed record SaveContractDevRequest
     public required int PaymentMethodCode { get; init; }
     public int? DiscountType { get; init; }
     public decimal? DiscountValue { get; init; }
+
+    /// <summary>
+    /// Day-18 check-out saga: optional pointer at the COMPLETED CHECK_OUT (or PRE_DELIVERY)
+    /// <c>Inspection</c> that justifies this Lease. See <c>SaveContractCommand.CheckOutInspectionId</c>.
+    /// </summary>
+    public Guid? CheckOutInspectionId { get; init; }
 }
