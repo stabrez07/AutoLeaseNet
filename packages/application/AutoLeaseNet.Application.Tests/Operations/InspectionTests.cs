@@ -22,12 +22,13 @@ public sealed class InspectionTests
     private static readonly Guid LeaseId = Guid.Parse("c3c3c3c3-0000-0000-0000-000000000020");
     private static readonly Guid PerformedByUserId = Guid.Parse("d4d4d4d4-0000-0000-0000-000000000030");
 
-    private static Inspection NewInProgress(InspectionType type = InspectionType.CheckOut) =>
+    /// <summary>Default helper leaves <c>LeaseId</c> null so LinkToLease tests can drive it explicitly.</summary>
+    private static Inspection NewInProgress(InspectionType type = InspectionType.CheckOut, Guid? leaseId = null) =>
         Inspection.Start(new StartInspectionInput
         {
             TenantId = TenantId,
             VehicleId = VehicleId,
-            LeaseId = LeaseId,
+            LeaseId = leaseId,
             Type = type,
             PerformedByUserId = PerformedByUserId,
             OdometerKm = 42_000,
@@ -38,7 +39,7 @@ public sealed class InspectionTests
     [Fact]
     public void Start_returns_aggregate_in_IN_PROGRESS_with_captured_metadata()
     {
-        var i = NewInProgress();
+        var i = NewInProgress(leaseId: LeaseId);
 
         i.Status.Should().Be(InspectionStatus.InProgress);
         i.Type.Should().Be(InspectionType.CheckOut);
@@ -238,5 +239,99 @@ public sealed class InspectionTests
 
         i.AbandonedAtUtc.Should().Be(firstTs);
         i.AbandonedReason.Should().Be(firstReason);
+    }
+
+    // ─── LinkToLease (Day 18 — check-out saga slice) ────────────────────────
+
+    [Fact]
+    public void LinkToLease_on_completed_CHECK_OUT_with_no_existing_link_sets_LeaseId_and_audit_timestamp()
+    {
+        var i = NewInProgress(InspectionType.CheckOut);
+        i.Complete(T0.AddMinutes(5));
+        var newLeaseId = Guid.Parse("e5e5e5e5-0000-0000-0000-000000000040");
+
+        i.LinkToLease(newLeaseId, T0.AddMinutes(10));
+
+        i.LeaseId.Should().Be(newLeaseId);
+        i.LeaseLinkedAtUtc.Should().Be(T0.AddMinutes(10));
+    }
+
+    [Fact]
+    public void LinkToLease_on_completed_PRE_DELIVERY_works_too()
+    {
+        var i = NewInProgress(InspectionType.PreDelivery);
+        i.Complete(T0.AddMinutes(5));
+        var newLeaseId = Guid.Parse("e5e5e5e5-0000-0000-0000-000000000041");
+
+        i.LinkToLease(newLeaseId, T0.AddMinutes(10));
+
+        i.LeaseId.Should().Be(newLeaseId);
+    }
+
+    [Fact]
+    public void LinkToLease_with_same_LeaseId_is_idempotent_no_op()
+    {
+        var i = Inspection.Start(new StartInspectionInput
+        {
+            TenantId = TenantId, VehicleId = VehicleId, LeaseId = LeaseId,
+            Type = InspectionType.CheckOut, PerformedByUserId = PerformedByUserId,
+            OdometerKm = 1, FuelLevel = FuelLevel.Full, NowUtc = T0,
+        });
+        i.Complete(T0.AddMinutes(5));
+        var originallyLinkedAt = i.LeaseLinkedAtUtc;
+
+        i.LinkToLease(LeaseId, T0.AddMinutes(10));
+
+        i.LeaseId.Should().Be(LeaseId);
+        i.LeaseLinkedAtUtc.Should().Be(originallyLinkedAt, because: "re-linking to the same Lease must not move the audit timestamp");
+    }
+
+    [Fact]
+    public void LinkToLease_rejects_when_already_linked_to_a_different_Lease()
+    {
+        var i = NewInProgress(InspectionType.CheckOut);
+        i.Complete(T0.AddMinutes(5));
+        var firstLeaseId = Guid.Parse("e5e5e5e5-0000-0000-0000-000000000050");
+        var secondLeaseId = Guid.Parse("e5e5e5e5-0000-0000-0000-000000000051");
+        i.LinkToLease(firstLeaseId, T0.AddMinutes(10));
+
+        var bad = () => i.LinkToLease(secondLeaseId, T0.AddMinutes(15));
+
+        bad.Should().Throw<InvalidOperationException>(because: "the link is permanent once set");
+    }
+
+    [Fact]
+    public void LinkToLease_rejects_when_status_is_not_COMPLETED()
+    {
+        var inProgress = NewInProgress(InspectionType.CheckOut);
+        var bad1 = () => inProgress.LinkToLease(Guid.NewGuid(), T0.AddMinutes(10));
+        bad1.Should().Throw<InvalidOperationException>();
+
+        var abandoned = NewInProgress(InspectionType.CheckOut);
+        abandoned.Abandon("cancelled", T0.AddMinutes(2));
+        var bad2 = () => abandoned.LinkToLease(Guid.NewGuid(), T0.AddMinutes(10));
+        bad2.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void LinkToLease_rejects_when_Type_is_not_a_check_out_kind()
+    {
+        var i = NewInProgress(InspectionType.Periodic);
+        i.Complete(T0.AddMinutes(5));
+
+        var bad = () => i.LinkToLease(Guid.NewGuid(), T0.AddMinutes(10));
+
+        bad.Should().Throw<InvalidOperationException>(because: "only CheckOut + PreDelivery inspections gate Lease.MarkIssued");
+    }
+
+    [Fact]
+    public void LinkToLease_rejects_empty_LeaseId()
+    {
+        var i = NewInProgress(InspectionType.CheckOut);
+        i.Complete(T0.AddMinutes(5));
+
+        var bad = () => i.LinkToLease(Guid.Empty, T0.AddMinutes(10));
+
+        bad.Should().Throw<ArgumentException>();
     }
 }

@@ -57,4 +57,22 @@ public sealed class EfInspectionRepository(AutoLeaseNetDbContext db) : IInspecti
 
         return new InspectionSearchResult(items, total);
     }
+
+    public Task<Inspection?> GetLatestUnlinkedCheckOutForVehicleAsync(
+        Guid tenantId,
+        Guid vehicleId,
+        CancellationToken ct)
+    {
+        // Most recent COMPLETED CheckOut/PreDelivery for this vehicle that hasn't been
+        // linked to a Lease yet — tracked (no AsNoTracking) so the SaveContract handler
+        // can mutate it within the same UoW.
+        return db.Inspections
+            .Where(i => i.TenantId == tenantId
+                     && i.VehicleId == vehicleId
+                     && i.LeaseId == null
+                     && i.Status == InspectionStatus.Completed
+                     && (i.Type == InspectionType.CheckOut || i.Type == InspectionType.PreDelivery))
+            .OrderByDescending(i => i.CompletedAtUtc)
+            .FirstOrDefaultAsync(ct);
+    }
 }

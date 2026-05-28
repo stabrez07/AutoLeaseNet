@@ -466,13 +466,16 @@ public sealed partial class BogusDataSeeder(
     private Inspection BuildCheckOut(SeededLease sl, List<Driver> drvs, DateTimeOffset now, Random rng, DamageMarkerType[] markerTypes)
     {
         var checkOutAt = sl.SavedAt.AddMinutes(20);
+        // Start the inspection un-linked, then drive the link through the same domain
+        // method the SaveContract saga uses — so the seeded data has a non-null
+        // LeaseLinkedAtUtc audit timestamp matching real flows.
         var i = Inspection.Start(new StartInspectionInput
         {
             TenantId = TenantId,
             VehicleId = sl.Vehicle.Id,
-            LeaseId = sl.Lease.Id,
+            LeaseId = null,
             Type = InspectionType.CheckOut,
-            PerformedByUserId = drvs[0].Id, // demo: use first driver id as the ops user id
+            PerformedByUserId = drvs[0].Id,
             OdometerKm = sl.Vehicle.CurrentKm,
             FuelLevel = FuelLevel.Full,
             AcCondition = 1, RadioStereoCondition = 1, ScreenCondition = 1,
@@ -485,6 +488,7 @@ public sealed partial class BogusDataSeeder(
         });
         AddDeterministicMarkers(i, rng, markerTypes, checkOutAt);
         i.Complete(checkOutAt.AddMinutes(5));
+        i.LinkToLease(sl.Lease.Id, checkOutAt.AddMinutes(6));
         return i;
     }
 
