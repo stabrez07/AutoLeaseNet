@@ -38,6 +38,7 @@ public sealed partial class BogusDataSeeder(
     IExtendedCoverageRepository coverages,
     ILeaseRepository leases,
     IInspectionRepository inspections,
+    IIncidentRepository incidents,
     IUnitOfWork uow,
     IClock clock,
     ILogger<BogusDataSeeder> logger) : IDataSeeder
@@ -66,6 +67,7 @@ public sealed partial class BogusDataSeeder(
             seededPolicies, seededCoverages, nowUtc);
 
         SeedInspections(seededLeases, seededDrivers, nowUtc);
+        SeedIncidents(seededLeases, seededDrivers, nowUtc);
 
         await uow.SaveChangesAsync(ct).ConfigureAwait(false);
         LogSeedComplete(TenantId, seededCustomers.Count, seededVehicles.Count, seededDrivers.Count);
@@ -433,6 +435,44 @@ public sealed partial class BogusDataSeeder(
             result.Add(new SeededLease(lease, veh, drv, savedAt));
         }
         return result;
+    }
+
+    // ─── Incidents (Spec 01 §5.6 / Spec 02 §4.7). One per Closed lease — half resolved
+    //     traffic accidents (minor), half closed breakdowns. Reporter alternates between
+    //     the first two seeded drivers for determinism.
+    private void SeedIncidents(List<SeededLease> seededLeases, List<Driver> drvs, DateTimeOffset now)
+    {
+        if (drvs.Count == 0) return;
+        var idx = 0;
+        foreach (var sl in seededLeases.Where(l => l.Lease.Status == LeaseStatus.Closed))
+        {
+            var isAccident = idx % 2 == 0;
+            var reportedAt = sl.SavedAt.AddDays(1);
+            var incident = Incident.Report(new ReportIncidentInput
+            {
+                TenantId = TenantId,
+                VehicleId = sl.Vehicle.Id,
+                LeaseId = sl.Lease.Id,
+                ReportedByPersonId = drvs[idx % drvs.Count].Id,
+                Type = isAccident ? IncidentType.TrafficAccident : IncidentType.Breakdown,
+                Severity = IncidentSeverity.Minor,
+                IncidentTimeUtc = reportedAt.AddMinutes(-30),
+                Description = isAccident
+                    ? "Front bumper grazed parking pillar — minor cosmetic."
+                    : "Battery flat after 4-hour airport wait — jump-started, returned.",
+                LocationDescription = isAccident ? "Riyadh — Olaya parking" : "Jeddah — airport pickup zone",
+                PoliceReportNumber = isAccident ? $"RP-2026-{1000 + idx:D4}" : null,
+                NowUtc = reportedAt,
+            });
+            incident.MarkResolved(
+                resolutionNotes: isAccident
+                    ? "Detail-shop polish — SAR 120 charged to renter."
+                    : "Battery replaced under fleet warranty.",
+                nowUtc: reportedAt.AddHours(6));
+            incident.MarkClosed(reportedAt.AddDays(1));
+            incidents.Add(incident);
+            idx++;
+        }
     }
 
     // ─── Inspections (per Spec 01 §invariants 2/3 — ACTIVE/EXTENDED/SUSPENDED leases get
