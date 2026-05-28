@@ -134,6 +134,13 @@ it first; update it after every meaningful change.
 | `POST` | `/api/v1/leases/{id}/check-in`       | dev JWT stub + `Idempotency-Key` header | `CheckInLeaseRequest`                  | 200 `{leaseId, inspectionId, status: Closed, payment: {rentAmount, paidAmount, lateHoursFee, extraKmFee, damagesFee, discountAmount, totalDue, vatAmount, grandTotal, finalPaidAmount}}` ; 404 unknown ; 422 invalid state / odometer regression / Tajeer non-transient ; 503 Tajeer transient |
 | `POST` | `/api/v1/leases/{id}/extend`         | dev JWT stub + `Idempotency-Key` header | `ExtendLeaseRequest` (`newContractEndUtc`, optional charges + reason)  | 200 `{leaseId, status: Extended, newContractEndUtc, extensionCount, charges?: {totalDue, vatAmount, grandTotal}}` ; 404 unknown ; 422 invalid state / `lease.extensions_exhausted` / `lease.invalid_new_end_date` / Tajeer non-transient ; 503 Tajeer transient |
 | `POST` | `/api/v1/leases/{id}/suspend`        | dev JWT stub + `Idempotency-Key` header | `SuspendLeaseRequest` (`suspensionReasonCode`, optional notes)         | 200 `{leaseId, status: Suspended, suspensionReasonCode, suspendedAtUtc}` ; 404 unknown ; 422 invalid state / Tajeer non-transient ; 503 Tajeer transient |
+| `POST` | `/api/v1/incidents`                  | dev JWT stub + `Idempotency-Key` header | `ReportIncidentRequest`                | 201 `{id, status: Open}` ; 422 invalid input |
+| `POST` | `/api/v1/incidents/{id}/investigate` | dev JWT stub + `Idempotency-Key` header | empty                                  | 200 `{id, status: UnderInvestigation}` ; 404 / 409 |
+| `POST` | `/api/v1/incidents/{id}/resolve`     | dev JWT stub + `Idempotency-Key` header | `ResolveIncidentRequest` (notes)       | 200 `{id, status: Resolved}` ; 404 / 409 |
+| `POST` | `/api/v1/incidents/{id}/close`       | dev JWT stub + `Idempotency-Key` header | empty                                  | 200 `{id, status: Closed}` ; 404 |
+| `PATCH`| `/api/v1/incidents/{id}/claim`       | dev JWT stub + `Idempotency-Key` header | `UpdateIncidentClaimRequest`           | 200 `{id, status}` ; 404 / 409 (immutable when Closed) |
+| `GET`  | `/api/v1/incidents/{id}`             | dev JWT stub                            | —                                      | `IncidentDetailDto` ; 404 if unknown |
+| `GET`  | `/api/v1/lookups/incidents`          | dev JWT stub                            | `?page=&pageSize=&leaseId=&vehicleId=&status=&severity=` | `PagedResult<IncidentSummaryDto>` |
 
 ## Current repo state
 
@@ -402,6 +409,18 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
    IS red — see TODO #1.
 
 ## Last updated
+
+2026-05-29 — Day-21 Incident aggregate shipped. Mirrors PR #12's Inspection
+aggregate structurally — `Incident` aggregate root with full Spec 01 §5.6
+field list + Spec 02 §4.7 state machine (`Open → UnderInvestigation | Resolved
+| Closed`; `Resolved → Closed`; `Closed` terminal). 5 commands + handlers +
+2 queries + handlers; `IIncidentRepository` port; `EfIncidentRepository`;
+new EF migration `Add_Incident_Aggregate` applied to local Dev DB.
+7 BFF endpoints under `/api/v1/incidents` (including the first PATCH —
+`UpdateClaim`). Seed adds one Closed incident per Closed lease (alternating
+TrafficAccident + Breakdown). `IncidentReportedDomainEvent` forward-declared
+with no subscriber — Replacement Saga (Spec 02 §6.5) is its future consumer.
+**256 tests green** (+20: 13 domain + 7 endpoint).
 
 2026-05-28 — Day-20 Extend + Suspend workstream shipped (same session as PR #15).
 `ITajeerContractClient` grew to 5 methods (`Save`, `CalculatePayment`, `Close`,
