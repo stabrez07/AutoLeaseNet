@@ -23,7 +23,127 @@ public static class LeaseEndpoints
             .WithName("CheckInLease")
             .RequireAuthorization();
 
+        group.MapPost("/{id:guid}/extend", ExtendAsync)
+            .WithName("ExtendLease")
+            .RequireAuthorization();
+
+        group.MapPost("/{id:guid}/suspend", SuspendAsync)
+            .WithName("SuspendLease")
+            .RequireAuthorization();
+
         return group;
+    }
+
+    private static async Task<IResult> ExtendAsync(
+        HttpContext ctx,
+        IMediator mediator,
+        Guid id,
+        ExtendLeaseRequest body,
+        CancellationToken ct)
+    {
+        var idempotencyKey = ctx.Request.Headers["Idempotency-Key"].ToString();
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            return Results.Problem(
+                title: "Missing Idempotency-Key",
+                detail: "POST /leases/{id}/extend requires an 'Idempotency-Key' header.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+        if (body is null)
+        {
+            return Results.Problem(
+                title: "Missing request body",
+                detail: "POST /leases/{id}/extend requires a JSON body with at least newContractEndUtc.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var command = new ExtendLeaseCommand
+        {
+            IdempotencyKey = idempotencyKey,
+            LeaseId = id,
+            NewContractEndUtc = body.NewContractEndUtc,
+            ExtensionReasonCode = body.ExtensionReasonCode,
+            AdditionalCharges = body.AdditionalCharges,
+            PaymentMethodCode = body.PaymentMethodCode,
+        };
+
+        var result = await mediator.Send(command, ct);
+        if (!result.Success)
+        {
+            var status = result.ErrorCode switch
+            {
+                "lease.not_found" => StatusCodes.Status404NotFound,
+                "tajeer.extend.transient" => StatusCodes.Status503ServiceUnavailable,
+                _ => StatusCodes.Status422UnprocessableEntity,
+            };
+            return Results.Problem(title: result.ErrorCode ?? "lease.extend.error", detail: result.ErrorMessage, statusCode: status);
+        }
+
+        return Results.Ok(new
+        {
+            leaseId = result.LeaseId,
+            status = result.LeaseStatus,
+            newContractEndUtc = result.NewContractEndUtc,
+            extensionCount = result.ExtensionCount,
+            charges = result.Charges is null ? null : new
+            {
+                totalDue = result.Charges.TotalDue,
+                vatAmount = result.Charges.VatAmount,
+                grandTotal = result.Charges.GrandTotal,
+            },
+        });
+    }
+
+    private static async Task<IResult> SuspendAsync(
+        HttpContext ctx,
+        IMediator mediator,
+        Guid id,
+        SuspendLeaseRequest body,
+        CancellationToken ct)
+    {
+        var idempotencyKey = ctx.Request.Headers["Idempotency-Key"].ToString();
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            return Results.Problem(
+                title: "Missing Idempotency-Key",
+                detail: "POST /leases/{id}/suspend requires an 'Idempotency-Key' header.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+        if (body is null)
+        {
+            return Results.Problem(
+                title: "Missing request body",
+                detail: "POST /leases/{id}/suspend requires a JSON body with at least suspensionReasonCode.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var command = new SuspendLeaseCommand
+        {
+            IdempotencyKey = idempotencyKey,
+            LeaseId = id,
+            SuspensionReasonCode = body.SuspensionReasonCode,
+            Notes = body.Notes,
+        };
+
+        var result = await mediator.Send(command, ct);
+        if (!result.Success)
+        {
+            var status = result.ErrorCode switch
+            {
+                "lease.not_found" => StatusCodes.Status404NotFound,
+                "tajeer.suspend.transient" => StatusCodes.Status503ServiceUnavailable,
+                _ => StatusCodes.Status422UnprocessableEntity,
+            };
+            return Results.Problem(title: result.ErrorCode ?? "lease.suspend.error", detail: result.ErrorMessage, statusCode: status);
+        }
+
+        return Results.Ok(new
+        {
+            leaseId = result.LeaseId,
+            status = result.LeaseStatus,
+            suspensionReasonCode = result.SuspensionReasonCode,
+            suspendedAtUtc = result.SuspendedAtUtc,
+        });
     }
 
     private static async Task<IResult> CheckInAsync(
@@ -144,4 +264,19 @@ public sealed record CheckInLeaseRequest
     public decimal? DiscountAmount { get; init; }
     /// <summary>What ops actually collected at the counter — passed to Tajeer's CloseContract.</summary>
     public decimal? FinalPaidAmount { get; init; }
+}
+
+public sealed record ExtendLeaseRequest
+{
+    /// <summary>New UTC contract end — must be strictly after the current one.</summary>
+    public required DateTimeOffset NewContractEndUtc { get; init; }
+    public int? ExtensionReasonCode { get; init; }
+    public decimal? AdditionalCharges { get; init; }
+    public int? PaymentMethodCode { get; init; }
+}
+
+public sealed record SuspendLeaseRequest
+{
+    public required int SuspensionReasonCode { get; init; }
+    public string? Notes { get; init; }
 }

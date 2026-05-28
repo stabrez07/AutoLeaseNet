@@ -294,10 +294,19 @@ public sealed class Lease : Entity
         UpdatedAtUtc = nowUtc;
     }
 
+    /// <summary>Tajeer caps total extensions at 25 (Spec 02 §4.2 state-machine note).</summary>
+    public const int MaxExtensions = 25;
+
     public void IncrementExtension(DateTimeOffset newEndUtc, DateTimeOffset nowUtc)
     {
         if (Status != LeaseStatus.Active && Status != LeaseStatus.Extended)
             throw new InvalidOperationException($"Cannot extend Lease {Id} from status {Status}.");
+        if (ExtensionCount >= MaxExtensions)
+            throw new InvalidOperationException(
+                $"Lease {Id} has reached MaxExtensions ({MaxExtensions}); further extension rejected.");
+        if (newEndUtc <= ContractEndUtc)
+            throw new InvalidOperationException(
+                $"Lease {Id} extension rejected: newEndUtc {newEndUtc:O} must be strictly after current ContractEndUtc {ContractEndUtc:O}.");
         ExtensionCount++;
         ContractEndUtc = newEndUtc;
         Status = LeaseStatus.Extended;

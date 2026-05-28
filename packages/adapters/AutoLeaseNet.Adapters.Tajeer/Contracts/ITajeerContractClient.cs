@@ -5,10 +5,11 @@ namespace AutoLeaseNet.Adapters.Tajeer.Contracts;
 
 /// <summary>
 /// Pattern B sub-client (Spec 04 §3) for Tajeer contract lifecycle endpoints. Phase 1
-/// ships <see cref="SaveAsync"/>, <see cref="CalculatePaymentAsync"/>, and
-/// <see cref="CloseAsync"/> — the minimum surface needed by the Day-19 check-in saga
-/// (Spec 02 §6.4). Remaining methods (Get, Extend, Suspend, Cancel, UpdatePaidAmount)
-/// land in later workstreams.
+/// ships <see cref="SaveAsync"/>, <see cref="CalculatePaymentAsync"/>,
+/// <see cref="CloseAsync"/>, <see cref="ExtendAsync"/>, and <see cref="SuspendAsync"/>
+/// — the surface needed by the Day-19 check-in saga (Spec 02 §6.4) plus Day-20
+/// extend/suspend endpoints. Remaining methods (Get, Cancel, UpdatePaidAmount) land
+/// in later workstreams.
 ///
 /// Implementations:
 /// - <c>TajeerContractClient</c> in this package (real HTTP).
@@ -53,5 +54,23 @@ public interface ITajeerContractClient
     /// </summary>
     Task<IntegrationResult<CloseContractResponse>> CloseAsync(
         CloseContractRequest request,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Spec 02 §6.7 — push the contract end date forward. Vendor transitions
+    /// <c>contractStatusCode</c> to 4 (Extended). Caller enforces the
+    /// <c>Lease.MaxExtensions</c> cap locally before invoking this.
+    /// </summary>
+    Task<IntegrationResult<ExtendContractResponse>> ExtendAsync(
+        ExtendContractRequest request,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Spec 02 §6.10 — pause the contract pending review (e.g. NON_TRAFFIC_DAMAGE).
+    /// Vendor transitions <c>contractStatusCode</c> to 3 (Suspended). Tajeer does
+    /// not support the reverse transition; only SUSPENDED → CLOSED is allowed.
+    /// </summary>
+    Task<IntegrationResult<SuspendContractResponse>> SuspendAsync(
+        SuspendContractRequest request,
         CancellationToken ct = default);
 }

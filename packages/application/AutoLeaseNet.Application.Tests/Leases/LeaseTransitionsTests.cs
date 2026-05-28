@@ -105,6 +105,40 @@ public sealed class LeaseTransitionsTests
     }
 
     [Fact]
+    public void IncrementExtension_rejects_newEndUtc_at_or_before_current_ContractEndUtc()
+    {
+        var lease = NewPending();
+        lease.MarkIssued(0, 4, null, T0.AddMinutes(1));
+        // Current ContractEndUtc was set to T0 + 2 days by NewPending(); the same date is invalid.
+        var act = () => lease.IncrementExtension(newEndUtc: T0.AddDays(2), nowUtc: T0.AddDays(1));
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*must be strictly after current ContractEndUtc*");
+        lease.ExtensionCount.Should().Be(0);
+        lease.Status.Should().Be(LeaseStatus.Active);
+    }
+
+    [Fact]
+    public void IncrementExtension_rejects_when_MaxExtensions_reached()
+    {
+        var lease = NewPending();
+        lease.MarkIssued(0, 4, null, T0.AddMinutes(1));
+        var nextEnd = T0.AddDays(2);
+        for (var i = 0; i < Lease.MaxExtensions; i++)
+        {
+            nextEnd = nextEnd.AddDays(1);
+            lease.IncrementExtension(nextEnd, T0.AddDays(1));
+        }
+        lease.ExtensionCount.Should().Be(Lease.MaxExtensions);
+
+        var act = () => lease.IncrementExtension(nextEnd.AddDays(1), T0.AddDays(1));
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage($"*MaxExtensions ({Lease.MaxExtensions})*");
+        lease.ExtensionCount.Should().Be(Lease.MaxExtensions, because: "rejected extension must not increment the count");
+    }
+
+    [Fact]
     public void MarkClosed_captures_return_snapshot_and_actual_return()
     {
         var lease = NewPending();
