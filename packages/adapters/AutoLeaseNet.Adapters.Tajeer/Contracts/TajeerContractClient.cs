@@ -18,6 +18,8 @@ public sealed partial class TajeerContractClient : ITajeerContractClient
     private const string SavePath = "/api/contracts/save";
     private const string CalculatePaymentPath = "/api/contracts/calculate-payment";
     private const string ClosePath = "/api/contracts/closure";
+    private const string ExtendPath = "/api/contracts/extend";
+    private const string SuspendPath = "/api/contracts/suspend";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -57,6 +59,24 @@ public sealed partial class TajeerContractClient : ITajeerContractClient
         ArgumentNullException.ThrowIfNull(request);
         return SendAsync<CloseContractRequest, CloseContractResponse>(
             HttpMethod.Put, ClosePath, request, "CloseContract", ct);
+    }
+
+    public Task<IntegrationResult<ExtendContractResponse>> ExtendAsync(
+        ExtendContractRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return SendAsync<ExtendContractRequest, ExtendContractResponse>(
+            HttpMethod.Put, ExtendPath, request, "ExtendContract", ct);
+    }
+
+    public Task<IntegrationResult<SuspendContractResponse>> SuspendAsync(
+        SuspendContractRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return SendAsync<SuspendContractRequest, SuspendContractResponse>(
+            HttpMethod.Put, SuspendPath, request, "SuspendContract", ct);
     }
 
     /// <summary>

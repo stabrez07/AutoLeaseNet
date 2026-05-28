@@ -132,6 +132,8 @@ it first; update it after every meaningful change.
 | `GET`  | `/api/v1/inspections/{id}`           | dev JWT stub                            | —                                      | `InspectionDetailDto` (with photos + damage markers) ; 404 if unknown           |
 | `GET`  | `/api/v1/lookups/inspections`        | dev JWT stub                            | `?page=1&pageSize=50&vehicleId=&leaseId=&type=&status=` | `PagedResult<InspectionSummaryDto>`                |
 | `POST` | `/api/v1/leases/{id}/check-in`       | dev JWT stub + `Idempotency-Key` header | `CheckInLeaseRequest`                  | 200 `{leaseId, inspectionId, status: Closed, payment: {rentAmount, paidAmount, lateHoursFee, extraKmFee, damagesFee, discountAmount, totalDue, vatAmount, grandTotal, finalPaidAmount}}` ; 404 unknown ; 422 invalid state / odometer regression / Tajeer non-transient ; 503 Tajeer transient |
+| `POST` | `/api/v1/leases/{id}/extend`         | dev JWT stub + `Idempotency-Key` header | `ExtendLeaseRequest` (`newContractEndUtc`, optional charges + reason)  | 200 `{leaseId, status: Extended, newContractEndUtc, extensionCount, charges?: {totalDue, vatAmount, grandTotal}}` ; 404 unknown ; 422 invalid state / `lease.extensions_exhausted` / `lease.invalid_new_end_date` / Tajeer non-transient ; 503 Tajeer transient |
+| `POST` | `/api/v1/leases/{id}/suspend`        | dev JWT stub + `Idempotency-Key` header | `SuspendLeaseRequest` (`suspensionReasonCode`, optional notes)         | 200 `{leaseId, status: Suspended, suspensionReasonCode, suspendedAtUtc}` ; 404 unknown ; 422 invalid state / Tajeer non-transient ; 503 Tajeer transient |
 
 ## Current repo state
 
@@ -400,6 +402,17 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
    IS red — see TODO #1.
 
 ## Last updated
+
+2026-05-28 — Day-20 Extend + Suspend workstream shipped (same session as PR #15).
+`ITajeerContractClient` grew to 5 methods (`Save`, `CalculatePayment`, `Close`,
+`Extend`, `Suspend`); both new methods reuse the `SendAsync<TReq,TRes>` helper
+so zero new error-mapping code was added. Domain gained
+`Lease.MaxExtensions = 25` + two new `IncrementExtension` invariants
+(non-monotonic date / extensions exhausted). Two new BFF endpoints
+(`POST /api/v1/leases/{id}/extend` + `/suspend`), each going Tajeer-first then
+local commit, both idempotency-cached. `ExtendSuspendFactory` applied the
+explicit-InMemory-swap pattern from PR #15's hotfix up-front. **236 tests
+green** (+22: 4 real-client + 4 InMemory + 2 domain + 9 handler + 3 endpoint).
 
 2026-05-28 — Tajeer Close Saga workstream shipped. The Day-19 check-in saga is
 now a true vendor commit, not local-only. `ITajeerContractClient` gained

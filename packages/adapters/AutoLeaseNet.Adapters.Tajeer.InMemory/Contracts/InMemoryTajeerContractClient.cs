@@ -17,10 +17,14 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
     private readonly Func<SaveContractRequest, IntegrationResult<SaveContractResponse>>? _saveFactoryOverride;
     private readonly Func<CalculatePaymentRequest, IntegrationResult<CalculatePaymentResponse>>? _calculateFactoryOverride;
     private readonly Func<CloseContractRequest, IntegrationResult<CloseContractResponse>>? _closeFactoryOverride;
+    private readonly Func<ExtendContractRequest, IntegrationResult<ExtendContractResponse>>? _extendFactoryOverride;
+    private readonly Func<SuspendContractRequest, IntegrationResult<SuspendContractResponse>>? _suspendFactoryOverride;
 
     private readonly List<SaveContractRequest> _saveCalls = new();
     private readonly List<CalculatePaymentRequest> _calculateCalls = new();
     private readonly List<CloseContractRequest> _closeCalls = new();
+    private readonly List<ExtendContractRequest> _extendCalls = new();
+    private readonly List<SuspendContractRequest> _suspendCalls = new();
 
     /// <summary>
     /// Construct with optional per-method failure injections. Pass <c>null</c> (or omit) for
@@ -30,11 +34,15 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
     public InMemoryTajeerContractClient(
         Func<SaveContractRequest, IntegrationResult<SaveContractResponse>>? saveFactory = null,
         Func<CalculatePaymentRequest, IntegrationResult<CalculatePaymentResponse>>? calculateFactory = null,
-        Func<CloseContractRequest, IntegrationResult<CloseContractResponse>>? closeFactory = null)
+        Func<CloseContractRequest, IntegrationResult<CloseContractResponse>>? closeFactory = null,
+        Func<ExtendContractRequest, IntegrationResult<ExtendContractResponse>>? extendFactory = null,
+        Func<SuspendContractRequest, IntegrationResult<SuspendContractResponse>>? suspendFactory = null)
     {
         _saveFactoryOverride = saveFactory;
         _calculateFactoryOverride = calculateFactory;
         _closeFactoryOverride = closeFactory;
+        _extendFactoryOverride = extendFactory;
+        _suspendFactoryOverride = suspendFactory;
     }
 
     /// <summary>All <see cref="SaveAsync"/> calls observed since construction.</summary>
@@ -45,6 +53,12 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
 
     /// <summary>All <see cref="CloseAsync"/> calls observed since construction.</summary>
     public IReadOnlyList<CloseContractRequest> CloseCalls => _closeCalls;
+
+    /// <summary>All <see cref="ExtendAsync"/> calls observed since construction.</summary>
+    public IReadOnlyList<ExtendContractRequest> ExtendCalls => _extendCalls;
+
+    /// <summary>All <see cref="SuspendAsync"/> calls observed since construction.</summary>
+    public IReadOnlyList<SuspendContractRequest> SuspendCalls => _suspendCalls;
 
     public Task<IntegrationResult<SaveContractResponse>> SaveAsync(
         SaveContractRequest request,
@@ -84,6 +98,34 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
         var result = _closeFactoryOverride is not null
             ? _closeFactoryOverride(request)
             : DefaultCloseResponse(request);
+
+        return Task.FromResult(result);
+    }
+
+    public Task<IntegrationResult<ExtendContractResponse>> ExtendAsync(
+        ExtendContractRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        _extendCalls.Add(request);
+
+        var result = _extendFactoryOverride is not null
+            ? _extendFactoryOverride(request)
+            : DefaultExtendResponse(request);
+
+        return Task.FromResult(result);
+    }
+
+    public Task<IntegrationResult<SuspendContractResponse>> SuspendAsync(
+        SuspendContractRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        _suspendCalls.Add(request);
+
+        var result = _suspendFactoryOverride is not null
+            ? _suspendFactoryOverride(request)
+            : DefaultSuspendResponse(request);
 
         return Task.FromResult(result);
     }
@@ -148,6 +190,32 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
             ContractStatusCode = 2, // Tajeer status code for Closed
             ClosedAt = request.ReturnDate,
             FinalPaidAmount = request.FinalPaidAmount,
+        });
+    }
+
+    private static IntegrationResult<ExtendContractResponse> DefaultExtendResponse(ExtendContractRequest request)
+    {
+        var charges = request.AdditionalChargesAmount ?? 0m;
+        var vat = Math.Round(charges * 0.15m, 2);
+
+        return IntegrationResult<ExtendContractResponse>.Success(new ExtendContractResponse
+        {
+            ContractNumber = request.ContractNumber,
+            ContractStatusCode = 4, // Tajeer status code for Extended
+            NewContractEndDate = request.NewContractEndDate,
+            TotalDue = charges,
+            VatAmount = vat,
+            GrandTotal = charges + vat,
+        });
+    }
+
+    private static IntegrationResult<SuspendContractResponse> DefaultSuspendResponse(SuspendContractRequest request)
+    {
+        return IntegrationResult<SuspendContractResponse>.Success(new SuspendContractResponse
+        {
+            ContractNumber = request.ContractNumber,
+            ContractStatusCode = 3, // Tajeer status code for Suspended
+            SuspendedAt = request.SuspendedAt,
         });
     }
 }
