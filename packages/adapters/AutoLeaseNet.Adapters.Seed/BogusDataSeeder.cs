@@ -6,6 +6,7 @@ using AutoLeaseNet.Domain.Customers;
 using AutoLeaseNet.Domain.Drivers;
 using AutoLeaseNet.Domain.ExtendedCoverages;
 using AutoLeaseNet.Domain.Leases;
+using AutoLeaseNet.Domain.Operations;
 using AutoLeaseNet.Domain.RentPolicies;
 using AutoLeaseNet.Domain.Vehicles;
 using Bogus;
@@ -36,6 +37,7 @@ public sealed partial class BogusDataSeeder(
     IRentPolicyRepository rentPolicies,
     IExtendedCoverageRepository coverages,
     ILeaseRepository leases,
+    IInspectionRepository inspections,
     IUnitOfWork uow,
     IClock clock,
     ILogger<BogusDataSeeder> logger) : IDataSeeder
@@ -60,8 +62,10 @@ public sealed partial class BogusDataSeeder(
         var seededVehicles = SeedVehicles(seededBranches, nowUtc);
         var seededDrivers = SeedDrivers(seededCustomers, nowUtc);
 
-        SeedLeases(seededCustomers, seededVehicles, seededDrivers, seededBranches,
+        var seededLeases = SeedLeases(seededCustomers, seededVehicles, seededDrivers, seededBranches,
             seededPolicies, seededCoverages, nowUtc);
+
+        SeedInspections(seededLeases, seededDrivers, nowUtc);
 
         await uow.SaveChangesAsync(ct).ConfigureAwait(false);
         LogSeedComplete(TenantId, seededCustomers.Count, seededVehicles.Count, seededDrivers.Count);
@@ -316,10 +320,11 @@ public sealed partial class BogusDataSeeder(
     }
 
     // ─── Leases (10: spans every status) ────────────────────────────────────
-    private void SeedLeases(
+    private List<SeededLease> SeedLeases(
         List<Customer> custs, List<Vehicle> vehs, List<Driver> drvs,
         List<Branch> brs, List<RentPolicy> pols, List<ExtendedCoverage> covs, DateTimeOffset now)
     {
+        var result = new List<SeededLease>();
         // Pair each lease with a customer/vehicle/driver to give realistic referential rows.
         var seedTemplates = new (LeaseStatus FinalStatus, int DaysAgo, decimal Rent, decimal Paid)[]
         {
@@ -420,8 +425,103 @@ public sealed partial class BogusDataSeeder(
             }
 
             leases.Add(lease);
+            result.Add(new SeededLease(lease, veh, drv, savedAt));
+        }
+        return result;
+    }
+
+    // ─── Inspections (per Spec 01 §invariants 2/3 — ACTIVE/EXTENDED/SUSPENDED leases get
+    //     a CHECK_OUT; CLOSED leases get both CHECK_OUT + CHECK_IN. Each carries 0–3
+    //     deterministic damage markers so the sketch endpoint has something to render).
+    private void SeedInspections(List<SeededLease> seededLeases, List<Driver> drvs, DateTimeOffset now)
+    {
+        var rng = new Random(options.RandomSeed ^ 0x1517);
+        var markerTypes = new[]
+        {
+            DamageMarkerType.SmallScratch,
+            DamageMarkerType.DeepScratch,
+            DamageMarkerType.VeryDeepScratch,
+            DamageMarkerType.BendInBody,
+        };
+
+        foreach (var sl in seededLeases)
+        {
+            switch (sl.Lease.Status)
+            {
+                case LeaseStatus.Active:
+                case LeaseStatus.Extended:
+                case LeaseStatus.Suspended:
+                    inspections.Add(BuildCheckOut(sl, drvs, now, rng, markerTypes));
+                    break;
+                case LeaseStatus.Closed:
+                    inspections.Add(BuildCheckOut(sl, drvs, now, rng, markerTypes));
+                    inspections.Add(BuildCheckIn(sl, drvs, now, rng, markerTypes));
+                    break;
+                default:
+                    break; // PendingIssuance / Cancelled / ExpiredDraft / SaveFailed: no inspection rows.
+            }
         }
     }
+
+    private Inspection BuildCheckOut(SeededLease sl, List<Driver> drvs, DateTimeOffset now, Random rng, DamageMarkerType[] markerTypes)
+    {
+        var checkOutAt = sl.SavedAt.AddMinutes(20);
+        var i = Inspection.Start(new StartInspectionInput
+        {
+            TenantId = TenantId,
+            VehicleId = sl.Vehicle.Id,
+            LeaseId = sl.Lease.Id,
+            Type = InspectionType.CheckOut,
+            PerformedByUserId = drvs[0].Id, // demo: use first driver id as the ops user id
+            OdometerKm = sl.Vehicle.CurrentKm,
+            FuelLevel = FuelLevel.Full,
+            AcCondition = 1, RadioStereoCondition = 1, ScreenCondition = 1,
+            SpeedometerCondition = 1, KeysCondition = 1, CarSeatsCondition = 1,
+            SafetyTriangleCondition = 1, FireExtinguisherCondition = 1,
+            FirstAidKitCondition = 1, SpareTireToolsCondition = 1,
+            TiresCondition = 1, SpareTireCondition = 1,
+            Notes = "Pre-delivery condition: clean.",
+            NowUtc = checkOutAt,
+        });
+        AddDeterministicMarkers(i, rng, markerTypes, checkOutAt);
+        i.Complete(checkOutAt.AddMinutes(5));
+        return i;
+    }
+
+    private Inspection BuildCheckIn(SeededLease sl, List<Driver> drvs, DateTimeOffset now, Random rng, DamageMarkerType[] markerTypes)
+    {
+        var returnedAt = (sl.Lease.ActualReturnUtc ?? sl.SavedAt.AddDays(2)).AddMinutes(15);
+        var endKm = sl.Lease.EndKm ?? (sl.Vehicle.CurrentKm + 320);
+        var i = Inspection.Start(new StartInspectionInput
+        {
+            TenantId = TenantId,
+            VehicleId = sl.Vehicle.Id,
+            LeaseId = sl.Lease.Id,
+            Type = InspectionType.CheckIn,
+            PerformedByUserId = drvs[0].Id,
+            OdometerKm = endKm,
+            FuelLevel = FuelLevel.Half,
+            Notes = "Returned with minor scuffs.",
+            NowUtc = returnedAt,
+        });
+        AddDeterministicMarkers(i, rng, markerTypes, returnedAt);
+        i.Complete(returnedAt.AddMinutes(8));
+        return i;
+    }
+
+    private static void AddDeterministicMarkers(Inspection i, Random rng, DamageMarkerType[] markerTypes, DateTimeOffset at)
+    {
+        var count = rng.Next(0, 4);
+        for (var n = 0; n < count; n++)
+        {
+            var type = markerTypes[rng.Next(markerTypes.Length)];
+            var x = (decimal)(rng.NextDouble() * (double)InspectionDamageMarker.CanvasWidth);
+            var y = (decimal)(rng.NextDouble() * (double)InspectionDamageMarker.CanvasHeight);
+            i.AddDamageMarker(type, Math.Round(x, 4), Math.Round(y, 4), at);
+        }
+    }
+
+    private sealed record SeededLease(Lease Lease, Vehicle Vehicle, Driver Driver, DateTimeOffset SavedAt);
 
     // Lightweight transliteration helper — for demo seed only, not production-grade.
     private static string TransliterateRough(string arabic, int salt)

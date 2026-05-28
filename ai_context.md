@@ -124,6 +124,13 @@ it first; update it after every meaningful change.
 | `GET`  | `/api/v1/lookups/customers`          | dev JWT stub                            | `?page=1&pageSize=50&search=`          | `PagedResult<CustomerSummaryDto>`                                               |
 | `GET`  | `/api/v1/lookups/vehicles`           | dev JWT stub                            | `?page=1&pageSize=50&search=&status=1` | `PagedResult<VehicleSummaryDto>`                                                |
 | `GET`  | `/api/v1/lookups/drivers`            | dev JWT stub                            | `?page=1&pageSize=50&search=`          | `PagedResult<DriverSummaryDto>`                                                 |
+| `POST` | `/api/v1/inspections`                | dev JWT stub + `Idempotency-Key` header | `StartInspectionRequest`               | 201 `{id, status}` ; 400 / 404 / 409 / 422 on failure                           |
+| `POST` | `/api/v1/inspections/{id}/photos`    | dev JWT stub + `Idempotency-Key` header | `AddPhotoRequest`                      | 200 `{id, status}` ; 404 / 409 / 422 on failure                                 |
+| `POST` | `/api/v1/inspections/{id}/damage-markers` | dev JWT stub + `Idempotency-Key` header | `AddDamageMarkerRequest`           | 200 `{id, status}` ; 404 / 409 / 422 on failure                                 |
+| `POST` | `/api/v1/inspections/{id}/complete`  | dev JWT stub + `Idempotency-Key` header | empty                                  | 200 `{id, status: Completed}` ; 404 / 409 on failure                            |
+| `POST` | `/api/v1/inspections/{id}/abandon`   | dev JWT stub + `Idempotency-Key` header | `AbandonInspectionRequest`             | 200 `{id, status: Abandoned}` ; 404 / 409 / 422 on failure                      |
+| `GET`  | `/api/v1/inspections/{id}`           | dev JWT stub                            | —                                      | `InspectionDetailDto` (with photos + damage markers) ; 404 if unknown           |
+| `GET`  | `/api/v1/lookups/inspections`        | dev JWT stub                            | `?page=1&pageSize=50&vehicleId=&leaseId=&type=&status=` | `PagedResult<InspectionSummaryDto>`                |
 
 ## Current repo state
 
@@ -393,15 +400,18 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
 
 ## Last updated
 
-2026-05-25 — PRs #9 + #10 merged. **#9 (`233a5e2`)** extracts
-`services.AddAutoLeaseNetDbContext(configureProvider)` so production and test
-factories both wire the DbContext + every AutoLeaseNet-owned interceptor in
-one place — Week 2 Day 9 RLS interceptor will land in exactly that method and
-zero test factories. **#10 (`3638137`)** deletes the stray `./AutoLeaseNet/`
-nested clone that appeared during the 2026-05-22 VSCode shift and adds a
-root-anchored `/AutoLeaseNet/` `.gitignore` guard. Repo at `3638137`; CI on
-`main` green. Outstanding-nit list now empty. Previous checkpoint: PR #7
-(`63f88f4`) — DbContext interceptor for domain-event dispatch.
+2026-05-25 — Inspection aggregate workstream closed. First Week-3 slice:
+`Inspection` aggregate + `InspectionPhoto` + `InspectionDamageMarker` with the
+full Spec 01 §5.6 field surface; state machine per Spec 02 §4.6 (IN_PROGRESS →
+COMPLETED / ABANDONED); 5 commands + 2 queries + 7 BFF endpoints under
+`/api/v1/inspections` + `/api/v1/lookups/inspections`; new EF migration
+`Add_Inspection_Aggregate` applied to local `AutoLeaseNet_Dev`; seed adapter now
+populates 1 CHECK_OUT per non-terminal lease + CHECK_OUT+CHECK_IN per closed
+lease with deterministic damage markers; `InspectionCompletedDomainEvent`
+forward-declared (no Phase-1 subscriber — saga workstream wires one).
+**175 tests green** (+24: 17 domain + 7 endpoint). Saga integration (Lease
+invariants 2 / 3) intentionally deferred. Previous checkpoints: PRs #9 + #10
+(`3638137`) — DbContext helper + nested-clone cleanup.
 
 **Outstanding nit (not blocking)**: a stray `AutoLeaseNet/` subfolder at the repo root
 appeared during the VSCode shift — it's a nested clone with its own `.git/` pointing at
