@@ -20,6 +20,7 @@ export const messagesEn = {
   nav: {
     dashboard: 'Dashboard',
     myLeases: 'My Leases',
+    myVehicles: 'My Vehicles',
   },
   signedInAs: 'Signed in as',
   devBanner:
@@ -31,8 +32,10 @@ export const messagesEn = {
       total: 'Total leases',
       active: 'Active',
       closed: 'Closed',
+      currentlyDriving: 'Currently driving',
     },
     cta: 'View all my leases',
+    ctaVehicles: 'See my vehicles',
   },
   leases: {
     title: 'My Leases',
@@ -56,6 +59,20 @@ export const messagesEn = {
     },
     empty: 'You have no leases on file yet.',
   },
+  vehicles: {
+    title: 'My Vehicles',
+    subtitle: 'Vehicles you currently have under an active, extended, or suspended lease.',
+    columns: {
+      plate: 'Plate',
+      makeModel: 'Make / Model',
+      year: 'Year',
+      color: 'Color',
+      km: 'KM',
+      licenseExpiry: 'License expiry',
+      insuranceExpiry: 'Insurance expiry',
+    },
+    empty: 'You have no vehicles assigned to active leases right now.',
+  },
   common: {
     loading: 'Loading…',
     error: 'Something went wrong',
@@ -72,6 +89,7 @@ export const messagesAr: Messages = {
   nav: {
     dashboard: 'لوحة المعلومات',
     myLeases: 'عقودي',
+    myVehicles: 'سياراتي',
   },
   signedInAs: 'تم الدخول باسم',
   devBanner:
@@ -83,8 +101,10 @@ export const messagesAr: Messages = {
       total: 'إجمالي العقود',
       active: 'النشطة',
       closed: 'المغلقة',
+      currentlyDriving: 'تقودها حالياً',
     },
     cta: 'عرض كل عقودي',
+    ctaVehicles: 'عرض سياراتي',
   },
   leases: {
     title: 'عقودي',
@@ -107,6 +127,20 @@ export const messagesAr: Messages = {
       99: 'فشل الحفظ',
     },
     empty: 'لا توجد لديك عقود مسجلة بعد.',
+  },
+  vehicles: {
+    title: 'سياراتي',
+    subtitle: 'السيارات المسلّمة لك حالياً ضمن عقد نشط أو مُمدّد أو موقوف.',
+    columns: {
+      plate: 'اللوحة',
+      makeModel: 'الصانع / الطراز',
+      year: 'السنة',
+      color: 'اللون',
+      km: 'الكيلومترات',
+      licenseExpiry: 'انتهاء الاستمارة',
+      insuranceExpiry: 'انتهاء التأمين',
+    },
+    empty: 'لا توجد سيارات مسلّمة لك حالياً.',
   },
   common: {
     loading: 'جارٍ التحميل…',

@@ -441,6 +441,41 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
 
 ## Last updated
 
+2026-05-29 — Customer Portal **My Vehicles** shipped end-to-end. Second
+demo-unblocking slice (after PR #22 scaffold). **Backend**:
+`Application.Me.GetMyVehiclesQuery` + `MyVehicleDto`;
+`Infrastructure.Me.GetMyVehiclesQueryHandler`. The handler is a deliberate
+two-step because Day-9 RLS on `Vehicles` is internal-staff-only
+(`fn_TenancyPredicate(TenantId, NULL)` blocks external reads): step 1 reads
+`Leases` under the natural request scope (RLS scopes to my customer) filtered
+to `Active | Extended | Suspended` with `VehicleId != null`, projecting to a
+distinct id set; step 2 opens a `SystemTenancyScope.For(tenantId)` bounded
+strictly to a `Vehicles.Where(v => ids.Contains(v.Id))` read. **Trust boundary
+documented in the handler XML doc**: the id set comes from the RLS-scoped
+lease query (NOT inside the SystemTenancyScope), so it's algebraically
+impossible to return a vehicle the caller doesn't have a lease on. Three
+invariants must hold under future edits: keep the SystemTenancyScope bounded
+to the Vehicles read, keep the lease query outside it, keep the WHERE-IN
+clause in place. Phase-2 cleanup path: extend the Vehicles RLS predicate with
+a customer-derived clause (the Day-9 migration comment already flags this);
+when that lands the handler collapses to a single LINQ join and the bypass
+goes away. Endpoint: `GET /api/v1/me/vehicles` in `MeEndpoints.cs` mirrors
+the `/leases` shape — 401 anon, 400 `me.requires_customer_context` for
+INTERNAL_STAFF, 200 array for EXTERNAL_INDIVIDUAL. **Frontend
+(customer-portal)**: `app/vehicles/page.tsx` table (plate triple in
+`dir="rtl"` span, make/model, year, color, KM, license + insurance expiry),
+loading / empty / error states; dashboard expanded to 4 stat cards (added
+"Currently driving" from `/me/vehicles` count) + second CTA link; "My
+Vehicles" added to nav. AR+EN i18n strings added. **Tests**: 337 total
+green (+6: 3 endpoint, 3 handler — Active/Extended/Suspended only filter,
+empty-when-no-leases, throws-on-missing-CustomerId). Customer-portal build:
+4 routes. Web-portal build: 7 routes. RED→GREEN ~75 min including plan +
+retro. Carry-forward updated: ZATCA adapter (Week-4 critical), close-saga
+refactor to TajeerStatusMapper (5-line cleanup, bundle), Vehicle Replacement
+Saga, customer-portal lease/vehicle detail pages, `BffTestHostDefaults`
+helper (5th retro now flagging it), drop `continue-on-error` from JS CI,
+Always Encrypted on PII (gated on AKV).
+
 2026-05-29 — Tajeer `GetAsync` + real status-mirror drift detection shipped.
 Closes the gap left by PR #21 (reconciliation stub was log-only because the
 client had no read method). **Adapter surface**: new `GetContractResponse` DTO
