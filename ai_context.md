@@ -91,6 +91,16 @@ it first; update it after every meaningful change.
     by default. Smoke tests (`Category=Smoke`) and local-dependency integration tests
     (`Category=Integration`) run only when explicitly filtered IN, so CI stays green
     without vendor secrets or local SQL.
+12. **Tenant isolation is three layers, with the DB engine layer as the floor.** App-layer
+    `TenantId` WHERE clauses remain; on top, `TenancyConnectionInterceptor` writes SQL
+    `SESSION_CONTEXT` on every connection open, and `dbo.TenancyPolicy` RLS filters
+    every read + blocks every cross-tenant write. The interceptor is registered in
+    `AddAutoLeaseNetDbContext` alongside `DomainEventDispatchInterceptor`, so prod +
+    tests share one wiring path. `ITenancyAccessor` returns `null` on anonymous
+    requests (RLS then hides all rows — safe by default); the seeder and webhook
+    receiver bypass via `SystemTenancyScope.For(tenantId)` /
+    `SystemTenancyScope.ForWebhookBootstrap()` (`UserType=WEBHOOK_BOOTSTRAP` is a
+    predicate override that Phase 2 retires when webhook URLs encode tenant).
 
 ## Domain rules
 
@@ -144,16 +154,17 @@ it first; update it after every meaningful change.
 
 ## Current repo state
 
-- **Branch**: `main` at commit `a42cf41` (`feat(operations): Day-21 Incident aggregate (foundation) (#17)`).
+- **Branch**: `main` at commit `a63f355` (`docs(ai_context): refresh after PR #11-#17 merges (#18)`) — pending PR for Day-9 RLS workstream.
 - **CI on main**: ✅ all three jobs green — `.NET (build -warnaserror + test)`, `JS (lint + typecheck + build)`, `Tajeer staging smoke (Category=Smoke)` (cleanly skipped via the `TAJEER_REAL_SMOKE_ENABLED` gate).
-- **Tests**: 256 green across 5 test projects (Adapters.Common 20, Adapters.Tajeer 66, Infrastructure 3, Application 107, Bff 60). Run via `dotnet test --filter "Category!=Smoke&Category!=Integration"`.
-- **Merged PRs since checkpoint `35ecbae`**: #1–#10 covered Week-1 stabilisation, governance, scaffold, and seed plumbing (see git log for individual titles). #11 (ai_context refresh after #9 + #10), #12 (Inspection aggregate — Week-3 E-Check foundation), #13 (Day-18 CHECK_OUT → Lease link via SaveContract), #14 (Day-19 check-in saga local close), #15 (Tajeer Calculate + Close — saga vendor commit), #16 (Day-20 Extend + Suspend endpoints), #17 (Day-21 Incident aggregate).
+- **Tests**: **264 green** across 5 test projects (Adapters.Common 20, Adapters.Tajeer 66, Infrastructure 5, Application 113, Bff 60). Run via `dotnet test --filter "Category!=Smoke&Category!=Integration"`. Plus 5 `Category=Integration` RLS tests gated on local SQL only.
+- **Merged PRs since checkpoint `35ecbae`**: #1–#10 (Week-1 stabilisation / governance / scaffold / seed). #11 (ai_context refresh), #12 (Inspection aggregate), #13 (Day-18 CHECK_OUT → Lease link), #14 (Day-19 check-in saga local close), #15 (Tajeer Calculate + Close saga), #16 (Day-20 Extend + Suspend), #17 (Day-21 Incident aggregate), #18 (ai_context refresh).
 - **Active aggregates**: Lease, Customer, Vehicle, Driver, Branch, RentPolicy, ExtendedCoverage, WebhookLog, Inspection (+ children), Incident.
 - **`ITajeerContractClient` surface**: `SaveAsync`, `CalculatePaymentAsync`, `CloseAsync`, `ExtendAsync`, `SuspendAsync` (5 methods; all share the `SendAsync<TReq,TRes>` error-mapping spine). InMemory sibling honours per-method override factories for negative-path tests.
-- **EF migrations applied to local `AutoLeaseNet_Dev`** (latest): `20260528205440_Add_Incident_Aggregate` (this commit's), preceded by `20260528131820_Add_Inspection_Aggregate` (PR #12) and `20260523163430_Add_Core_Aggregates`.
+- **Tenancy enforcement (Day-9, new)**: three layers — repository `TenantId` filter (unchanged), `TenancyConnectionInterceptor` setting SQL `SESSION_CONTEXT` on every connection open, and `dbo.TenancyPolicy` RLS on 9 aggregate-root tables (`Leases`, `Customers`, `Vehicles`, `Drivers`, `Branches`, `RentPolicies`, `ExtendedCoverages`, `Inspections`, `Incidents`). `SystemTenancyScope` (AsyncLocal) provides the bypass path used by the demo seeder and the Tajeer webhook receiver (`WEBHOOK_BOOTSTRAP` user-type override; Phase-2 retires it).
+- **EF migrations applied to local `AutoLeaseNet_Dev`** (latest): `20260529012701_Add_RLS_TenancyPolicy` (this commit's), preceded by `20260528205440_Add_Incident_Aggregate`, `20260528131820_Add_Inspection_Aggregate`, `20260523163430_Add_Core_Aggregates`.
 - **Branch protection**: enforced on `main`. Direct push blocked; every change is `gh pr create` → `gh pr merge --squash --delete-branch`.
 - **Repo visibility**: public. L.G2/L.G3 closed at $0 cost.
-- **Current blocker profile**: no active code/CI blockers. Remaining external work: manual Tajeer Rabet staging exercise (needs creds + ngrok), Azure / Entra / Unifonic onboarding. Internal next workstreams (any order): Outbox + BackgroundService drain, Vehicle Replacement Saga (subscribes to `IncidentReportedDomainEvent`), Lease lifecycle domain events → invoicing trigger (Week 4), Reconciliation job (15-min scheduled).
+- **Current blocker profile**: no active code/CI blockers. Remaining external work: manual Tajeer Rabet staging exercise (needs creds + ngrok), Azure / Entra / Unifonic onboarding. Phase-1 hardening sprint continues: Outbox + BackgroundService drain (next), Reconciliation job skeleton (½ day), Vehicle Replacement Saga (subscribes to `IncidentReportedDomainEvent`), Always Encrypted on PII (was bundled with Day-9; split to follow-up pending Azure Key Vault), RLS on Inspection child tables (Phase 2 backfill).
 
 ## TODOs — in priority order
 
@@ -429,6 +440,24 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
    IS red — see TODO #1.
 
 ## Last updated
+
+2026-05-29 — Day-9 RLS tenant-isolation workstream shipped. **Tenant isolation
+now enforced at the DB layer** for the first time. New port `ITenancyAccessor`
++ `Tenancy(TenantId, CustomerId?, UserType)` record + `SystemTenancyScope`
+(AsyncLocal) in `Application.Ports.Tenancy`. New interceptor
+`TenancyConnectionInterceptor` writes `SESSION_CONTEXT('TenantId' | 'CustomerId'
+| 'UserType')` on every `SqlConnection` open; registered alongside
+`DomainEventDispatchInterceptor` via `AddAutoLeaseNetDbContext` so prod + tests
+agree. EF migration `20260529012701_Add_RLS_TenancyPolicy` creates
+`dbo.fn_TenancyPredicate` + `dbo.TenancyPolicy` covering 9 aggregate-root
+tables. Phase-1 webhook bypass via `WEBHOOK_BOOTSTRAP` UserType override
+(retires in Phase 2 with per-tenant webhook URLs). End-to-end smoke proven:
+unknown-tenant header against `/api/v1/lookups/customers` returns
+`totalCount:0` even without any app-side filter. **264 tests green** (+6
+SystemTenancyScope + 2 TenancyConnectionInterceptor unit tests); +5
+`Category=Integration` RLS isolation tests proving cross-tenant read filter,
+cross-tenant write block, and the WEBHOOK_BOOTSTRAP override. Always Encrypted
+split to a follow-up workstream pending Azure Key Vault provisioning.
 
 2026-05-29 — Day-21 Incident aggregate shipped. Mirrors PR #12's Inspection
 aggregate structurally — `Incident` aggregate root with full Spec 01 §5.6
