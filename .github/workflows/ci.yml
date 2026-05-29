@@ -68,7 +68,10 @@ jobs:
   # infra yet on either portal.
   # ─────────────────────────────────────────────────────────────────────────
   js:
-    name: JS (lint + typecheck + test + build)
+    # Display name preserved verbatim so the branch-protection required-check
+    # binding from earlier PRs still matches. "best-effort" now only applies to
+    # the two remaining `continue-on-error: true` steps below (Lint + Test).
+    name: JS (lint + typecheck + test + build) — best-effort until UI lands
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
