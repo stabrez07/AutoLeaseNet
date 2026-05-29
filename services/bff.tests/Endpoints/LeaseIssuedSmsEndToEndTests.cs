@@ -225,6 +225,7 @@ internal sealed class SmsE2EFactory : WebApplicationFactory<Program>
                 // Drain runs at 1s interval here so the test only waits a moment.
                 ["Outbox:Enabled"] = "true",
                 ["Outbox:DrainIntervalSeconds"] = "1",
+                ["Reconciliation:Enabled"] = "false",
                 ["Seed:Mode"] = "Empty",
             });
         });

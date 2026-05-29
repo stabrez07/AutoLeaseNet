@@ -275,6 +275,7 @@ internal sealed class InspectionFactory : WebApplicationFactory<Program>
                 ["Tajeer:WebhookSharedSecret"] = "test-secret",
                 ["Tajeer:Mode"] = "InMemory",
                 ["Outbox:Enabled"] = "false",
+                ["Reconciliation:Enabled"] = "false",
                 ["Seed:Mode"] = "Demo",
                 ["Seed:TenantId"] = SeededTenantId.ToString(),
                 ["Seed:RandomSeed"] = "20260525",

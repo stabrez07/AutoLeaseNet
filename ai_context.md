@@ -154,9 +154,9 @@ it first; update it after every meaningful change.
 
 ## Current repo state
 
-- **Branch**: `main` at commit `d80b88a` (`feat(infra): Day-9 RLS tenant isolation (#19)`) — pending PR for Outbox+drain workstream.
+- **Branch**: `main` at commit `1a1e87d` (`feat(infra): Outbox + BackgroundService drain (#20)`) — pending PR for Reconciliation skeleton workstream.
 - **CI on main**: ✅ all three jobs green — `.NET (build -warnaserror + test)`, `JS (lint + typecheck + build)`, `Tajeer staging smoke (Category=Smoke)` (cleanly skipped via the `TAJEER_REAL_SMOKE_ENABLED` gate).
-- **Tests**: **269 green** across 5 test projects (Adapters.Common 20, Adapters.Tajeer 66, Infrastructure 10, Application 113, Bff 60). Run via `dotnet test --filter "Category!=Smoke&Category!=Integration"`. Plus 5 `Category=Integration` RLS tests gated on local SQL only.
+- **Tests**: **276 green** across 5 test projects (Adapters.Common 20, Adapters.Tajeer 66, Infrastructure 17, Application 113, Bff 60). Run via `dotnet test --filter "Category!=Smoke&Category!=Integration"`. Plus 5 `Category=Integration` RLS tests gated on local SQL only.
 - **Merged PRs since checkpoint `35ecbae`**: #1–#10 (Week-1 stabilisation / governance / scaffold / seed). #11 (ai_context refresh), #12 (Inspection aggregate), #13 (Day-18 CHECK_OUT → Lease link), #14 (Day-19 check-in saga local close), #15 (Tajeer Calculate + Close saga), #16 (Day-20 Extend + Suspend), #17 (Day-21 Incident aggregate), #18 (ai_context refresh).
 - **Active aggregates**: Lease, Customer, Vehicle, Driver, Branch, RentPolicy, ExtendedCoverage, WebhookLog, Inspection (+ children), Incident.
 - **`ITajeerContractClient` surface**: `SaveAsync`, `CalculatePaymentAsync`, `CloseAsync`, `ExtendAsync`, `SuspendAsync` (5 methods; all share the `SendAsync<TReq,TRes>` error-mapping spine). InMemory sibling honours per-method override factories for negative-path tests.
@@ -164,7 +164,7 @@ it first; update it after every meaningful change.
 - **EF migrations applied to local `AutoLeaseNet_Dev`** (latest): `20260529020317_Add_OutboxEvent` (this commit's), preceded by `20260529012701_Add_RLS_TenancyPolicy`, `20260528205440_Add_Incident_Aggregate`, `20260528131820_Add_Inspection_Aggregate`, `20260523163430_Add_Core_Aggregates`.
 - **Branch protection**: enforced on `main`. Direct push blocked; every change is `gh pr create` → `gh pr merge --squash --delete-branch`.
 - **Repo visibility**: public. L.G2/L.G3 closed at $0 cost.
-- **Current blocker profile**: no active code/CI blockers. Remaining external work: manual Tajeer Rabet staging exercise (needs creds + ngrok), Azure / Entra / Unifonic onboarding. Phase-1 hardening sprint continues: Outbox + BackgroundService drain (next), Reconciliation job skeleton (½ day), Vehicle Replacement Saga (subscribes to `IncidentReportedDomainEvent`), Always Encrypted on PII (was bundled with Day-9; split to follow-up pending Azure Key Vault), RLS on Inspection child tables (Phase 2 backfill).
+- **Current blocker profile**: no active code/CI blockers. Remaining external work: manual Tajeer Rabet staging exercise (needs creds + ngrok), Azure / Entra / Unifonic onboarding. **Phase-1 hardening sprint complete (Day-9 RLS + Outbox + Reconciliation).** Next session pivots to demo-unblocking: Customer Portal scaffold, ZATCA adapter (Week-4 critical path), Vehicle Replacement Saga (subscribes to `IncidentReportedDomainEvent`), Always Encrypted on PII (gated on Azure Key Vault or local-cert decision), `ITajeerContractClient.GetAsync` (turns the reconciliation stub into a real drift detector), RLS on Inspection child tables (Phase 2 backfill).
 
 ## TODOs — in priority order
 
@@ -440,6 +440,23 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
    IS red — see TODO #1.
 
 ## Last updated
+
+2026-05-29 — Reconciliation BackgroundService skeleton shipped. **Phase-1
+hardening sprint complete** (Day-9 RLS + Outbox + Reconciliation, three PRs).
+`IReconciliationCheck` abstraction + `ReconciliationOptions` (default
+15-minute cadence per Plan 02 Day 20) + `ReconciliationService :
+BackgroundService` (second instance on the OutboxDrainService pattern;
+per-cycle DI scope, per-check try/catch). One stub check
+`TajeerStatusMirrorCheck` iterates configured `Reconciliation:Tajeer:TenantIds`
+under `SystemTenancyScope.For(tenantId)`, queries `MaxLeasesPerCycle` most
+recently-updated `Active` leases, logs visibility. Does NOT yet call Tajeer —
+needs `ITajeerContractClient.GetAsync` which is a separate workstream.
+`AddReconciliation(section)` extension; wired in `Program.cs`. Test factory
+sweep: 9 factories opted out via `Reconciliation:Enabled=false`. **276 tests
+green** (+4 ReconciliationService + 3 TajeerStatusMirrorCheck). Next
+workstreams (Phase-1 hardening done): Customer Portal scaffold, ZATCA adapter
+(Week-4 critical path), Vehicle Replacement Saga, Always Encrypted (pending
+AKV or local-cert decision), Tajeer GetContract method.
 
 2026-05-29 — Outbox + BackgroundService drain shipped. Replaces the inline
 post-commit `DomainEventDispatchInterceptor` with a transactional outbox:

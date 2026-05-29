@@ -137,6 +137,7 @@ public sealed class DevWebApplicationFactory : WebApplicationFactory<Program>
                 ["Tajeer:WebhookSharedSecret"] = "test-secret",
                 ["Tajeer:Mode"] = "InMemory",
                 ["Outbox:Enabled"] = "false",
+                ["Reconciliation:Enabled"] = "false",
                 ["Seed:Mode"] = "Empty",
             });
         });
