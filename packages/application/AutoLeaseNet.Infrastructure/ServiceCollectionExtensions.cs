@@ -42,6 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IWebhookLogRepository, EfWebhookLogRepository>();
         services.AddScoped<IInspectionRepository, EfInspectionRepository>();
         services.AddScoped<IIncidentRepository, EfIncidentRepository>();
+        services.AddScoped<IZatcaChainStateRepository, EfZatcaChainStateRepository>();
 
         return services;
     }

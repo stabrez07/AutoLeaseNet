@@ -15,6 +15,8 @@
     <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Common\AutoLeaseNet.Adapters.Common.csproj" />
     <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Tajeer\AutoLeaseNet.Adapters.Tajeer.csproj" />
     <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Tajeer.InMemory\AutoLeaseNet.Adapters.Tajeer.InMemory.csproj" />
+    <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Zatca\AutoLeaseNet.Adapters.Zatca.csproj" />
+    <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Zatca.InMemory\AutoLeaseNet.Adapters.Zatca.InMemory.csproj" />
     <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Seed\AutoLeaseNet.Adapters.Seed.csproj" />
     <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Sms.InMemory\AutoLeaseNet.Adapters.Sms.InMemory.csproj" />
     <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Storage.InMemory\AutoLeaseNet.Adapters.Storage.InMemory.csproj" />

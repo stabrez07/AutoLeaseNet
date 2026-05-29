@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>AutoLeaseNet.Adapters.Zatca.Tests</RootNamespace>
+    <AssemblyName>AutoLeaseNet.Adapters.Zatca.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AutoLeaseNet.Adapters.Zatca\AutoLeaseNet.Adapters.Zatca.csproj" />
+    <ProjectReference Include="..\AutoLeaseNet.Adapters.Zatca.InMemory\AutoLeaseNet.Adapters.Zatca.InMemory.csproj" />
+    <ProjectReference Include="..\..\application\AutoLeaseNet.Domain\AutoLeaseNet.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+</Project>

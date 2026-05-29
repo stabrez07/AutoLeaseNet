@@ -101,6 +101,23 @@ it first; update it after every meaningful change.
     receiver bypass via `SystemTenancyScope.For(tenantId)` /
     `SystemTenancyScope.ForWebhookBootstrap()` (`UserType=WEBHOOK_BOOTSTRAP` is a
     predicate override that Phase 2 retires when webhook URLs encode tenant).
+13. **ZATCA adapter skeleton (Week-4 prep, 2026-05-29).** Three packages on disk —
+    `Adapters.Zatca` (Pattern B), `Adapters.Zatca.InMemory`, `Adapters.Zatca.Tests` —
+    plus `Domain.Zatca.ZatcaChainState`, port `IZatcaChainStateRepository`, EF repo
+    + configuration + migration `Add_ZatcaChainState`. `IZatcaClient.SubmitInvoiceAsync`
+    is the only method this PR; DTOs are `SubmitInvoiceRequest` / `SubmitInvoiceResponse`
+    / `ZatcaResultStatus { Cleared | Reported | WarningCleared | Rejected }`. The Real
+    HTTP client (fully wired with auth handler + Polly resilience) is a **clear-error
+    stub** that returns `IntegrationResult.Failure("zatca.not_yet_implemented",
+    isTransient:false)` — Week-4 lights up UBL 2.1 + ECDSA P-256 + TLV QR. `Zatca:Mode`
+    switch (`Real` | `InMemory`) mirrors Tajeer; default `InMemory` in dev. **Chain
+    invariant location**: `ZatcaChainState.AdvanceTo(hash, when)` accepts any hash —
+    the saga (Week-4) is responsible for only calling it on `Cleared` / `Reported` /
+    `WarningCleared` results. This matches the existing `Lease.MarkIssued` pattern
+    (entity stays passive; cross-aggregate policy lives in the saga). `ZatcaHealthCheck`
+    reports `Healthy` when Mode=InMemory and `Degraded("not yet implemented")` when
+    Mode=Real, so the readiness probe stays green for the rest of the BFF while making
+    the unfinished state visible.
 
 ## Domain rules
 
@@ -154,14 +171,14 @@ it first; update it after every meaningful change.
 
 ## Current repo state
 
-- **Branch**: `main` at commit `d8d315f` (`feat(infra): Reconciliation BackgroundService skeleton (#21)`) — pending PR for Customer Portal scaffold workstream.
-- **CI on main**: ✅ all three jobs green — `.NET (build -warnaserror + test)`, `JS (lint + typecheck + build)` (note: JS gate runs with `continue-on-error: true` on every step; both portals now build cleanly locally so dropping the flag is a near-term cleanup), `Tajeer staging smoke (Category=Smoke)` (cleanly skipped via the `TAJEER_REAL_SMOKE_ENABLED` gate).
-- **Tests**: **279 green** across 5 test projects (Adapters.Common 20, Adapters.Tajeer 66, Infrastructure 17, Application 113, Bff 63). Run via `dotnet test --filter "Category!=Smoke&Category!=Integration"`. Plus 5 `Category=Integration` RLS tests gated on local SQL only.
+- **Branch**: `main` at commit `eeb6204` (`feat(customer-portal): Vehicle detail page completes demo path symmetry (#27)`); next PR is `feat/zatca-adapter-skeleton` (ZATCA Week-4 prep).
+- **CI on main**: ✅ all required jobs green — `.NET (build -warnaserror + test)` strict; `JS (lint + typecheck + test + build) — best-effort until UI lands` (strict on Typecheck + Build since #25; Lint + Test still `continue-on-error` until UI lands).
+- **Tests**: **368 green** across 6 test projects (Adapters.Common 20, Adapters.Tajeer 82, Adapters.Zatca 12 [new], Infrastructure 68, Application 113, Bff 73). Run via `dotnet test --filter "Category!=Smoke&Category!=Integration"`. Plus `Category=Integration` RLS tests gated on local SQL only.
 - **Merged PRs since checkpoint `35ecbae`**: #1–#10 (Week-1 stabilisation / governance / scaffold / seed). #11 (ai_context refresh), #12 (Inspection aggregate), #13 (Day-18 CHECK_OUT → Lease link), #14 (Day-19 check-in saga local close), #15 (Tajeer Calculate + Close saga), #16 (Day-20 Extend + Suspend), #17 (Day-21 Incident aggregate), #18 (ai_context refresh).
-- **Active aggregates**: Lease, Customer, Vehicle, Driver, Branch, RentPolicy, ExtendedCoverage, WebhookLog, Inspection (+ children), Incident.
+- **Active aggregates**: Lease, Customer, Vehicle, Driver, Branch, RentPolicy, ExtendedCoverage, WebhookLog, Inspection (+ children), Incident, ZatcaChainState (per-tenant aggregate-of-one, Week-4 prep).
 - **`ITajeerContractClient` surface**: `SaveAsync`, `CalculatePaymentAsync`, `CloseAsync`, `ExtendAsync`, `SuspendAsync` (5 methods; all share the `SendAsync<TReq,TRes>` error-mapping spine). InMemory sibling honours per-method override factories for negative-path tests.
 - **Tenancy enforcement (Day-9, new)**: three layers — repository `TenantId` filter (unchanged), `TenancyConnectionInterceptor` setting SQL `SESSION_CONTEXT` on every connection open, and `dbo.TenancyPolicy` RLS on 9 aggregate-root tables (`Leases`, `Customers`, `Vehicles`, `Drivers`, `Branches`, `RentPolicies`, `ExtendedCoverages`, `Inspections`, `Incidents`). `SystemTenancyScope` (AsyncLocal) provides the bypass path used by the demo seeder and the Tajeer webhook receiver (`WEBHOOK_BOOTSTRAP` user-type override; Phase-2 retires it).
-- **EF migrations applied to local `AutoLeaseNet_Dev`** (latest): `20260529020317_Add_OutboxEvent` (this commit's), preceded by `20260529012701_Add_RLS_TenancyPolicy`, `20260528205440_Add_Incident_Aggregate`, `20260528131820_Add_Inspection_Aggregate`, `20260523163430_Add_Core_Aggregates`.
+- **EF migrations** (latest first): `20260529232659_Add_ZatcaChainState` (this PR's), `20260529020317_Add_OutboxEvent`, `20260529012701_Add_RLS_TenancyPolicy`, `20260528205440_Add_Incident_Aggregate`, `20260528131820_Add_Inspection_Aggregate`, `20260523163430_Add_Core_Aggregates`, `20260523155639_Add_WebhookLog`, `20260522232532_Init_Lease`.
 - **Branch protection**: enforced on `main`. Direct push blocked; every change is `gh pr create` → `gh pr merge --squash --delete-branch`.
 - **Repo visibility**: public. L.G2/L.G3 closed at $0 cost.
 - **Current blocker profile**: no active code/CI blockers. Remaining external work: manual Tajeer Rabet staging exercise (needs creds + ngrok), Azure / Entra / Unifonic onboarding. Phase-1 hardening sprint done; first demo-unblocking slice (Customer Portal scaffold) shipped. Carry-forward: ZATCA adapter (Week-4 critical path), `ITajeerContractClient.GetAsync` (turns reconciliation stub into real drift detector), Vehicle Replacement Saga (subscribes to `IncidentReportedDomainEvent`), Customer Portal — My Vehicles / Lease detail (needs `/me/vehicles` endpoint or RLS extension), `BffTestHostDefaults` shared config helper (three retros have asked), Always Encrypted on PII (gated on Azure Key Vault or local-cert), drop `continue-on-error: true` from JS CI typecheck+build (both portals now build cleanly), RLS on Inspection child tables (Phase 2 backfill).
