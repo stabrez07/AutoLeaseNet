@@ -97,25 +97,28 @@ export function Badge({
 }
 
 /**
- * Maps a LeaseStatus enum value (1-7, 99) to the right badge tone. Kept in one
- * place so the dashboard + leases table agree visually.
+ * Maps a LeaseStatus enum value to the right badge tone. Codes match the
+ * Domain/Leases/LeaseStatus.cs enum: 0=Draft, 1=SaveFailed, 2=PendingIssuance,
+ * 3=Active, 4=Extended, 5=Suspended, 6=Closed, 7=Cancelled, 8=ExpiredDraft.
+ * Kept in one place so the dashboard + leases table agree visually.
  */
 export function statusTone(status: number): 'green' | 'amber' | 'red' | 'slate' | 'blue' {
   switch (status) {
-    case 2:
-      return 'green' // Active
-    case 3:
-      return 'blue' // Extended
-    case 4:
-      return 'amber' // Suspended
-    case 5:
-      return 'slate' // Closed
-    case 6:
-    case 7:
-    case 99:
-      return 'red' // Cancelled / Expired / SaveFailed
-    case 1:
+    case 3: // Active
+      return 'green'
+    case 4: // Extended
+      return 'blue'
+    case 5: // Suspended
+      return 'amber'
+    case 6: // Closed
+      return 'slate'
+    case 1: // SaveFailed
+    case 7: // Cancelled
+    case 8: // ExpiredDraft
+      return 'red'
+    case 0: // Draft
+    case 2: // PendingIssuance
     default:
-      return 'amber' // PendingIssuance
+      return 'amber'
   }
 }

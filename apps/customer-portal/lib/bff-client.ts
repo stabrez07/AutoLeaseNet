@@ -9,7 +9,9 @@ export const BFF_BASE_URL = process.env.NEXT_PUBLIC_BFF_BASE_URL ?? 'http://loca
 export interface MyLease {
   id: string
   tajeerContractNumber: number | null
-  status: number // LeaseStatus: 1=Pending 2=Active 3=Extended 4=Suspended 5=Closed 6=Cancelled 7=Expired 99=SaveFailed
+  // LeaseStatus enum: 0=Draft 1=SaveFailed 2=PendingIssuance 3=Active 4=Extended
+  //                    5=Suspended 6=Closed 7=Cancelled 8=ExpiredDraft
+  status: number
   contractStartUtc: string
   contractEndUtc: string
   issuedAtUtc: string | null
@@ -30,6 +32,51 @@ export interface MyVehicle {
   currentKm: number
   licenseExpiryDate: string | null  // ISO date (yyyy-MM-dd)
   insuranceExpiryDate: string | null
+}
+
+export interface LeaseVehicleSummary {
+  id: string
+  plateNumber: string
+  plateLetters: string
+  plateTypeCode: number
+  make: string
+  model: string
+  modelYear: number
+  color: string | null
+}
+
+export interface MyLeaseDetail {
+  id: string
+  tajeerContractNumber: number | null
+  status: number
+  contractTypeCode: number
+  contractStartUtc: string
+  contractEndUtc: string
+  actualReturnUtc: string | null
+  allowedKmPerHour: number
+  allowedKmPerDay: number
+  unlimitedKm: boolean
+  allowedLateHours: number
+  extensionCount: number
+  rentAmount: number
+  paidAmount: number
+  remainingAmount: number
+  vatAmount: number
+  totalAmount: number
+  paymentMethodCode: number
+  discountType: number | null
+  discountValue: number | null
+  savedAtUtc: string | null
+  issuedAtUtc: string | null
+  suspendedAtUtc: string | null
+  resumedAtUtc: string | null
+  closedAtUtc: string | null
+  cancelledAtUtc: string | null
+  expiredAtUtc: string | null
+  suspensionReasonCode: number | null
+  closureMainReasonCode: number | null
+  closureSubReasonCode: number | null
+  vehicle: LeaseVehicleSummary | null
 }
 
 export interface ProblemDetails {
@@ -78,6 +125,10 @@ class CustomerBffClient {
 
   getMyVehicles() {
     return this.getJson<MyVehicle[]>('/api/v1/me/vehicles')
+  }
+
+  getMyLeaseDetail(leaseId: string) {
+    return this.getJson<MyLeaseDetail>(`/api/v1/me/leases/${encodeURIComponent(leaseId)}`)
   }
 }
 

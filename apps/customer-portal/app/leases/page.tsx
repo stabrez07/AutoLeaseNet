@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { useLocale } from '../../lib/locale-provider'
 import { bff, type MyLease } from '../../lib/bff-client'
@@ -64,8 +65,13 @@ export default function MyLeasesPage() {
                   (t.leases.statuses as Record<number, string>)[statusKey] ?? `#${l.status}`
                 return (
                   <tr key={l.id}>
-                    <td className="px-4 py-2.5 font-mono text-xs text-slate-700">
-                      {l.tajeerContractNumber ?? '—'}
+                    <td className="px-4 py-2.5 font-mono text-xs">
+                      <Link
+                        href={`/leases/${l.id}`}
+                        className="text-brand-700 hover:text-brand-900 underline-offset-4 hover:underline"
+                      >
+                        {l.tajeerContractNumber ?? '—'}
+                      </Link>
                     </td>
                     <td className="px-4 py-2.5">
                       <Badge tone={statusTone(l.status)}>{statusLabel}</Badge>
