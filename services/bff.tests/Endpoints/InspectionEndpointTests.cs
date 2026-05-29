@@ -223,20 +223,16 @@ internal sealed class InspectionFactory : WebApplicationFactory<Program>
     public async Task EnsureSeededAsync()
     {
         if (_seeded) return;
-        using var _ = CreateClient();
-        using var scope = Services.CreateScope();
-        var seeder = scope.ServiceProvider.GetRequiredService<AutoLeaseNet.Application.Ports.Seeding.IDataSeeder>();
-        await seeder.SeedAsync(CancellationToken.None);
-
-        var db = scope.ServiceProvider.GetRequiredService<AutoLeaseNetDbContext>();
-        var deadline = DateTime.UtcNow.AddSeconds(120);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (await db.Inspections.AnyAsync()) { _seeded = true; return; }
-            await Task.Delay(100);
-        }
-        var mode = scope.ServiceProvider.GetRequiredService<IConfiguration>().GetValue<string>("Seed:Mode") ?? "(null)";
-        throw new InvalidOperationException($"Seeder did not populate Inspections within 120s. Mode={mode}.");
+        await BffTestHostDefaults.EnsureDemoSeededAsync(
+            this,
+            db => db.Inspections.AnyAsync(),
+            "Inspections",
+            buildTimeoutDetail: (_, sp) =>
+            {
+                var mode = sp.GetRequiredService<IConfiguration>().GetValue<string>("Seed:Mode") ?? "(null)";
+                return Task.FromResult($"Seed:Mode={mode}.");
+            });
+        _seeded = true;
     }
 
     public async Task<(Guid VehicleId, int CurrentKm)> PickSeededVehicleAsync()

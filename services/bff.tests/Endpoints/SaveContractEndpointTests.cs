@@ -219,31 +219,19 @@ public sealed class SaveContractEndpointFactory : WebApplicationFactory<Program>
     public async Task EnsureSeededAsync()
     {
         if (_seedFinished) return;
-        // Force the host to build by creating a client. The Program.cs Development
-        // startup hook awaits `seeder.SeedAsync(...)` before app.Run(), so the seed
-        // should be complete by the time CreateClient() returns; the polling below
-        // is defensive against any future startup-timing race.
-        // Timeout 120s — Demo seed generation (Bogus + full aggregate graph) can
-        // exceed 30s on constrained or contended test runners.
-        using var probe = CreateClient();
-        using var scope = Services.CreateScope();
-        var seeder = scope.ServiceProvider.GetRequiredService<IDataSeeder>();
-        await seeder.SeedAsync(CancellationToken.None);
-
-        var db = scope.ServiceProvider.GetRequiredService<AutoLeaseNetDbContext>();
-        var deadline = DateTime.UtcNow.AddSeconds(120);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (await db.Customers.AnyAsync()) { _seedFinished = true; return; }
-            await Task.Delay(100);
-        }
-
-        var mode = scope.ServiceProvider
-            .GetRequiredService<IConfiguration>()
-            .GetValue<string>("Seed:Mode") ?? "(null)";
-        var customerCount = await db.Customers.CountAsync();
-        throw new InvalidOperationException(
-            $"Seeder did not populate Customers within 120s. SeederType={seeder.GetType().Name}; Seed:Mode={mode}; Customers={customerCount}; DbName={_dbName}.");
+        var dbName = _dbName;
+        await BffTestHostDefaults.EnsureDemoSeededAsync(
+            this,
+            db => db.Customers.AnyAsync(),
+            "Customers",
+            buildTimeoutDetail: async (db, sp) =>
+            {
+                var mode = sp.GetRequiredService<IConfiguration>().GetValue<string>("Seed:Mode") ?? "(null)";
+                var seederType = sp.GetRequiredService<IDataSeeder>().GetType().Name;
+                var customerCount = await db.Customers.CountAsync();
+                return $"SeederType={seederType}; Seed:Mode={mode}; Customers={customerCount}; DbName={dbName}.";
+            });
+        _seedFinished = true;
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

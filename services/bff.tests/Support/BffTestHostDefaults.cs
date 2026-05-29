@@ -1,5 +1,7 @@
+using AutoLeaseNet.Application.Ports.Seeding;
 using AutoLeaseNet.Infrastructure;
 using AutoLeaseNet.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -91,5 +93,64 @@ public static class BffTestHostDefaults
         ArgumentException.ThrowIfNullOrWhiteSpace(databaseName);
         services.RemoveAll<DbContextOptions<AutoLeaseNetDbContext>>();
         services.AddAutoLeaseNetDbContext(opt => opt.UseInMemoryDatabase(databaseName));
+    }
+
+    /// <summary>Default demo-seed deadline. Long enough to ride out contended runners; short enough that a real hang fails the test rather than the suite timeout.</summary>
+    public static readonly TimeSpan DefaultSeedTimeout = TimeSpan.FromSeconds(120);
+
+    /// <summary>
+    /// Boots the test host, runs the configured <see cref="IDataSeeder"/>, and polls until
+    /// <paramref name="readinessCheck"/> succeeds. Used by every demo-seeded factory so the
+    /// 15-line "create probe client → resolve seeder → SeedAsync → deadline loop" dance lives
+    /// in one place.
+    ///
+    /// <para>
+    /// <paramref name="entityName"/> is for the timeout error message — pass the table /
+    /// concept the check is waiting on (e.g. <c>"Customers"</c>, <c>"Active Lease"</c>) so the
+    /// failure clearly points at what didn't materialise.
+    /// </para>
+    ///
+    /// <para>
+    /// <paramref name="buildTimeoutDetail"/> is an opt-in escape hatch for factories that want
+    /// to enrich the timeout message with diagnostic snapshot (e.g. configured Seed:Mode,
+    /// row counts, db name). Runs once if the readiness check never succeeds; the returned
+    /// string is appended to the standard error.
+    /// </para>
+    /// </summary>
+    public static async Task EnsureDemoSeededAsync(
+        WebApplicationFactory<Program> factory,
+        Func<AutoLeaseNetDbContext, Task<bool>> readinessCheck,
+        string entityName,
+        TimeSpan? timeout = null,
+        Func<AutoLeaseNetDbContext, IServiceProvider, Task<string>>? buildTimeoutDetail = null)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        ArgumentNullException.ThrowIfNull(readinessCheck);
+        ArgumentException.ThrowIfNullOrWhiteSpace(entityName);
+
+        // Probe client forces the host to build so Services + the Development startup
+        // hook (which itself awaits seeder.SeedAsync) have run by the time we resolve.
+        using var probe = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
+
+        var seeder = scope.ServiceProvider.GetRequiredService<IDataSeeder>();
+        await seeder.SeedAsync(CancellationToken.None);
+
+        var db = scope.ServiceProvider.GetRequiredService<AutoLeaseNetDbContext>();
+        var effectiveTimeout = timeout ?? DefaultSeedTimeout;
+        var deadline = DateTime.UtcNow.Add(effectiveTimeout);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (await readinessCheck(db)) return;
+            await Task.Delay(100);
+        }
+
+        var baseMessage = $"Seeder did not produce '{entityName}' within {effectiveTimeout.TotalSeconds:0}s.";
+        if (buildTimeoutDetail is not null)
+        {
+            var detail = await buildTimeoutDetail(db, scope.ServiceProvider);
+            throw new InvalidOperationException($"{baseMessage} {detail}");
+        }
+        throw new InvalidOperationException(baseMessage);
     }
 }

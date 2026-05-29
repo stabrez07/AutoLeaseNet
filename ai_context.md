@@ -171,7 +171,7 @@ it first; update it after every meaningful change.
 
 ## Current repo state
 
-- **Branch**: `main` at commit `eeb6204` (`feat(customer-portal): Vehicle detail page completes demo path symmetry (#27)`); next PR is `feat/zatca-adapter-skeleton` (ZATCA Week-4 prep).
+- **Branch**: `main` at commit `8c78c00` (`feat(zatca): adapter skeleton with chain-state invariant (Week-4 prep) (#28)`); next PR is `chore/bff-test-seed-waiter` (extracts `EnsureDemoSeededAsync` from 8 endpoint factories into `BffTestHostDefaults`).
 - **CI on main**: ✅ all required jobs green — `.NET (build -warnaserror + test)` strict; `JS (lint + typecheck + test + build) — best-effort until UI lands` (strict on Typecheck + Build since #25; Lint + Test still `continue-on-error` until UI lands).
 - **Tests**: **368 green** across 6 test projects (Adapters.Common 20, Adapters.Tajeer 82, Adapters.Zatca 12 [new], Infrastructure 68, Application 113, Bff 73). Run via `dotnet test --filter "Category!=Smoke&Category!=Integration"`. Plus `Category=Integration` RLS tests gated on local SQL only.
 - **Merged PRs since checkpoint `35ecbae`**: #1–#10 (Week-1 stabilisation / governance / scaffold / seed). #11 (ai_context refresh), #12 (Inspection aggregate), #13 (Day-18 CHECK_OUT → Lease link), #14 (Day-19 check-in saga local close), #15 (Tajeer Calculate + Close saga), #16 (Day-20 Extend + Suspend), #17 (Day-21 Incident aggregate), #18 (ai_context refresh).

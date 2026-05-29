@@ -114,19 +114,8 @@ internal sealed class MyVehiclesFactory : WebApplicationFactory<Program>
     public async Task EnsureSeededAsync()
     {
         if (_seeded) return;
-        using var _ = CreateClient();
-        using var scope = Services.CreateScope();
-        var seeder = scope.ServiceProvider.GetRequiredService<AutoLeaseNet.Application.Ports.Seeding.IDataSeeder>();
-        await seeder.SeedAsync(CancellationToken.None);
-
-        var db = scope.ServiceProvider.GetRequiredService<AutoLeaseNetDbContext>();
-        var deadline = DateTime.UtcNow.AddSeconds(120);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (await db.Customers.AnyAsync()) { _seeded = true; return; }
-            await Task.Delay(100);
-        }
-        throw new InvalidOperationException("Seeder did not populate Customers within 120s.");
+        await BffTestHostDefaults.EnsureDemoSeededAsync(this, db => db.Customers.AnyAsync(), "Customers");
+        _seeded = true;
     }
 
     public async Task<Guid> PickAnyCustomerIdAsync()
