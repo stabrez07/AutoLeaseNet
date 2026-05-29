@@ -141,7 +141,7 @@ export const messagesEn = {
     error: 'Something went wrong',
     retry: 'Retry',
   },
-} as const
+}
 
 export const messagesAr: Messages = {
   appName: 'أوتو ليس نت',

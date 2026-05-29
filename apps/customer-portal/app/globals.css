@@ -1,10 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
 html,
 body {
   padding: 0;
   margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    'Inter',
+    'Noto Kufi Arabic',
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  background: theme('colors.slate.50');
+  color: theme('colors.slate.900');
 }
 
 * {
   box-sizing: border-box;
+}
+
+[dir='rtl'] body {
+  font-family: 'Noto Kufi Arabic', 'Inter', system-ui, sans-serif;
 }

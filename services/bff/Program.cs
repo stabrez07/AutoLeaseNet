@@ -138,6 +138,7 @@ v1.MapLookupEndpoints();
 v1.MapInspectionEndpoints();
 v1.MapIncidentEndpoints();
 v1.MapLeaseEndpoints();
+v1.MapMeEndpoints();
 v1.MapTajeerWebhookEndpoints();
 
 if (app.Environment.IsDevelopment())

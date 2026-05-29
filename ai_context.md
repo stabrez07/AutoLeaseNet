@@ -154,9 +154,9 @@ it first; update it after every meaningful change.
 
 ## Current repo state
 
-- **Branch**: `main` at commit `1a1e87d` (`feat(infra): Outbox + BackgroundService drain (#20)`) — pending PR for Reconciliation skeleton workstream.
-- **CI on main**: ✅ all three jobs green — `.NET (build -warnaserror + test)`, `JS (lint + typecheck + build)`, `Tajeer staging smoke (Category=Smoke)` (cleanly skipped via the `TAJEER_REAL_SMOKE_ENABLED` gate).
-- **Tests**: **276 green** across 5 test projects (Adapters.Common 20, Adapters.Tajeer 66, Infrastructure 17, Application 113, Bff 60). Run via `dotnet test --filter "Category!=Smoke&Category!=Integration"`. Plus 5 `Category=Integration` RLS tests gated on local SQL only.
+- **Branch**: `main` at commit `d8d315f` (`feat(infra): Reconciliation BackgroundService skeleton (#21)`) — pending PR for Customer Portal scaffold workstream.
+- **CI on main**: ✅ all three jobs green — `.NET (build -warnaserror + test)`, `JS (lint + typecheck + build)` (note: JS gate runs with `continue-on-error: true` on every step; both portals now build cleanly locally so dropping the flag is a near-term cleanup), `Tajeer staging smoke (Category=Smoke)` (cleanly skipped via the `TAJEER_REAL_SMOKE_ENABLED` gate).
+- **Tests**: **279 green** across 5 test projects (Adapters.Common 20, Adapters.Tajeer 66, Infrastructure 17, Application 113, Bff 63). Run via `dotnet test --filter "Category!=Smoke&Category!=Integration"`. Plus 5 `Category=Integration` RLS tests gated on local SQL only.
 - **Merged PRs since checkpoint `35ecbae`**: #1–#10 (Week-1 stabilisation / governance / scaffold / seed). #11 (ai_context refresh), #12 (Inspection aggregate), #13 (Day-18 CHECK_OUT → Lease link), #14 (Day-19 check-in saga local close), #15 (Tajeer Calculate + Close saga), #16 (Day-20 Extend + Suspend), #17 (Day-21 Incident aggregate), #18 (ai_context refresh).
 - **Active aggregates**: Lease, Customer, Vehicle, Driver, Branch, RentPolicy, ExtendedCoverage, WebhookLog, Inspection (+ children), Incident.
 - **`ITajeerContractClient` surface**: `SaveAsync`, `CalculatePaymentAsync`, `CloseAsync`, `ExtendAsync`, `SuspendAsync` (5 methods; all share the `SendAsync<TReq,TRes>` error-mapping spine). InMemory sibling honours per-method override factories for negative-path tests.
@@ -164,7 +164,7 @@ it first; update it after every meaningful change.
 - **EF migrations applied to local `AutoLeaseNet_Dev`** (latest): `20260529020317_Add_OutboxEvent` (this commit's), preceded by `20260529012701_Add_RLS_TenancyPolicy`, `20260528205440_Add_Incident_Aggregate`, `20260528131820_Add_Inspection_Aggregate`, `20260523163430_Add_Core_Aggregates`.
 - **Branch protection**: enforced on `main`. Direct push blocked; every change is `gh pr create` → `gh pr merge --squash --delete-branch`.
 - **Repo visibility**: public. L.G2/L.G3 closed at $0 cost.
-- **Current blocker profile**: no active code/CI blockers. Remaining external work: manual Tajeer Rabet staging exercise (needs creds + ngrok), Azure / Entra / Unifonic onboarding. **Phase-1 hardening sprint complete (Day-9 RLS + Outbox + Reconciliation).** Next session pivots to demo-unblocking: Customer Portal scaffold, ZATCA adapter (Week-4 critical path), Vehicle Replacement Saga (subscribes to `IncidentReportedDomainEvent`), Always Encrypted on PII (gated on Azure Key Vault or local-cert decision), `ITajeerContractClient.GetAsync` (turns the reconciliation stub into a real drift detector), RLS on Inspection child tables (Phase 2 backfill).
+- **Current blocker profile**: no active code/CI blockers. Remaining external work: manual Tajeer Rabet staging exercise (needs creds + ngrok), Azure / Entra / Unifonic onboarding. Phase-1 hardening sprint done; first demo-unblocking slice (Customer Portal scaffold) shipped. Carry-forward: ZATCA adapter (Week-4 critical path), `ITajeerContractClient.GetAsync` (turns reconciliation stub into real drift detector), Vehicle Replacement Saga (subscribes to `IncidentReportedDomainEvent`), Customer Portal — My Vehicles / Lease detail (needs `/me/vehicles` endpoint or RLS extension), `BffTestHostDefaults` shared config helper (three retros have asked), Always Encrypted on PII (gated on Azure Key Vault or local-cert), drop `continue-on-error: true` from JS CI typecheck+build (both portals now build cleanly), RLS on Inspection child tables (Phase 2 backfill).
 
 ## TODOs — in priority order
 
@@ -440,6 +440,27 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
    IS red — see TODO #1.
 
 ## Last updated
+
+2026-05-29 — Customer Portal scaffold shipped. First demo-unblocking slice
+after the Phase-1 hardening sprint. **Backend**: new `Application.Me`
+namespace + `GetMyLeasesQuery` + `MyLeaseDto`; `Infrastructure.Me`
+`GetMyLeasesQueryHandler` (trusts Day-9 RLS for CustomerId scoping — no
+app-side WHERE); endpoint `GET /api/v1/me/leases` (group:
+`MeEndpoints.MapMeEndpoints`). 3 endpoint tests cover anonymous→401,
+internal-staff-without-customer→400 `me.requires_customer_context`, and
+external-customer→200 lease list. **Frontend (customer-portal)**:
+Tailwind + brand palette + LocaleProvider + AR/EN dictionaries (with status
+labels for all 7 LeaseStatus values), typed BFF client always sending
+`X-Dev-User-Type=EXTERNAL_INDIVIDUAL` + `X-Dev-Customer-Id`, app shell with
+Dashboard / My Leases + AR/EN toggle + signed-in-as ribbon + amber dev
+banner, dashboard with 3 stat cards (total/active/closed) + CTA, leases
+table with status badges and dates. Demo customer hardcoded in
+`lib/dev-customer.ts` (id `cc368b8b-...`; env-overridable). **Adjacent fix**:
+removed `as const` from BOTH portals' `messagesEn` — silently fixed a
+type-narrowing bug that had been making web-portal build fail under
+`continue-on-error: true` in CI. Both portals build green now (web-portal:
+8 routes; customer-portal: 3 routes). **279 tests green** (+3 MeEndpoint).
+First PR in the post-hardening "demo-unblocking" arc.
 
 2026-05-29 — Reconciliation BackgroundService skeleton shipped. **Phase-1
 hardening sprint complete** (Day-9 RLS + Outbox + Reconciliation, three PRs).
