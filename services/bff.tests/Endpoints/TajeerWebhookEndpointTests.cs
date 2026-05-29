@@ -4,8 +4,8 @@ using System.Text;
 using System.Text.Json;
 using AutoLeaseNet.Adapters.Tajeer.Contracts;
 using AutoLeaseNet.Adapters.Tajeer.InMemory.Contracts;
+using AutoLeaseNet.Bff.Tests.Support;
 using AutoLeaseNet.Domain.Leases;
-using AutoLeaseNet.Infrastructure;
 using AutoLeaseNet.Infrastructure.Persistence;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
@@ -268,33 +268,19 @@ internal sealed class WebhookFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
-
         builder.ConfigureAppConfiguration((_, config) =>
         {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:AutoLeaseNet"] = "Server=ignored;Database=ignored;",
-                ["Tajeer:BaseUrl"] = "https://tajeer-stg.api.elm.sa",
-                ["Tajeer:IssuanceUrlBase"] = "https://tajeerstg.logisti.sa",
-                ["Tajeer:AppId"] = "test-app",
-                ["Tajeer:AppKey"] = "test-key",
-                ["Tajeer:AuthorizationToken"] = "Basic test",
-                ["Tajeer:BranchId"] = "1",
-                ["Tajeer:TimeoutSeconds"] = "10",
-                ["Tajeer:WebhookSharedSecret"] = "test-webhook-secret-day6",
-                ["Tajeer:Webhook:LogOnly"] = _logOnly ? "true" : "false",
-                ["Tajeer:Mode"] = "InMemory",
-                ["Outbox:Enabled"] = "false",
-                ["Reconciliation:Enabled"] = "false",
-                // Empty seed avoids dropping 200+ rows into webhook tests.
-                ["Seed:Mode"] = "Empty",
-            });
+            var settings = BffTestHostDefaults.Defaults();
+            // Webhook tests sign payloads with this exact secret; override the default.
+            settings["Tajeer:WebhookSharedSecret"] = "test-webhook-secret-day6";
+            settings["Tajeer:Webhook:LogOnly"] = _logOnly ? "true" : "false";
+            // Empty seed avoids dropping 200+ rows into webhook tests (already the default).
+            config.AddInMemoryCollection(settings);
         });
 
         builder.ConfigureTestServices(services =>
         {
-            services.RemoveAll<DbContextOptions<AutoLeaseNetDbContext>>();
-            services.AddAutoLeaseNetDbContext(opt => opt.UseInMemoryDatabase(databaseName: _dbName));
+            BffTestHostDefaults.ReplaceDbContextWithInMemory(services, _dbName);
 
             // Provide a no-op ITajeerContractClient so DI resolves cleanly.
             services.RemoveAll<ITajeerContractClient>();

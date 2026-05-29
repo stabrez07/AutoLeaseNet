@@ -1,4 +1,5 @@
 using AutoLeaseNet.Bff.Authentication;
+using AutoLeaseNet.Bff.Tests.Support;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -53,18 +54,13 @@ public sealed class DevJwtStubProductionGuardTests
             // AddDevJwtStub doesn't throw in Staging.
             builder.ConfigureAppConfiguration((_, config) =>
             {
-                config.AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["ConnectionStrings:AutoLeaseNet"] = "Server=ignored;Database=ignored;TrustServerCertificate=true;Encrypt=false",
-                    ["Tajeer:BaseUrl"] = "https://tajeer-stg.api.elm.sa",
-                    ["Tajeer:IssuanceUrlBase"] = "https://tajeerstg.logisti.sa",
-                    ["Tajeer:AppId"] = "staging-test-app",
-                    ["Tajeer:AppKey"] = "staging-test-key",
-                    ["Tajeer:AuthorizationToken"] = "Basic staging-test",
-                    ["Tajeer:BranchId"] = "1",
-                    ["Tajeer:WebhookSharedSecret"] = "staging-test-secret",
-                    ["Tajeer:Mode"] = "InMemory",
-                });
+                var settings = BffTestHostDefaults.Defaults();
+                // Make the staging credentials visibly distinct from dev placeholders.
+                settings["Tajeer:AppId"] = "staging-test-app";
+                settings["Tajeer:AppKey"] = "staging-test-key";
+                settings["Tajeer:AuthorizationToken"] = "Basic staging-test";
+                settings["Tajeer:WebhookSharedSecret"] = "staging-test-secret";
+                config.AddInMemoryCollection(settings);
             });
         }
     }

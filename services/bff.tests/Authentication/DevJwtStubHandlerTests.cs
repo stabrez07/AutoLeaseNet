@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using AutoLeaseNet.Bff.Tests.Support;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -123,23 +124,6 @@ public sealed class DevWebApplicationFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Development");
         builder.ConfigureAppConfiguration((_, config) =>
-        {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:AutoLeaseNet"] = "Server=ignored;Database=ignored;",
-                ["Tajeer:BaseUrl"] = "https://tajeer-stg.api.elm.sa",
-                ["Tajeer:IssuanceUrlBase"] = "https://tajeerstg.logisti.sa",
-                ["Tajeer:AppId"] = "test-app",
-                ["Tajeer:AppKey"] = "test-key",
-                ["Tajeer:AuthorizationToken"] = "Basic test",
-                ["Tajeer:BranchId"] = "1",
-                ["Tajeer:TimeoutSeconds"] = "10",
-                ["Tajeer:WebhookSharedSecret"] = "test-secret",
-                ["Tajeer:Mode"] = "InMemory",
-                ["Outbox:Enabled"] = "false",
-                ["Reconciliation:Enabled"] = "false",
-                ["Seed:Mode"] = "Empty",
-            });
-        });
+            config.AddInMemoryCollection(BffTestHostDefaults.Defaults()));
     }
 }

@@ -2,8 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AutoLeaseNet.Bff.Endpoints;
+using AutoLeaseNet.Bff.Tests.Support;
 using AutoLeaseNet.Domain.Operations;
-using AutoLeaseNet.Infrastructure;
 using AutoLeaseNet.Infrastructure.Persistence;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
@@ -12,7 +12,6 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace AutoLeaseNet.Bff.Tests.Endpoints;
@@ -255,33 +254,9 @@ internal sealed class IncidentFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
-
         builder.ConfigureAppConfiguration((_, config) =>
-        {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:AutoLeaseNet"] = "Server=replaced-by-in-memory;Database=ignored;",
-                ["Tajeer:BaseUrl"] = "https://tajeer-stg.api.elm.sa",
-                ["Tajeer:IssuanceUrlBase"] = "https://tajeerstg.logisti.sa",
-                ["Tajeer:AppId"] = "test-app",
-                ["Tajeer:AppKey"] = "test-key",
-                ["Tajeer:AuthorizationToken"] = "Basic test",
-                ["Tajeer:BranchId"] = "1",
-                ["Tajeer:TimeoutSeconds"] = "10",
-                ["Tajeer:WebhookSharedSecret"] = "test-secret",
-                ["Tajeer:Mode"] = "InMemory",
-                ["Outbox:Enabled"] = "false",
-                ["Reconciliation:Enabled"] = "false",
-                ["Seed:Mode"] = "Demo",
-                ["Seed:TenantId"] = SeededTenantId.ToString(),
-                ["Seed:RandomSeed"] = "20260528",
-            });
-        });
-
+            config.AddInMemoryCollection(BffTestHostDefaults.DemoSeedDefaults(SeededTenantId, "20260528")));
         builder.ConfigureTestServices(services =>
-        {
-            services.RemoveAll<DbContextOptions<AutoLeaseNetDbContext>>();
-            services.AddAutoLeaseNetDbContext(opt => opt.UseInMemoryDatabase(databaseName: _dbName));
-        });
+            BffTestHostDefaults.ReplaceDbContextWithInMemory(services, _dbName));
     }
 }

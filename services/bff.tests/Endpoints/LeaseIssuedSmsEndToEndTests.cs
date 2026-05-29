@@ -7,9 +7,9 @@ using AutoLeaseNet.Adapters.Tajeer.Contracts;
 using AutoLeaseNet.Adapters.Tajeer.InMemory.Contracts;
 using AutoLeaseNet.Application.Leases.Notifications;
 using AutoLeaseNet.Application.Ports.Messaging;
+using AutoLeaseNet.Bff.Tests.Support;
 using AutoLeaseNet.Domain.Customers;
 using AutoLeaseNet.Domain.Leases;
-using AutoLeaseNet.Infrastructure;
 using AutoLeaseNet.Infrastructure.Persistence;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
@@ -205,35 +205,21 @@ internal sealed class SmsE2EFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
-
         builder.ConfigureAppConfiguration((_, config) =>
         {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:AutoLeaseNet"] = "Server=ignored;Database=ignored;",
-                ["Tajeer:BaseUrl"] = "https://tajeer-stg.api.elm.sa",
-                ["Tajeer:IssuanceUrlBase"] = "https://tajeerstg.logisti.sa",
-                ["Tajeer:AppId"] = "test-app",
-                ["Tajeer:AppKey"] = "test-key",
-                ["Tajeer:AuthorizationToken"] = "Basic test",
-                ["Tajeer:BranchId"] = "1",
-                ["Tajeer:TimeoutSeconds"] = "10",
-                ["Tajeer:WebhookSharedSecret"] = "test-webhook-secret-day7",
-                ["Tajeer:Webhook:LogOnly"] = "false",
-                ["Tajeer:Mode"] = "InMemory",
-                // SMS is dispatched by the OutboxDrainService now (post-Outbox workstream).
-                // Drain runs at 1s interval here so the test only waits a moment.
-                ["Outbox:Enabled"] = "true",
-                ["Outbox:DrainIntervalSeconds"] = "1",
-                ["Reconciliation:Enabled"] = "false",
-                ["Seed:Mode"] = "Empty",
-            });
+            var settings = BffTestHostDefaults.Defaults();
+            settings["Tajeer:WebhookSharedSecret"] = "test-webhook-secret-day7";
+            settings["Tajeer:Webhook:LogOnly"] = "false";
+            // SMS is dispatched by the OutboxDrainService now (post-Outbox workstream).
+            // Drain runs at 1s interval here so the test only waits a moment.
+            settings["Outbox:Enabled"] = "true";
+            settings["Outbox:DrainIntervalSeconds"] = "1";
+            config.AddInMemoryCollection(settings);
         });
 
         builder.ConfigureTestServices(services =>
         {
-            services.RemoveAll<DbContextOptions<AutoLeaseNetDbContext>>();
-            services.AddAutoLeaseNetDbContext(opt => opt.UseInMemoryDatabase(databaseName: _dbName));
+            BffTestHostDefaults.ReplaceDbContextWithInMemory(services, _dbName);
 
             services.RemoveAll<ITajeerContractClient>();
             services.RemoveAll<InMemoryTajeerContractClient>();

@@ -441,6 +441,28 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
 
 ## Last updated
 
+2026-05-29 — Tech-debt sweep: `BffTestHostDefaults` extracted + CI strict
+mode enabled. Closes the FIVE-retros-in-a-row complaint that every new BFF
+endpoint workstream copies the same ~30-line `ConfigureWebHost` block.
+**New helper**: `services/bff.tests/Support/BffTestHostDefaults.cs` exposes
+`Defaults()` (the 13 always-shared keys, Seed:Mode=Empty), `DemoSeedDefaults
+(tenantId, randomSeed)` (Defaults + Seed:Mode=Demo + the three seeder keys),
+and `ReplaceDbContextWithInMemory(services, dbName)` (the standard EF
+InMemory swap ceremony). Per-factory overrides are now `var settings = …; 
+settings["X"] = "y";`. **13 factories retrofitted** across 11 files:
+MeFactory, MyVehiclesFactory, IncidentFactory, InspectionFactory,
+CheckInFactory, ExtendSuspendFactory, SaveContractEndpointFactory,
+WebhookFactory, SmsE2EFactory, HealthTestFactory, BrokenSqlHealthTestFactory,
+DevWebApplicationFactory, EnvironmentWebApplicationFactory. Each
+`ConfigureWebHost` shrank from ~30 to ~6–10 lines; net `-230` lines across
+the test project. Pure refactor: 337 tests still green, no behavioural
+change. **CI strict mode**: `.github/workflows/ci.yml` dropped
+`continue-on-error: true` from JS Typecheck + Build steps (kept on Lint +
+Test which are still skeletal). Both portals strict-typecheck + build
+cleanly locally (verified pre-flight). Carry-forward updated:
+`BffTestSeedWaiter` (the next-biggest factory copy-paste pattern) is now
+the top tech-debt item; ZATCA adapter still Week-4 critical path.
+
 2026-05-29 — Customer Portal **My Vehicles** shipped end-to-end. Second
 demo-unblocking slice (after PR #22 scaffold). **Backend**:
 `Application.Me.GetMyVehiclesQuery` + `MyVehicleDto`;

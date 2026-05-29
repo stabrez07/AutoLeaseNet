@@ -62,10 +62,15 @@ jobs:
           retention-days: 14
 
   # ─────────────────────────────────────────────────────────────────────────
-  # JS / pnpm — apps are skeletal until design.md from user lands.
-  # continue-on-error: true on lint/typecheck/test/build until then.
+  # JS / pnpm — both portals build cleanly as of PRs #22 / #24, so Typecheck
+  # and Build are now blocking. Lint + Test stay best-effort: the lint config
+  # is still skeletal until design.md lands, and pnpm test has no real test
+  # infra yet on either portal.
   # ─────────────────────────────────────────────────────────────────────────
   js:
+    # Display name preserved verbatim so the branch-protection required-check
+    # binding from earlier PRs still matches. "best-effort" now only applies to
+    # the two remaining `continue-on-error: true` steps below (Lint + Test).
     name: JS (lint + typecheck + test + build) — best-effort until UI lands
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -90,7 +95,6 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
-        continue-on-error: true
 
       - name: Test
         run: pnpm test
@@ -98,7 +102,6 @@ jobs:
 
       - name: Build
         run: pnpm build
-        continue-on-error: true
 
   # ─────────────────────────────────────────────────────────────────────────
   # Tajeer staging smoke — calls real Tajeer Rabet staging from CI.
