@@ -18,6 +18,20 @@ export interface MyLease {
   totalAmount: number | null
 }
 
+export interface MyVehicle {
+  id: string
+  plateNumber: string
+  plateLetters: string
+  plateTypeCode: number
+  make: string
+  model: string
+  modelYear: number
+  color: string | null
+  currentKm: number
+  licenseExpiryDate: string | null  // ISO date (yyyy-MM-dd)
+  insuranceExpiryDate: string | null
+}
+
 export interface ProblemDetails {
   title?: string
   detail?: string
@@ -60,6 +74,10 @@ class CustomerBffClient {
 
   getMyLeases() {
     return this.getJson<MyLease[]>('/api/v1/me/leases')
+  }
+
+  getMyVehicles() {
+    return this.getJson<MyVehicle[]>('/api/v1/me/vehicles')
   }
 }
 

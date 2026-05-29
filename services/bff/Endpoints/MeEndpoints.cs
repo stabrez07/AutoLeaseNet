@@ -38,6 +38,24 @@ public static class MeEndpoints
         .WithName("GetMyLeases")
         .WithSummary("Leases visible to the current authenticated customer (RLS-scoped).");
 
+        group.MapGet("/vehicles", async (IMediator mediator, CancellationToken ct) =>
+        {
+            try
+            {
+                var result = await mediator.Send(new GetMyVehiclesQuery(), ct);
+                return Results.Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(
+                    title: "me.requires_customer_context",
+                    detail: ex.Message,
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+        })
+        .WithName("GetMyVehicles")
+        .WithSummary("Vehicles the current authenticated customer currently has (Active/Extended/Suspended leases).");
+
         return group;
     }
 }
