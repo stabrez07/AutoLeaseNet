@@ -4,6 +4,7 @@ using AutoLeaseNet.Domain.Drivers;
 using AutoLeaseNet.Domain.ExtendedCoverages;
 using AutoLeaseNet.Domain.Leases;
 using AutoLeaseNet.Domain.Operations;
+using AutoLeaseNet.Domain.Outbox;
 using AutoLeaseNet.Domain.RentPolicies;
 using AutoLeaseNet.Domain.Vehicles;
 using AutoLeaseNet.Domain.Webhooks;
@@ -30,6 +31,7 @@ public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> optio
     public DbSet<InspectionPhoto> InspectionPhotos => Set<InspectionPhoto>();
     public DbSet<InspectionDamageMarker> InspectionDamageMarkers => Set<InspectionDamageMarker>();
     public DbSet<Incident> Incidents => Set<Incident>();
+    public DbSet<OutboxEvent> OutboxEvents => Set<OutboxEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

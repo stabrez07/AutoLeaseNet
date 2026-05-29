@@ -69,14 +69,17 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configureProvider);
 
-        services.TryAddScoped<DomainEventDispatchInterceptor>();
+        // OutboxWriteInterceptor replaced DomainEventDispatchInterceptor on 2026-05-29
+        // (workstream: 2026-05-29-outbox-drain). Capture runs in the same UoW as the
+        // business change; async dispatch is now OutboxDrainService's job.
+        services.TryAddScoped<OutboxWriteInterceptor>();
         services.TryAddScoped<TenancyConnectionInterceptor>();
 
         services.AddDbContext<AutoLeaseNetDbContext>((sp, opt) =>
         {
             configureProvider(opt);
             opt.AddInterceptors(
-                sp.GetRequiredService<DomainEventDispatchInterceptor>(),
+                sp.GetRequiredService<OutboxWriteInterceptor>(),
                 sp.GetRequiredService<TenancyConnectionInterceptor>());
         });
 

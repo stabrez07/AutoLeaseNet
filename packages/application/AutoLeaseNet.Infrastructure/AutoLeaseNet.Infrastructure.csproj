@@ -35,4 +35,8 @@
     <PackageReference Include="MediatR" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="AutoLeaseNet.Infrastructure.Tests" />
+  </ItemGroup>
+
 </Project>
