@@ -284,6 +284,7 @@ internal sealed class WebhookFactory : WebApplicationFactory<Program>
                 ["Tajeer:WebhookSharedSecret"] = "test-webhook-secret-day6",
                 ["Tajeer:Webhook:LogOnly"] = _logOnly ? "true" : "false",
                 ["Tajeer:Mode"] = "InMemory",
+                ["Outbox:Enabled"] = "false",
                 // Empty seed avoids dropping 200+ rows into webhook tests.
                 ["Seed:Mode"] = "Empty",
             });

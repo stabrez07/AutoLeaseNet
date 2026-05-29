@@ -66,6 +66,9 @@ public sealed class LeaseIssuedSmsEndToEndTests
         var reread = await db.Leases.AsNoTracking().SingleAsync(l => l.Id == lease.Id);
         reread.Status.Should().Be(LeaseStatus.Active);
 
+        // Post-Outbox: SMS dispatch is asynchronous via the drain. Wait up to 5s.
+        await WaitForAsync(() => factory.Sms.Sent.Count == 1, TimeSpan.FromSeconds(5));
+
         factory.Sms.Sent.Should().HaveCount(1, because: "one issuance event = one SMS dispatch");
         var sms = factory.Sms.Sent.Single();
         sms.ToE164.Should().Be("+966501239876");
@@ -102,7 +105,22 @@ public sealed class LeaseIssuedSmsEndToEndTests
         var reread = await db.Leases.AsNoTracking().SingleAsync(l => l.Id == lease.Id);
         reread.Status.Should().Be(LeaseStatus.Active);
 
+        // Even when the handler decides not to send (no customer), let the drain finish
+        // its cycle so the OutboxEvent row is observably ProcessedAtUtc-set.
+        await WaitForAsync(() => db.OutboxEvents.AsNoTracking()
+            .Any(o => o.ProcessedAtUtc != null), TimeSpan.FromSeconds(5));
+
         factory.Sms.Sent.Should().BeEmpty(because: "no customer reference on the lease means no SMS recipient");
+    }
+
+    private static async Task WaitForAsync(Func<bool> predicate, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (predicate()) return;
+            await Task.Delay(100);
+        }
     }
 }
 
@@ -203,6 +221,10 @@ internal sealed class SmsE2EFactory : WebApplicationFactory<Program>
                 ["Tajeer:WebhookSharedSecret"] = "test-webhook-secret-day7",
                 ["Tajeer:Webhook:LogOnly"] = "false",
                 ["Tajeer:Mode"] = "InMemory",
+                // SMS is dispatched by the OutboxDrainService now (post-Outbox workstream).
+                // Drain runs at 1s interval here so the test only waits a moment.
+                ["Outbox:Enabled"] = "true",
+                ["Outbox:DrainIntervalSeconds"] = "1",
                 ["Seed:Mode"] = "Empty",
             });
         });

@@ -264,6 +264,7 @@ public sealed class SaveContractEndpointFactory : WebApplicationFactory<Program>
                 ["Tajeer:TimeoutSeconds"] = "10",
                 ["Tajeer:WebhookSharedSecret"] = "test-secret",
                 ["Tajeer:Mode"] = "InMemory",
+                ["Outbox:Enabled"] = "false",
                 ["Seed:Mode"] = "Demo",
                 ["Seed:TenantId"] = SeededTenantId.ToString(),
                 ["Seed:RandomSeed"] = "20260524",
