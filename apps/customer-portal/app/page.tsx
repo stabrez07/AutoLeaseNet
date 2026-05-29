@@ -46,8 +46,9 @@ export default function DashboardPage() {
   }
 
   const total = leases.length
-  const active = leases.filter((l) => l.status === 2 || l.status === 3).length
-  const closed = leases.filter((l) => l.status === 5).length
+  // LeaseStatus: 3=Active, 4=Extended, 6=Closed.
+  const active = leases.filter((l) => l.status === 3 || l.status === 4).length
+  const closed = leases.filter((l) => l.status === 6).length
   const driving = vehicles.length
 
   return (

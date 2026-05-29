@@ -441,6 +441,33 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
 
 ## Last updated
 
+2026-05-29 — Customer Portal **Lease detail** page shipped end-to-end.
+Third demo-unblocking slice; leases list no longer a dead-end. **Backend**:
+`Application.Me.GetMyLeaseDetailQuery(Guid LeaseId)` + `MyLeaseDetailDto`
+(contract terms + full payment block + lifecycle timeline + reason codes) +
+nested `LeaseVehicleSummaryDto`; `Infrastructure.Me.GetMyLeaseDetailQuery
+Handler` — same two-step trust shape as `GetMyVehicles`: lease read with
+explicit CustomerId predicate under natural scope, then a bounded
+`SystemTenancyScope.For(tenantId)` block iff `VehicleId != null` for the
+vehicle read; returns `null` for "not visible" so the endpoint maps to 404
+without distinguishing "doesn't exist" from "not yours". Endpoint:
+`GET /api/v1/me/leases/{id:guid}` in `MeEndpoints.cs`. **Frontend**:
+`app/leases/[id]/page.tsx` — four card sections (contract / vehicle /
+payment / timeline) + friendly not-found state + back link; `app/leases/
+page.tsx` contract number cell wrapped in `<Link>` for drill-in; AR+EN
+i18n for `leaseDetail.*`. **Adjacent fix**: PR #22's customer-portal
+`LeaseStatus` code map was off-by-one against
+`Domain/Leases/LeaseStatus.cs` (i18n said `2: Active`, actual enum has
+`Active=3`); dashboard "Active" filter actually counted "PendingIssuance
++ Active"; `statusTone` had the same shift. Fixed across `i18n.ts`,
+`app/page.tsx`, `components/ui.tsx` with anchoring comments citing the
+enum file. **Tests**: 344 total green (+7: 3 endpoint, 4 handler).
+customer-portal build: 5 routes (added dynamic `/leases/[id]`).
+Carry-forward: `BffTestSeedWaiter` extract (third retro now flagging it),
+Vehicle detail page, ZATCA adapter (Week-4 critical), close-saga refactor
+→ TajeerStatusMapper, Vehicle Replacement Saga, Phase-2 Vehicles RLS
+extension, Always Encrypted on PII.
+
 2026-05-29 — Tech-debt sweep: `BffTestHostDefaults` extracted + CI strict
 mode enabled. Closes the FIVE-retros-in-a-row complaint that every new BFF
 endpoint workstream copies the same ~30-line `ConfigureWebHost` block.
