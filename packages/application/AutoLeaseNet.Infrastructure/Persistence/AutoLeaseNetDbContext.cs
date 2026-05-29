@@ -8,6 +8,7 @@ using AutoLeaseNet.Domain.Outbox;
 using AutoLeaseNet.Domain.RentPolicies;
 using AutoLeaseNet.Domain.Vehicles;
 using AutoLeaseNet.Domain.Webhooks;
+using AutoLeaseNet.Domain.Zatca;
 using Microsoft.EntityFrameworkCore;
 
 namespace AutoLeaseNet.Infrastructure.Persistence;
@@ -32,6 +33,7 @@ public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> optio
     public DbSet<InspectionDamageMarker> InspectionDamageMarkers => Set<InspectionDamageMarker>();
     public DbSet<Incident> Incidents => Set<Incident>();
     public DbSet<OutboxEvent> OutboxEvents => Set<OutboxEvent>();
+    public DbSet<ZatcaChainState> ZatcaChainStates => Set<ZatcaChainState>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

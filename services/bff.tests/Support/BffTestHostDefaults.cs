@@ -52,6 +52,12 @@ public static class BffTestHostDefaults
             ["Tajeer:TimeoutSeconds"] = "10",
             ["Tajeer:WebhookSharedSecret"] = DefaultWebhookSharedSecret,
             ["Tajeer:Mode"] = "InMemory",
+            // ZATCA Phase-1 — every BFF test host runs against the in-memory fake.
+            // Required fields per [ZatcaOptions] data annotations: BaseUrl + AuthorizationToken.
+            ["Zatca:BaseUrl"] = "https://gw-fatoora-sandbox.example/clearance",
+            ["Zatca:Environment"] = "Sandbox",
+            ["Zatca:AuthorizationToken"] = "Bearer test",
+            ["Zatca:Mode"] = "InMemory",
             ["Outbox:Enabled"] = "false",
             ["Reconciliation:Enabled"] = "false",
             ["Seed:Mode"] = "Empty",

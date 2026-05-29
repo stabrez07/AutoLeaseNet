@@ -11,6 +11,8 @@ using AutoLeaseNet.Adapters.Sms.InMemory;
 using AutoLeaseNet.Adapters.Tajeer;
 using AutoLeaseNet.Adapters.Tajeer.Configuration;
 using AutoLeaseNet.Adapters.Tajeer.InMemory;
+using AutoLeaseNet.Adapters.Zatca.Configuration;
+using AutoLeaseNet.Adapters.Zatca.InMemory;
 using AutoLeaseNet.Application.Leases;
 using AutoLeaseNet.Application.Ports.Seeding;
 using AutoLeaseNet.Application.Ports.Tenancy;
@@ -33,7 +35,8 @@ builder.Services.AddSwaggerGen();
 var readyTags = new[] { "ready" };
 builder.Services
     .AddHealthChecks()
-    .AddCheck<SqlHealthCheck>("sql", tags: readyTags);
+    .AddCheck<SqlHealthCheck>("sql", tags: readyTags)
+    .AddCheck<ZatcaHealthCheck>("zatca", tags: readyTags);
 
 // === Authentication ===
 // Phase 1: DevJwtStubHandler (header-based, dev/CI/staging only).
@@ -88,6 +91,9 @@ builder.Services.AddMediatR(cfg =>
 // AddTajeerWithModeSwitch wires the named HttpClient + auth + resilience and then,
 // based on Tajeer:Mode (Real | InMemory), binds ITajeerContractClient to the right impl.
 builder.Services.AddTajeerWithModeSwitch(builder.Configuration.GetSection(TajeerOptions.SectionName));
+// ZATCA Phase-1 wires the shape only — the Real client is a clear-error stub until the Week-4
+// UBL+ECDSA+TLV workstream lands. Default Zatca:Mode=InMemory in dev keeps the demo path green.
+builder.Services.AddZatcaWithModeSwitch(builder.Configuration.GetSection(ZatcaOptions.SectionName));
 builder.Services.AddInMemoryCache();
 builder.Services.AddInMemorySms();
 builder.Services.AddSeed(builder.Configuration.GetSection(SeedOptions.SectionName));

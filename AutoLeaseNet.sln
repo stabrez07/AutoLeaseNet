@@ -61,6 +61,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AutoLeaseNet.Application.Te
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AutoLeaseNet.Adapters.Seed", "packages\adapters\AutoLeaseNet.Adapters.Seed\AutoLeaseNet.Adapters.Seed.csproj", "{928C1957-26A0-4B88-9400-9498CE105223}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AutoLeaseNet.Adapters.Zatca.Tests", "packages\adapters\AutoLeaseNet.Adapters.Zatca.Tests\AutoLeaseNet.Adapters.Zatca.Tests.csproj", "{0106E874-7D06-4F49-A424-C8B6791A9004}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -170,6 +172,10 @@ Global
 		{928C1957-26A0-4B88-9400-9498CE105223}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{928C1957-26A0-4B88-9400-9498CE105223}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{928C1957-26A0-4B88-9400-9498CE105223}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0106E874-7D06-4F49-A424-C8B6791A9004}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0106E874-7D06-4F49-A424-C8B6791A9004}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0106E874-7D06-4F49-A424-C8B6791A9004}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0106E874-7D06-4F49-A424-C8B6791A9004}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{22BA1119-1936-496F-A40B-688C7CA8C50C} = {F69F8B83-FEBF-4FB4-B3D4-67F924A2C429}
@@ -199,5 +205,6 @@ Global
 		{FCB9D85E-7F6F-458C-B4EB-290E2ED89140} = {22BA1119-1936-496F-A40B-688C7CA8C50C}
 		{295EEE64-17A2-446C-AB72-309E47AD1ABD} = {22BA1119-1936-496F-A40B-688C7CA8C50C}
 		{928C1957-26A0-4B88-9400-9498CE105223} = {86198745-49E5-4304-A227-65F84C88447C}
+		{0106E874-7D06-4F49-A424-C8B6791A9004} = {86198745-49E5-4304-A227-65F84C88447C}
 	EndGlobalSection
 EndGlobal
