@@ -59,9 +59,14 @@ if (builder.Environment.IsDevelopment())
     });
 }
 
-// === Tenancy (ITenantContext resolved from current request claims) ===
+// === Tenancy (ITenantContext + ITenancyAccessor resolved from current request claims) ===
+// ITenantContext throws when no tenant is in scope — Application/Domain handlers depend on it.
+// ITenancyAccessor returns null on anonymous requests and honours SystemTenancyScope first —
+// the connection interceptor uses it to set SQL SESSION_CONTEXT for RLS without breaking
+// the anonymous webhook path or the demo seeder.
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, ClaimsTenantContext>();
+builder.Services.AddScoped<ITenancyAccessor, ClaimsAndSystemTenancyAccessor>();
 
 // === Application & Infrastructure ===
 builder.Services.AddAutoLeaseNetInfrastructure(builder.Configuration);
@@ -85,10 +90,18 @@ var app = builder.Build();
 
 // C7 — Demo / Dev seeding hook. Runs once on startup; the seeder itself short-circuits
 // if rows already exist for the configured tenant.
+//
+// The SystemTenancyScope.For(seeder.TenantId) is *required* once RLS is on: without it
+// the connection interceptor would skip SESSION_CONTEXT (no HTTP request, no claims),
+// the predicate would evaluate to false, and the seeder's newly-inserted rows would be
+// hidden from the very same transaction that inserted them — leading to bogus
+// "already seeded?" checks and broken startup. See workstream
+// Plans/workstreams/2026-05-29-day-9-rls-tenant-isolation/plan.md.
 if (app.Environment.IsDevelopment())
 {
     using var seedScope = app.Services.CreateScope();
     var seeder = seedScope.ServiceProvider.GetRequiredService<IDataSeeder>();
+    using var systemScope = SystemTenancyScope.For(seeder.TenantId);
     await seeder.SeedAsync(CancellationToken.None);
 }
 

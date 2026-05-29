@@ -3,6 +3,7 @@ using System.Text.Json;
 using AutoLeaseNet.Adapters.Tajeer.Configuration;
 using AutoLeaseNet.Adapters.Tajeer.Webhooks;
 using AutoLeaseNet.Application.Ports.Persistence;
+using AutoLeaseNet.Application.Ports.Tenancy;
 using AutoLeaseNet.Application.Ports.Time;
 using AutoLeaseNet.Domain.Webhooks;
 using Microsoft.AspNetCore.Builder;
@@ -54,6 +55,13 @@ public static class TajeerWebhookEndpoints
         ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
+        // Webhook is anonymous and must do a cross-tenant Lease lookup by contract
+        // number before any tenant is known. WEBHOOK_BOOTSTRAP is the predicate's
+        // explicit see-all override; Phase 2 retires this when webhook URLs encode
+        // tenant. Scope wraps the entire handler so the lookup + the WebhookLog +
+        // the lease.MarkIssued save all run on a connection with the bypass set.
+        using var systemScope = SystemTenancyScope.ForWebhookBootstrap();
+
         var logger = loggerFactory.CreateLogger("TajeerWebhook");
         var webhook = webhookOptions.Value;
         var nowUtc = clock.UtcNow;

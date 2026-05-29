@@ -70,11 +70,14 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configureProvider);
 
         services.TryAddScoped<DomainEventDispatchInterceptor>();
+        services.TryAddScoped<TenancyConnectionInterceptor>();
 
         services.AddDbContext<AutoLeaseNetDbContext>((sp, opt) =>
         {
             configureProvider(opt);
-            opt.AddInterceptors(sp.GetRequiredService<DomainEventDispatchInterceptor>());
+            opt.AddInterceptors(
+                sp.GetRequiredService<DomainEventDispatchInterceptor>(),
+                sp.GetRequiredService<TenancyConnectionInterceptor>());
         });
 
         return services;
