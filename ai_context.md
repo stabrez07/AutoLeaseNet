@@ -441,6 +441,35 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
 
 ## Last updated
 
+2026-05-29 — Tajeer `GetAsync` + real status-mirror drift detection shipped.
+Closes the gap left by PR #21 (reconciliation stub was log-only because the
+client had no read method). **Adapter surface**: new `GetContractResponse` DTO
+(lean projection — status code + reason codes + extensionCount + updatedAt);
+`ITajeerContractClient.GetAsync(long contractNumber)` returning
+`IntegrationResult<GetContractResponse>`. Real `TajeerContractClient.GetAsync`
+hits `/api/contracts/{contractNumber}` via a new `SendNoBodyAsync` overload of
+the failure-mapping spine; 404 maps to `tajeer.vendor.contract.not_found`
+(non-transient drift signal). `InMemoryTajeerContractClient.GetAsync` projects
+the most recent Save/Close/Suspend/Extend call back as a synthetic response;
+new `getFactory` ctor override + public `SeedProjection(...)` helper for
+drift-test wiring. **Status mapping centralised**: `TajeerStatusMapper.FromTajeer`
++ `ApplyLocalRefinements` in `Infrastructure/Tajeer/` per Spec 03 §7.2 / §1
+principle #10 (mapper lives in Infrastructure, not the adapter, because
+adapters here are kept Domain-free; the vendor codes live in the adapter DTOs,
+the translation to `LeaseStatus` lives one layer up). `InvalidTajeerStatusException`
+fires on unknown triples — caught by the reconciliation loop. **Reconciliation
+upgrade**: `TajeerStatusMirrorCheck` now takes `ITajeerContractClient`, walks
+Active+Extended leases with `TajeerContractNumber != null`, compares via the
+mapper, classifies each row as match / drift / vendor-failure-drift /
+transient-blip / unrecognised-state (warn on every drift, debug on match, debug
+on transient). Phase 1 is detect-only by design — auto-correcting risks masking
+missed webhooks (Phase 2 lands an action policy). **320 tests green** (was 279;
++12 mapper, +6 real GET, +9 InMemory GET, +5 mirror, plus subtractions in
+mirror retrofit). Carry-forward next: ZATCA adapter (Week-4 critical path),
+Customer Portal — My Vehicles via lease join, Vehicle Replacement Saga,
+`BffTestHostDefaults` shared helper (4 retros now), drop `continue-on-error`
+from JS CI.
+
 2026-05-29 — Customer Portal scaffold shipped. First demo-unblocking slice
 after the Phase-1 hardening sprint. **Backend**: new `Application.Me`
 namespace + `GetMyLeasesQuery` + `MyLeaseDto`; `Infrastructure.Me`
