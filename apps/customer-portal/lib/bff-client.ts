@@ -34,6 +34,29 @@ export interface MyVehicle {
   insuranceExpiryDate: string | null
 }
 
+export interface MyVehicleDetail {
+  id: string
+  plateNumber: string
+  plateLetters: string
+  plateTypeCode: number
+  make: string
+  model: string
+  modelYear: number
+  color: string | null
+  fuelTypeCode: number
+  transmissionTypeCode: number
+  bodyTypeCode: number
+  seats: number
+  currentKm: number
+  licenseExpiryDate: string | null
+  insuranceExpiryDate: string | null
+  inspectionExpiryDate: string | null
+  insuranceCompany: string | null
+  insurancePolicyNumber: string | null
+  nextServiceDueKm: number | null
+  nextServiceDueDate: string | null
+}
+
 export interface LeaseVehicleSummary {
   id: string
   plateNumber: string
@@ -129,6 +152,10 @@ class CustomerBffClient {
 
   getMyLeaseDetail(leaseId: string) {
     return this.getJson<MyLeaseDetail>(`/api/v1/me/leases/${encodeURIComponent(leaseId)}`)
+  }
+
+  getMyVehicleDetail(vehicleId: string) {
+    return this.getJson<MyVehicleDetail>(`/api/v1/me/vehicles/${encodeURIComponent(vehicleId)}`)
   }
 }
 

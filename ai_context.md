@@ -441,6 +441,30 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
 
 ## Last updated
 
+2026-05-29 — Customer Portal **Vehicle detail** page shipped end-to-end.
+Demo path now symmetric — both customer list pages have drill-ins.
+**Backend**: `Application.Me.GetMyVehicleDetailQuery(Guid VehicleId)` +
+`MyVehicleDetailDto` (plate triple + make/model/year + customer-visible
+identification / regulatory / service fields; VIN, engine number, branch,
+financial, telematics, notes intentionally omitted as operator-only);
+`Infrastructure.Me.GetMyVehicleDetailQueryHandler` — third handler with the
+established trust shape: lease-side `AnyAsync` EXISTS check (caller's
+customer has a lease in Active/Extended/Suspended on this vehicle id) gates
+the Vehicle read under a bounded `SystemTenancyScope.For(tenantId)`.
+Returns null → 404 for "not visible" matching the symmetry of
+`GetMyVehicles`'s currently-holding filter (Closed lease's vehicle is not
+visible — pinned by a dedicated test). Endpoint: `GET /api/v1/me/vehicles/
+{id:guid}` in `MeEndpoints.cs`. **Frontend**: `app/vehicles/[id]/page.tsx`
+— three card sections (identification / regulatory / service) + friendly
+not-found state + back link; `app/vehicles/page.tsx` plate cell wrapped
+in `<Link>` for drill-in; AR + EN i18n for `vehicleDetail.*`. **Tests**:
+351 total green (+7: 3 endpoint, 4 handler). customer-portal: 6 routes
+(added dynamic `/vehicles/[id]`). Carry-forward: `BffTestSeedWaiter`
+extract (FOUR retros asking), ZATCA adapter (Week-4 critical), Vehicle
+Replacement Saga, close-saga refactor → TajeerStatusMapper, Phase-2
+Vehicles RLS extension (now collapses THREE handlers when shipped),
+Always Encrypted on PII, next-intl + `[locale]` segments migration.
+
 2026-05-29 — Customer Portal **Lease detail** page shipped end-to-end.
 Third demo-unblocking slice; leases list no longer a dead-end. **Backend**:
 `Application.Me.GetMyLeaseDetailQuery(Guid LeaseId)` + `MyLeaseDetailDto`
