@@ -84,6 +84,7 @@ public sealed class HealthTestFactory : WebApplicationFactory<Program>
                 ["Tajeer:WebhookSharedSecret"] = "test-secret",
                 ["Tajeer:Mode"] = "InMemory",
                 ["Outbox:Enabled"] = "false",
+                ["Reconciliation:Enabled"] = "false",
                 ["Seed:Mode"] = "Empty",
             });
         });
@@ -113,6 +114,7 @@ public sealed class BrokenSqlHealthTestFactory : WebApplicationFactory<Program>
                 ["Tajeer:WebhookSharedSecret"] = "test-secret",
                 ["Tajeer:Mode"] = "InMemory",
                 ["Outbox:Enabled"] = "false",
+                ["Reconciliation:Enabled"] = "false",
                 ["Seed:Mode"] = "Empty",
             });
         });

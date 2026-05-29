@@ -21,6 +21,7 @@ using AutoLeaseNet.Bff.Middleware;
 using AutoLeaseNet.Bff.Tenancy;
 using AutoLeaseNet.Infrastructure;
 using AutoLeaseNet.Infrastructure.Outbox;
+using AutoLeaseNet.Infrastructure.Reconciliation;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -74,6 +75,8 @@ builder.Services.AddAutoLeaseNetInfrastructure(builder.Configuration);
 // Outbox capture-side is wired by AddAutoLeaseNetInfrastructure (interceptor registered
 // inside AddAutoLeaseNetDbContext); the drain BackgroundService + repository live here.
 builder.Services.AddOutbox(builder.Configuration.GetSection(OutboxOptions.SectionName));
+// Reconciliation: periodic drift-detection job (Phase-1 stub check: Tajeer status mirror).
+builder.Services.AddReconciliation(builder.Configuration.GetSection(ReconciliationOptions.SectionName));
 builder.Services.AddMediatR(cfg =>
 {
     cfg.RegisterServicesFromAssemblyContaining<SaveContractCommand>();
