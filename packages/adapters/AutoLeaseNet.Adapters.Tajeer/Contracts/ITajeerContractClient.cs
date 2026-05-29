@@ -73,4 +73,14 @@ public interface ITajeerContractClient
     Task<IntegrationResult<SuspendContractResponse>> SuspendAsync(
         SuspendContractRequest request,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Spec 03 §6.3 — read-only lookup of a contract's current state on Tajeer. Used by
+    /// the reconciliation drift detector to verify our local mirror matches the vendor's
+    /// view (CLAUDE.md §5 — Tajeer is system of record). Vendor 404 surfaces as
+    /// <c>tajeer.vendor.contract.not_found</c> rather than a transient failure.
+    /// </summary>
+    Task<IntegrationResult<GetContractResponse>> GetAsync(
+        long contractNumber,
+        CancellationToken ct = default);
 }

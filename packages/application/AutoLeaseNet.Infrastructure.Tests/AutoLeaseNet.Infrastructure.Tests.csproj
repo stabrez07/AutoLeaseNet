@@ -10,6 +10,8 @@
   <ItemGroup>
     <ProjectReference Include="..\AutoLeaseNet.Infrastructure\AutoLeaseNet.Infrastructure.csproj" />
     <ProjectReference Include="..\AutoLeaseNet.Application\AutoLeaseNet.Application.csproj" />
+    <ProjectReference Include="..\..\adapters\AutoLeaseNet.Adapters.Tajeer\AutoLeaseNet.Adapters.Tajeer.csproj" />
+    <ProjectReference Include="..\..\adapters\AutoLeaseNet.Adapters.Tajeer.InMemory\AutoLeaseNet.Adapters.Tajeer.InMemory.csproj" />
   </ItemGroup>
 
   <ItemGroup>

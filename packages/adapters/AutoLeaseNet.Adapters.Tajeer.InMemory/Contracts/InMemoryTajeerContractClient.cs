@@ -19,30 +19,39 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
     private readonly Func<CloseContractRequest, IntegrationResult<CloseContractResponse>>? _closeFactoryOverride;
     private readonly Func<ExtendContractRequest, IntegrationResult<ExtendContractResponse>>? _extendFactoryOverride;
     private readonly Func<SuspendContractRequest, IntegrationResult<SuspendContractResponse>>? _suspendFactoryOverride;
+    private readonly Func<long, IntegrationResult<GetContractResponse>>? _getFactoryOverride;
 
     private readonly List<SaveContractRequest> _saveCalls = new();
     private readonly List<CalculatePaymentRequest> _calculateCalls = new();
     private readonly List<CloseContractRequest> _closeCalls = new();
     private readonly List<ExtendContractRequest> _extendCalls = new();
     private readonly List<SuspendContractRequest> _suspendCalls = new();
+    private readonly List<long> _getCalls = new();
+
+    // Per-contract latest-status projection — what GetAsync derives its response from
+    // when no override is supplied. Updated by every state-changing call so a
+    // Save→Extend→Suspend sequence is reflected back on the next Get.
+    private readonly Dictionary<long, ContractProjection> _projection = new();
 
     /// <summary>
     /// Construct with optional per-method failure injections. Pass <c>null</c> (or omit) for
     /// any factory you want to leave on the default success path. The parameterless form
-    /// (<c>new InMemoryTajeerContractClient()</c>) keeps all three on defaults.
+    /// (<c>new InMemoryTajeerContractClient()</c>) keeps all factories on defaults.
     /// </summary>
     public InMemoryTajeerContractClient(
         Func<SaveContractRequest, IntegrationResult<SaveContractResponse>>? saveFactory = null,
         Func<CalculatePaymentRequest, IntegrationResult<CalculatePaymentResponse>>? calculateFactory = null,
         Func<CloseContractRequest, IntegrationResult<CloseContractResponse>>? closeFactory = null,
         Func<ExtendContractRequest, IntegrationResult<ExtendContractResponse>>? extendFactory = null,
-        Func<SuspendContractRequest, IntegrationResult<SuspendContractResponse>>? suspendFactory = null)
+        Func<SuspendContractRequest, IntegrationResult<SuspendContractResponse>>? suspendFactory = null,
+        Func<long, IntegrationResult<GetContractResponse>>? getFactory = null)
     {
         _saveFactoryOverride = saveFactory;
         _calculateFactoryOverride = calculateFactory;
         _closeFactoryOverride = closeFactory;
         _extendFactoryOverride = extendFactory;
         _suspendFactoryOverride = suspendFactory;
+        _getFactoryOverride = getFactory;
     }
 
     /// <summary>All <see cref="SaveAsync"/> calls observed since construction.</summary>
@@ -60,6 +69,9 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
     /// <summary>All <see cref="SuspendAsync"/> calls observed since construction.</summary>
     public IReadOnlyList<SuspendContractRequest> SuspendCalls => _suspendCalls;
 
+    /// <summary>All <see cref="GetAsync"/> calls observed since construction (by contract number).</summary>
+    public IReadOnlyList<long> GetCalls => _getCalls;
+
     public Task<IntegrationResult<SaveContractResponse>> SaveAsync(
         SaveContractRequest request,
         CancellationToken ct = default)
@@ -70,6 +82,16 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
         var result = _saveFactoryOverride is not null
             ? _saveFactoryOverride(request)
             : DefaultSaveResponse(request, _saveCalls.Count);
+
+        if (result.IsSuccess && result.Value is { } saved)
+        {
+            _projection[saved.ContractNumber] = new ContractProjection(
+                ContractStatusCode: 1, // Saved
+                ExtensionCount: 0,
+                SuspensionReasonCode: null,
+                ClosureReasonCode: null,
+                ClosureSubReasonCode: null);
+        }
 
         return Task.FromResult(result);
     }
@@ -99,6 +121,16 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
             ? _closeFactoryOverride(request)
             : DefaultCloseResponse(request);
 
+        if (result.IsSuccess)
+        {
+            _projection[request.ContractNumber] = ProjectionFor(request.ContractNumber) with
+            {
+                ContractStatusCode = 2,
+                ClosureReasonCode = request.ClosureMainReasonCode,
+                ClosureSubReasonCode = request.ClosureSubReasonCode,
+            };
+        }
+
         return Task.FromResult(result);
     }
 
@@ -112,6 +144,17 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
         var result = _extendFactoryOverride is not null
             ? _extendFactoryOverride(request)
             : DefaultExtendResponse(request);
+
+        if (result.IsSuccess)
+        {
+            var prior = ProjectionFor(request.ContractNumber);
+            _projection[request.ContractNumber] = prior with
+            {
+                // Tajeer keeps Issued (4) after extensions — extension is local-only refinement.
+                ContractStatusCode = 4,
+                ExtensionCount = prior.ExtensionCount + 1,
+            };
+        }
 
         return Task.FromResult(result);
     }
@@ -127,8 +170,80 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
             ? _suspendFactoryOverride(request)
             : DefaultSuspendResponse(request);
 
+        if (result.IsSuccess)
+        {
+            _projection[request.ContractNumber] = ProjectionFor(request.ContractNumber) with
+            {
+                ContractStatusCode = 3,
+                SuspensionReasonCode = request.SuspensionReasonCode,
+            };
+        }
+
         return Task.FromResult(result);
     }
+
+    public Task<IntegrationResult<GetContractResponse>> GetAsync(
+        long contractNumber,
+        CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(contractNumber);
+        _getCalls.Add(contractNumber);
+
+        if (_getFactoryOverride is not null)
+        {
+            return Task.FromResult(_getFactoryOverride(contractNumber));
+        }
+
+        if (!_projection.TryGetValue(contractNumber, out var p))
+        {
+            // No prior call observed for this contract number — mirror real vendor 404.
+            return Task.FromResult(IntegrationResult<GetContractResponse>.Failure(
+                errorCode: "tajeer.vendor.contract.not_found",
+                errorMessage: $"InMemoryTajeerContractClient has no prior state for contractNumber {contractNumber}.",
+                isTransient: false));
+        }
+
+        return Task.FromResult(IntegrationResult<GetContractResponse>.Success(new GetContractResponse
+        {
+            ContractNumber = contractNumber,
+            ContractStatusCode = p.ContractStatusCode,
+            SuspensionReasonCode = p.SuspensionReasonCode,
+            ClosureReasonCode = p.ClosureReasonCode,
+            ClosureSubReasonCode = p.ClosureSubReasonCode,
+            ExtensionCount = p.ExtensionCount,
+        }));
+    }
+
+    /// <summary>
+    /// Test hook — seed a projection for a contract number directly, without driving it
+    /// through a write call first. Useful for drift tests where the local row was created
+    /// by another path (seeder, fixture) and we just want GetAsync to return a chosen
+    /// vendor state. Overwrites any prior projection.
+    /// </summary>
+    public void SeedProjection(
+        long contractNumber,
+        int contractStatusCode,
+        int extensionCount = 0,
+        int? suspensionReasonCode = null,
+        int? closureReasonCode = null,
+        int? closureSubReasonCode = null)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(contractNumber);
+        _projection[contractNumber] = new ContractProjection(
+            contractStatusCode, extensionCount, suspensionReasonCode, closureReasonCode, closureSubReasonCode);
+    }
+
+    private ContractProjection ProjectionFor(long contractNumber)
+        => _projection.TryGetValue(contractNumber, out var p)
+            ? p
+            : new ContractProjection(ContractStatusCode: 0, ExtensionCount: 0, null, null, null);
+
+    private sealed record ContractProjection(
+        int ContractStatusCode,
+        int ExtensionCount,
+        int? SuspensionReasonCode,
+        int? ClosureReasonCode,
+        int? ClosureSubReasonCode);
 
     private static IntegrationResult<SaveContractResponse> DefaultSaveResponse(SaveContractRequest request, int sequenceNumber)
     {
