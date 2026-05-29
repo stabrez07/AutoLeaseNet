@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { useLocale } from '../../lib/locale-provider'
 import { bff, type MyVehicle } from '../../lib/bff-client'
@@ -60,9 +61,14 @@ export default function MyVehiclesPage() {
               {vehicles.map((v) => (
                 <tr key={v.id}>
                   <td className="px-4 py-2.5">
-                    <span dir="rtl" className="font-mono text-xs text-slate-800">
-                      {v.plateLetters}&nbsp;&nbsp;{v.plateNumber}
-                    </span>
+                    <Link
+                      href={`/vehicles/${v.id}`}
+                      className="text-brand-700 hover:text-brand-900 underline-offset-4 hover:underline"
+                    >
+                      <span dir="rtl" className="font-mono text-xs">
+                        {v.plateLetters}&nbsp;&nbsp;{v.plateNumber}
+                      </span>
+                    </Link>
                   </td>
                   <td className="px-4 py-2.5 text-slate-700">
                     {v.make} {v.model}
