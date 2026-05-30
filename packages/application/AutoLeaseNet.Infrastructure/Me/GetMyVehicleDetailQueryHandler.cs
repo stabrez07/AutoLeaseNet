@@ -8,22 +8,12 @@ using Microsoft.EntityFrameworkCore;
 namespace AutoLeaseNet.Infrastructure.Me;
 
 /// <summary>
-/// Handler for <see cref="GetMyVehicleDetailQuery"/>. Two-step, same shape as
-/// <see cref="GetMyVehiclesQueryHandler"/>:
-///
-/// <list type="number">
-///   <item>Lease-side EXISTS check under the natural request scope — the caller's
-///         customer must have a lease in Active/Extended/Suspended on this vehicle id.
-///         Returns <c>null</c> if no such lease exists.</item>
-///   <item>Bounded <see cref="SystemTenancyScope"/> for the Vehicle read.</item>
-/// </list>
-///
-/// <para>
-/// The lease-side check is the trust anchor — see <see cref="GetMyVehiclesQueryHandler"/>
-/// for the three invariants future editors must keep true. Phase 2's customer-derived
-/// RLS on <c>Vehicles</c> collapses both this handler and <see cref="GetMyVehiclesQueryHandler"/>
-/// to single LINQ joins.
-/// </para>
+/// Handler for <see cref="GetMyVehicleDetailQuery"/>. Same shape as
+/// <see cref="GetMyVehiclesQueryHandler"/>: a single RLS-scoped query whose
+/// application-side EXISTS join mirrors the Phase-2 Vehicles RLS predicate
+/// (<c>dbo.fn_VehiclesTenancyPredicate</c>) and adds the "currently holding"
+/// status gate. Returns <c>null</c> when the customer has no current lease on
+/// the vehicle, which the endpoint maps to 404.
 /// </summary>
 public sealed class GetMyVehicleDetailQueryHandler(AutoLeaseNetDbContext db, ITenantContext tenant)
     : IRequestHandler<GetMyVehicleDetailQuery, MyVehicleDetailDto?>
@@ -47,20 +37,13 @@ public sealed class GetMyVehicleDetailQueryHandler(AutoLeaseNetDbContext db, ITe
             throw new InvalidOperationException("/me/vehicles/{id} requires a customer context (X-Dev-Customer-Id or customer_id claim).");
         }
 
-        var hasCurrentLease = await db.Leases
-            .AsNoTracking()
-            .AnyAsync(l => l.CustomerId == customerId
-                && l.VehicleId == request.VehicleId
-                && CurrentlyHoldingStatuses.Contains(l.Status), cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!hasCurrentLease) return null;
-
-        using var systemScope = SystemTenancyScope.For(tenant.TenantId);
-
         return await db.Vehicles
             .AsNoTracking()
-            .Where(v => v.Id == request.VehicleId)
+            .Where(v => v.Id == request.VehicleId
+                && v.TenantId == tenant.TenantId
+                && db.Leases.Any(l => l.VehicleId == v.Id
+                                      && l.CustomerId == customerId
+                                      && CurrentlyHoldingStatuses.Contains(l.Status)))
             .Select(v => new MyVehicleDetailDto(
                 v.Id,
                 v.PlateNumber,

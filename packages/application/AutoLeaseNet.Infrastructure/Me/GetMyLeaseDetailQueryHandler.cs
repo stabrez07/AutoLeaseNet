@@ -7,24 +7,16 @@ using Microsoft.EntityFrameworkCore;
 namespace AutoLeaseNet.Infrastructure.Me;
 
 /// <summary>
-/// Handler for <see cref="GetMyLeaseDetailQuery"/>. Two-step in the same shape as
-/// <see cref="GetMyVehiclesQueryHandler"/>: the lease read runs under the
-/// natural request scope (RLS scopes Leases by CustomerId) and an app-side
-/// CustomerId predicate enforces the same constraint under EF InMemory; if the
-/// lease carries a <c>VehicleId</c>, a bounded <see cref="SystemTenancyScope"/>
-/// reads the vehicle row.
+/// Handler for <see cref="GetMyLeaseDetailQuery"/>. The lease is RLS-scoped to
+/// the calling customer (Day-9 <c>fn_TenancyPredicate</c> on Leases). If the
+/// lease carries a <c>VehicleId</c>, the vehicle enrichment is a plain
+/// FirstOrDefault — Phase-2 <c>fn_VehiclesTenancyPredicate</c> already grants
+/// access because the customer has (or had) a lease on it. No
+/// <see cref="SystemTenancyScope"/> needed.
 ///
 /// <para>
-/// <b>Trust boundary.</b> Vehicles RLS is internal-staff-only. The vehicle read
-/// is inside the bypass scope, but the vehicle id used in the <c>FirstOrDefault</c>
-/// comes from a lease row that is NOT under the bypass — so the customer can
-/// only ever see the vehicle attached to their own lease. Phase 2 extends RLS
-/// on <c>Vehicles</c> with a customer-derived predicate and removes the scope.
-/// </para>
-///
-/// <para>
-/// Returns <c>null</c> for "not visible to this customer" so the endpoint can
-/// emit 404 without distinguishing "doesn't exist" from "not yours".
+/// Returns <c>null</c> for "not visible to this customer" so the endpoint
+/// emits 404 without distinguishing "doesn't exist" from "not yours".
 /// </para>
 /// </summary>
 public sealed class GetMyLeaseDetailQueryHandler(AutoLeaseNetDbContext db, ITenantContext tenant)
@@ -87,7 +79,6 @@ public sealed class GetMyLeaseDetailQueryHandler(AutoLeaseNetDbContext db, ITena
         LeaseVehicleSummaryDto? vehicleDto = null;
         if (lease.VehicleId is Guid vehicleId)
         {
-            using var systemScope = SystemTenancyScope.For(tenant.TenantId);
             vehicleDto = await db.Vehicles
                 .AsNoTracking()
                 .Where(v => v.Id == vehicleId)

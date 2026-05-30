@@ -118,6 +118,23 @@ it first; update it after every meaningful change.
     reports `Healthy` when Mode=InMemory and `Degraded("not yet implemented")` when
     Mode=Real, so the readiness probe stays green for the rest of the BFF while making
     the unfinished state visible.
+14. **Phase-2 Vehicles RLS extension (2026-05-30).** Migration `Add_Vehicles_RLS_PhaseTwo`
+    introduces `dbo.fn_VehiclesTenancyPredicate(@TenantId, @Id)` and rewires
+    `dbo.TenancyPolicy` via `ALTER FILTER/BLOCK PREDICATE` to point Vehicles at it
+    (in-place swap, not DROP+ADD — SQL Server's planner rejects the latter as a
+    duplicate-predicate violation even when both halves cancel out). New predicate
+    authorises an external customer iff `EXISTS (SELECT 1 FROM dbo.Leases WHERE
+    VehicleId = @Id AND TenantId = @TenantId AND CustomerId = SESSION_CONTEXT('CustomerId'))`
+    — **no lease-status filter in RLS**; "currently holding" stays the handler's
+    business rule so the lease-detail view can show vehicle info for historical
+    (Closed) leases without re-bypassing RLS. Three handlers
+    (`GetMyVehiclesQueryHandler`, `GetMyVehicleDetailQueryHandler`,
+    `GetMyLeaseDetailQueryHandler`) collapse from the two-step `SystemTenancyScope`
+    bypass to a single RLS-scoped LINQ join (the join's app-side EXISTS mirrors
+    the DB predicate so EF InMemory tests stay correct). Proof: 7 new
+    `VehiclesRlsIsolationTests` (Integration category, real SQL) cover external/internal/system
+    user-types + active/closed/orphan/cross-tenant vehicle scenarios. The Day-9
+    "Phase 2 follow-ups" comment in the legacy migration is now redeemed.
 
 ## Domain rules
 
@@ -171,17 +188,17 @@ it first; update it after every meaningful change.
 
 ## Current repo state
 
-- **Branch**: `main` at commit `8c78c00` (`feat(zatca): adapter skeleton with chain-state invariant (Week-4 prep) (#28)`); next PR is `chore/bff-test-seed-waiter` (extracts `EnsureDemoSeededAsync` from 8 endpoint factories into `BffTestHostDefaults`).
+- **Branch**: `main` at commit `67df03d` (`chore(test): extract EnsureDemoSeededAsync into BffTestHostDefaults (#29)`); next PR is `feat/vehicles-rls-phase-2` (`Add_Vehicles_RLS_PhaseTwo` migration + handler collapse).
 - **CI on main**: ✅ all required jobs green — `.NET (build -warnaserror + test)` strict; `JS (lint + typecheck + test + build) — best-effort until UI lands` (strict on Typecheck + Build since #25; Lint + Test still `continue-on-error` until UI lands).
 - **Tests**: **368 green** across 6 test projects (Adapters.Common 20, Adapters.Tajeer 82, Adapters.Zatca 12 [new], Infrastructure 68, Application 113, Bff 73). Run via `dotnet test --filter "Category!=Smoke&Category!=Integration"`. Plus `Category=Integration` RLS tests gated on local SQL only.
 - **Merged PRs since checkpoint `35ecbae`**: #1–#10 (Week-1 stabilisation / governance / scaffold / seed). #11 (ai_context refresh), #12 (Inspection aggregate), #13 (Day-18 CHECK_OUT → Lease link), #14 (Day-19 check-in saga local close), #15 (Tajeer Calculate + Close saga), #16 (Day-20 Extend + Suspend), #17 (Day-21 Incident aggregate), #18 (ai_context refresh).
 - **Active aggregates**: Lease, Customer, Vehicle, Driver, Branch, RentPolicy, ExtendedCoverage, WebhookLog, Inspection (+ children), Incident, ZatcaChainState (per-tenant aggregate-of-one, Week-4 prep).
 - **`ITajeerContractClient` surface**: `SaveAsync`, `CalculatePaymentAsync`, `CloseAsync`, `ExtendAsync`, `SuspendAsync` (5 methods; all share the `SendAsync<TReq,TRes>` error-mapping spine). InMemory sibling honours per-method override factories for negative-path tests.
-- **Tenancy enforcement (Day-9, new)**: three layers — repository `TenantId` filter (unchanged), `TenancyConnectionInterceptor` setting SQL `SESSION_CONTEXT` on every connection open, and `dbo.TenancyPolicy` RLS on 9 aggregate-root tables (`Leases`, `Customers`, `Vehicles`, `Drivers`, `Branches`, `RentPolicies`, `ExtendedCoverages`, `Inspections`, `Incidents`). `SystemTenancyScope` (AsyncLocal) provides the bypass path used by the demo seeder and the Tajeer webhook receiver (`WEBHOOK_BOOTSTRAP` user-type override; Phase-2 retires it).
-- **EF migrations** (latest first): `20260529232659_Add_ZatcaChainState` (this PR's), `20260529020317_Add_OutboxEvent`, `20260529012701_Add_RLS_TenancyPolicy`, `20260528205440_Add_Incident_Aggregate`, `20260528131820_Add_Inspection_Aggregate`, `20260523163430_Add_Core_Aggregates`, `20260523155639_Add_WebhookLog`, `20260522232532_Init_Lease`.
+- **Tenancy enforcement (Day-9 + Phase-2 Vehicles)**: three layers — repository `TenantId` filter (unchanged), `TenancyConnectionInterceptor` setting SQL `SESSION_CONTEXT` on every connection open, and `dbo.TenancyPolicy` RLS on 9 aggregate-root tables. **Two predicate functions now**: `fn_TenancyPredicate(TenantId, CustomerId)` for `Leases`/`Customers`/`Drivers` (external user matches via the row's CustomerId) plus internal-only `(TenantId, NULL)` for `Branches`/`RentPolicies`/`ExtendedCoverages`/`Inspections`/`Incidents`; `fn_VehiclesTenancyPredicate(TenantId, Id)` for `Vehicles` (external user matches via EXISTS-lease join, see decision #14). `SystemTenancyScope` (AsyncLocal) still provides bypass for the demo seeder + Tajeer webhook receiver — the three Phase-1 `/me/vehicles*` handlers no longer use it.
+- **EF migrations** (latest first): `20260529235911_Add_Vehicles_RLS_PhaseTwo` (this PR's), `20260529232659_Add_ZatcaChainState`, `20260529020317_Add_OutboxEvent`, `20260529012701_Add_RLS_TenancyPolicy`, `20260528205440_Add_Incident_Aggregate`, `20260528131820_Add_Inspection_Aggregate`, `20260523163430_Add_Core_Aggregates`, `20260523155639_Add_WebhookLog`, `20260522232532_Init_Lease`.
 - **Branch protection**: enforced on `main`. Direct push blocked; every change is `gh pr create` → `gh pr merge --squash --delete-branch`.
 - **Repo visibility**: public. L.G2/L.G3 closed at $0 cost.
-- **Current blocker profile**: no active code/CI blockers. Remaining external work: manual Tajeer Rabet staging exercise (needs creds + ngrok), Azure / Entra / Unifonic onboarding. Phase-1 hardening sprint done; first demo-unblocking slice (Customer Portal scaffold) shipped. Carry-forward: ZATCA adapter (Week-4 critical path), `ITajeerContractClient.GetAsync` (turns reconciliation stub into real drift detector), Vehicle Replacement Saga (subscribes to `IncidentReportedDomainEvent`), Customer Portal — My Vehicles / Lease detail (needs `/me/vehicles` endpoint or RLS extension), `BffTestHostDefaults` shared config helper (three retros have asked), Always Encrypted on PII (gated on Azure Key Vault or local-cert), drop `continue-on-error: true` from JS CI typecheck+build (both portals now build cleanly), RLS on Inspection child tables (Phase 2 backfill).
+- **Current blocker profile**: no active code/CI blockers. Remaining external work: manual Tajeer Rabet staging exercise (needs creds + ngrok), Azure / Entra / Unifonic onboarding. Phase-1 hardening sprint done; first demo-unblocking slice (Customer Portal scaffold) shipped. Carry-forward: Vehicle Replacement Saga (subscribes to `IncidentReportedDomainEvent`), Quotation aggregate + 3-tier approval (Week-4 entry point), ZATCA Week-4 actual (UBL 2.1 + ECDSA P-256 + TLV QR + `ZatcaSubmission` saga), Always Encrypted on PII (gated on Azure Key Vault or local-cert), drop `continue-on-error: true` from JS CI Lint+Test (both portals now build cleanly), RLS on Inspection child tables (Phase 2 backfill), customer-portal i18n migration to next-intl `[locale]` segments.
 
 ## TODOs — in priority order
 
