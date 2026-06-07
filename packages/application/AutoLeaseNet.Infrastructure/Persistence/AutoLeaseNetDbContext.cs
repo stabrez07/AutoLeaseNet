@@ -6,6 +6,7 @@ using AutoLeaseNet.Domain.Leases;
 using AutoLeaseNet.Domain.Operations;
 using AutoLeaseNet.Domain.Outbox;
 using AutoLeaseNet.Domain.RentPolicies;
+using AutoLeaseNet.Domain.Sales;
 using AutoLeaseNet.Domain.Vehicles;
 using AutoLeaseNet.Domain.Webhooks;
 using AutoLeaseNet.Domain.Zatca;
@@ -34,6 +35,10 @@ public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> optio
     public DbSet<Incident> Incidents => Set<Incident>();
     public DbSet<OutboxEvent> OutboxEvents => Set<OutboxEvent>();
     public DbSet<ZatcaChainState> ZatcaChainStates => Set<ZatcaChainState>();
+    public DbSet<Quotation> Quotations => Set<Quotation>();
+    public DbSet<QuotationLine> QuotationLines => Set<QuotationLine>();
+    public DbSet<QuotationApproval> QuotationApprovals => Set<QuotationApproval>();
+    public DbSet<ApprovalTier> ApprovalTiers => Set<ApprovalTier>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

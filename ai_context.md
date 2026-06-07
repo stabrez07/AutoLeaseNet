@@ -192,10 +192,10 @@ it first; update it after every meaningful change.
 - **CI on main**: ✅ all required jobs green — `.NET (build -warnaserror + test)` strict; `JS (lint + typecheck + test + build) — best-effort until UI lands` (strict on Typecheck + Build since #25; Lint + Test still `continue-on-error` until UI lands).
 - **Tests**: **384 green (non-integration)** across 6 test projects (Adapters.Common 20, Adapters.Tajeer 81, Adapters.Zatca 12, Infrastructure 59, Application 140, Bff 72). Run via `dotnet test --settings .runsettings` (filters `Category!=Smoke&Category!=Integration`). Plus `Category=Integration` RLS tests gated on local SQL only. (Counts shifted vs the #29 baseline because that figure was pre-`.runsettings`-filter accounting; the integration RLS tests are excluded here.)
 - **Merged PRs since checkpoint `35ecbae`**: #1–#10 (Week-1 stabilisation / governance / scaffold / seed). #11 (ai_context refresh), #12 (Inspection aggregate), #13 (Day-18 CHECK_OUT → Lease link), #14 (Day-19 check-in saga local close), #15 (Tajeer Calculate + Close saga), #16 (Day-20 Extend + Suspend), #17 (Day-21 Incident aggregate), #18 (ai_context refresh).
-- **Active aggregates**: Lease, Customer, Vehicle, Driver, Branch, RentPolicy, ExtendedCoverage, WebhookLog, Inspection (+ children), Incident, ZatcaChainState (per-tenant aggregate-of-one, Week-4 prep), Quotation (+ QuotationLine + QuotationApproval children; ApprovalTier config) — **domain only so far; no EF config / migration / seed / endpoints yet** (Day-22 foundation, 2026-06-07).
+- **Active aggregates**: Lease, Customer, Vehicle, Driver, Branch, RentPolicy, ExtendedCoverage, WebhookLog, Inspection (+ children), Incident, ZatcaChainState (per-tenant aggregate-of-one, Week-4 prep), Quotation (+ QuotationLine + QuotationApproval children; ApprovalTier config) — **persisted + RLS-isolated as of 2026-06-07; still pending: ApprovalTier seed, repository/query handlers, endpoints + approval saga**.
 - **`ITajeerContractClient` surface**: `SaveAsync`, `CalculatePaymentAsync`, `CloseAsync`, `ExtendAsync`, `SuspendAsync` (5 methods; all share the `SendAsync<TReq,TRes>` error-mapping spine). InMemory sibling honours per-method override factories for negative-path tests.
-- **Tenancy enforcement (Day-9 + Phase-2 Vehicles)**: three layers — repository `TenantId` filter (unchanged), `TenancyConnectionInterceptor` setting SQL `SESSION_CONTEXT` on every connection open, and `dbo.TenancyPolicy` RLS on 9 aggregate-root tables. **Two predicate functions now**: `fn_TenancyPredicate(TenantId, CustomerId)` for `Leases`/`Customers`/`Drivers` (external user matches via the row's CustomerId) plus internal-only `(TenantId, NULL)` for `Branches`/`RentPolicies`/`ExtendedCoverages`/`Inspections`/`Incidents`; `fn_VehiclesTenancyPredicate(TenantId, Id)` for `Vehicles` (external user matches via EXISTS-lease join, see decision #14). `SystemTenancyScope` (AsyncLocal) still provides bypass for the demo seeder + Tajeer webhook receiver — the three Phase-1 `/me/vehicles*` handlers no longer use it.
-- **EF migrations** (latest first): `20260529235911_Add_Vehicles_RLS_PhaseTwo` (this PR's), `20260529232659_Add_ZatcaChainState`, `20260529020317_Add_OutboxEvent`, `20260529012701_Add_RLS_TenancyPolicy`, `20260528205440_Add_Incident_Aggregate`, `20260528131820_Add_Inspection_Aggregate`, `20260523163430_Add_Core_Aggregates`, `20260523155639_Add_WebhookLog`, `20260522232532_Init_Lease`.
+- **Tenancy enforcement (Day-9 + Phase-2 Vehicles)**: three layers — repository `TenantId` filter (unchanged), `TenancyConnectionInterceptor` setting SQL `SESSION_CONTEXT` on every connection open, and `dbo.TenancyPolicy` RLS on 13 tables (9 original + the 4 Quotation tables added 2026-06-07, all internal-only `(TenantId, NULL)`). **Two predicate functions**: `fn_TenancyPredicate(TenantId, CustomerId)` for `Leases`/`Customers`/`Drivers` (external user matches via the row's CustomerId) plus internal-only `(TenantId, NULL)` for `Branches`/`RentPolicies`/`ExtendedCoverages`/`Inspections`/`Incidents`; `fn_VehiclesTenancyPredicate(TenantId, Id)` for `Vehicles` (external user matches via EXISTS-lease join, see decision #14). `SystemTenancyScope` (AsyncLocal) still provides bypass for the demo seeder + Tajeer webhook receiver — the three Phase-1 `/me/vehicles*` handlers no longer use it.
+- **EF migrations** (latest first): `20260607172013_Add_Quotation_Aggregate` (4 tables + RLS extension), `20260529235911_Add_Vehicles_RLS_PhaseTwo`, `20260529232659_Add_ZatcaChainState`, `20260529020317_Add_OutboxEvent`, `20260529012701_Add_RLS_TenancyPolicy`, `20260528205440_Add_Incident_Aggregate`, `20260528131820_Add_Inspection_Aggregate`, `20260523163430_Add_Core_Aggregates`, `20260523155639_Add_WebhookLog`, `20260522232532_Init_Lease`.
 - **Branch protection**: enforced on `main`. Direct push blocked; every change is `gh pr create` → `gh pr merge --squash --delete-branch`.
 - **Repo visibility**: public. L.G2/L.G3 closed at $0 cost.
 - **Current blocker profile**: no active code/CI blockers. Remaining external work: manual Tajeer Rabet staging exercise (needs creds + ngrok), Azure / Entra / Unifonic onboarding. Phase-1 hardening sprint done; first demo-unblocking slice (Customer Portal scaffold) shipped. Carry-forward: Vehicle Replacement Saga (subscribes to `IncidentReportedDomainEvent`), Quotation aggregate + 3-tier approval (Week-4 entry point), ZATCA Week-4 actual (UBL 2.1 + ECDSA P-256 + TLV QR + `ZatcaSubmission` saga), Always Encrypted on PII (gated on Azure Key Vault or local-cert), drop `continue-on-error: true` from JS CI Lint+Test (both portals now build cleanly), RLS on Inspection child tables (Phase 2 backfill), customer-portal i18n migration to next-intl `[locale]` segments.
@@ -474,6 +474,28 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
    IS red — see TODO #1.
 
 ## Last updated
+
+2026-06-07 — **Quotation persistence: EF config + migration + RLS** (follows the
+aggregate-foundation PR #31). `QuotationConfiguration.cs` maps all four entities
+(`Quotation` root with backing-field navigations to `QuotationLine` /
+`QuotationApproval` children, + `ApprovalTier` config); money `DECIMAL(18,2)`,
+percent `DECIMAL(5,2)`, enums → `int`/`tinyint`, `RowVersion`, tenant-scoped
+unique + lookup indexes (incl. approver-inbox `(TenantId, Status,
+RequiredRoleCode)`). 4 DbSets on the context. Migration
+`20260607172013_Add_Quotation_Aggregate` — EF-generated DDL (4 tables, 2 child
+cascade FKs, 8 indexes) **+ hand-appended RLS**: `ALTER SECURITY POLICY
+dbo.TenancyPolicy ADD …` wires all four into the Day-9 policy in `Up`, reversed
+(`DROP … PREDICATE` before `DropTable`) in `Down`. All four scope **internal-only**
+`fn_TenancyPredicate(TenantId, NULL)` (Quotation has CustomerId but no customer
+portal quote view yet — Phase-2 follow-up noted in the migration remark). RLS
+lives in the same migration as table creation (atomic; the separate-migration
+pattern was only for the Vehicles in-place predicate swap). `dbo.TenancyPolicy`
+now covers **13 tables**. Build `-warnaserror` clean; suite **384 green** (no new
+tests — config is validated by EF model-build + migration generation; RLS SQL is
+for gated `Category=Integration` tests on a SQL machine). **Not applied to a DB**
+(this box has no local SQL up). Next: `ApprovalTier` seed (finishes Day-22), then
+Day-23 repo/handlers/endpoints/saga/inbox. Workstream:
+[`2026-06-07-quotation-ef-migration-rls`](./Plans/workstreams/2026-06-07-quotation-ef-migration-rls/).
 
 2026-06-07 — **Quotation aggregate foundation** (Week-4 Day-22, first sales
 slice). Pure domain, zero external deps — same shape as the Inspection (#12) /
