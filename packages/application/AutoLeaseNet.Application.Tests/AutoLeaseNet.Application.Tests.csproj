@@ -11,6 +11,7 @@
     <ProjectReference Include="..\AutoLeaseNet.Application\AutoLeaseNet.Application.csproj" />
     <ProjectReference Include="..\AutoLeaseNet.Application.Ports\AutoLeaseNet.Application.Ports.csproj" />
     <ProjectReference Include="..\AutoLeaseNet.Infrastructure\AutoLeaseNet.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\adapters\AutoLeaseNet.Adapters.Seed\AutoLeaseNet.Adapters.Seed.csproj" />
     <ProjectReference Include="..\..\adapters\AutoLeaseNet.Adapters.Tajeer\AutoLeaseNet.Adapters.Tajeer.csproj" />
     <ProjectReference Include="..\..\adapters\AutoLeaseNet.Adapters.Tajeer.InMemory\AutoLeaseNet.Adapters.Tajeer.InMemory.csproj" />
     <ProjectReference Include="..\..\adapters\AutoLeaseNet.Adapters.Cache.InMemory\AutoLeaseNet.Adapters.Cache.InMemory.csproj" />
@@ -31,3 +32,4 @@
   </ItemGroup>
 
 </Project>
+

@@ -42,6 +42,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IWebhookLogRepository, EfWebhookLogRepository>();
         services.AddScoped<IInspectionRepository, EfInspectionRepository>();
         services.AddScoped<IIncidentRepository, EfIncidentRepository>();
+        services.AddScoped<IQuotationRepository, EfQuotationRepository>();
+        services.AddScoped<IApprovalTierRepository, EfApprovalTierRepository>();
         services.AddScoped<IZatcaChainStateRepository, EfZatcaChainStateRepository>();
 
         return services;
@@ -52,7 +54,7 @@ public static class ServiceCollectionExtensions
     /// DbContext with the caller-supplied provider configuration AND every
     /// AutoLeaseNet-owned EF Core interceptor (today: domain-event dispatch; future:
     /// SESSION_CONTEXT tenancy, audit, soft-delete). Production and test composition
-    /// both call through here so a new interceptor lands in one place â€” preventing
+    /// both call through here so a new interceptor lands in one place — preventing
     /// the "test factory forgot to re-bind the interceptor" class of bug
     /// (see Plans/workstreams/2026-05-25-dbcontext-interceptor-domain-events/retrospective.md).
     /// </summary>
