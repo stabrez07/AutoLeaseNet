@@ -124,6 +124,13 @@ stateDiagram-v2
 - Once `ACCEPTED`, the quote is immutable. Pricing changes require a new quote (clone-and-amend).
 - `EXPIRED` triggers automatically via a daily background job comparing `ValidUntilDate` to today.
 
+> **Implementation refinement (2026-06-07, Quotation aggregate foundation)**: the diagram's
+> `DRAFT → SENT_TO_CUSTOMER (under all thresholds)` edge is implemented as
+> `DRAFT → APPROVED` (auto-approved, zero `QuotationApproval` rows, raises `QuotationApproved`).
+> Sending stays a **distinct explicit action** (`MarkSentToCustomer`) so PDF generation /
+> send-to-customer is never conflated with the approval decision. Net reachable states are
+> unchanged; an under-threshold quote still requires a deliberate send step.
+
 **Events emitted**:
 
 | Trigger | Event |
