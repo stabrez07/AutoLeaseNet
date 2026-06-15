@@ -1,3 +1,4 @@
+using AutoLeaseNet.Domain.Billing;
 using AutoLeaseNet.Domain.Branches;
 using AutoLeaseNet.Domain.Customers;
 using AutoLeaseNet.Domain.Drivers;
@@ -39,6 +40,7 @@ public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> optio
     public DbSet<QuotationLine> QuotationLines => Set<QuotationLine>();
     public DbSet<QuotationApproval> QuotationApprovals => Set<QuotationApproval>();
     public DbSet<ApprovalTier> ApprovalTiers => Set<ApprovalTier>();
+    public DbSet<Invoice> Invoices => Set<Invoice>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
