@@ -4,6 +4,7 @@
     <RootNamespace>AutoLeaseNet.Application</RootNamespace>
     <AssemblyName>AutoLeaseNet.Application</AssemblyName>
     <Description>Application layer — use cases (MediatR handlers), sagas, event handlers. Depends only on Domain + Application.Ports.</Description>
+    <NoWarn>$(NoWarn);CA1848;CA1873;CA1869</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

@@ -46,6 +46,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IApprovalTierRepository, EfApprovalTierRepository>();
         services.AddScoped<IZatcaChainStateRepository, EfZatcaChainStateRepository>();
         services.AddScoped<IInvoiceRepository, EfInvoiceRepository>();
+        services.AddScoped<IZatcaSubmissionRepository, EfZatcaSubmissionRepository>();
 
         return services;
     }

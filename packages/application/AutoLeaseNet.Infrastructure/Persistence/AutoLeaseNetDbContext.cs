@@ -41,6 +41,7 @@ public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> optio
     public DbSet<QuotationApproval> QuotationApprovals => Set<QuotationApproval>();
     public DbSet<ApprovalTier> ApprovalTiers => Set<ApprovalTier>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<ZatcaSubmission> ZatcaSubmissions => Set<ZatcaSubmission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

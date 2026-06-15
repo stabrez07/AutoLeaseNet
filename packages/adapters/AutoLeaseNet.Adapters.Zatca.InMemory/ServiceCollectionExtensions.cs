@@ -1,4 +1,4 @@
-using AutoLeaseNet.Adapters.Zatca;
+using AutoLeaseNet.Application.Ports.Integrations;
 using AutoLeaseNet.Adapters.Zatca.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,17 +9,19 @@ namespace AutoLeaseNet.Adapters.Zatca.InMemory;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Replaces any prior <see cref="IZatcaClient"/> registration with the in-memory
-    /// fake. Call AFTER <see cref="AutoLeaseNet.Adapters.Zatca.ServiceCollectionExtensions.AddZatca"/>
-    /// from a composition root that wants the InMemory adapter (tests, offline dev).
+    /// Registers the in-memory ZATCA client for development and testing.
+    /// Call AFTER <see cref="AutoLeaseNet.Adapters.Zatca.ServiceCollectionExtensions.AddZatca"/>
+    /// from a composition root that wants the InMemory adapter, or use
+    /// <see cref="AddZatcaWithModeSwitch"/> for automatic mode-based selection.
     /// </summary>
     public static IServiceCollection AddInMemoryZatca(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddSingleton<InMemoryZatcaClient>();
-        services.Replace(ServiceDescriptor.Singleton<IZatcaClient>(
-            sp => sp.GetRequiredService<InMemoryZatcaClient>()));
+        services.AddSingleton<ZatcaClientInMemory>();
+        services.Replace(ServiceDescriptor.Scoped<IZatcaClient>(
+            sp => sp.GetRequiredService<ZatcaClientInMemory>()));
+        
         return services;
     }
 
@@ -27,7 +29,7 @@ public static class ServiceCollectionExtensions
     /// Convenience wrapper that calls
     /// <see cref="AutoLeaseNet.Adapters.Zatca.ServiceCollectionExtensions.AddZatca"/> and
     /// then — if <see cref="ZatcaOptions.Mode"/> is <see cref="ZatcaMode.InMemory"/> —
-    /// swaps <see cref="IZatcaClient"/> for the in-memory fake. Production composition
+    /// swaps <see cref="IZatcaClient"/> for the in-memory fake. Development composition
     /// roots can call this directly so the mode switch is one line.
     /// </summary>
     public static IServiceCollection AddZatcaWithModeSwitch(
@@ -44,12 +46,12 @@ public static class ServiceCollectionExtensions
         {
             services.AddInMemoryZatca();
         }
+
         return services;
     }
 
     // Read just the Mode field — avoids re-binding the whole options object (which would
-    // trip ValidateDataAnnotations if required fields aren't populated yet). Matches the
-    // Tajeer ReadMode pattern verbatim.
+    // trip ValidateDataAnnotations if required fields aren't populated yet).
     private static ZatcaMode ReadMode(IConfigurationSection section)
     {
         var raw = section[nameof(ZatcaOptions.Mode)];

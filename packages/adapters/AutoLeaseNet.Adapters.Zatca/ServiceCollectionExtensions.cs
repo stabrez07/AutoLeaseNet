@@ -1,6 +1,4 @@
-using AutoLeaseNet.Adapters.Common.Resilience;
-using AutoLeaseNet.Adapters.Zatca.Authentication;
-using AutoLeaseNet.Adapters.Zatca.Client;
+using AutoLeaseNet.Application.Ports.Integrations;
 using AutoLeaseNet.Adapters.Zatca.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,17 +8,14 @@ namespace AutoLeaseNet.Adapters.Zatca;
 
 public static class ServiceCollectionExtensions
 {
-    /// <summary>Named HttpClient for Fatoorah; consume via <c>IHttpClientFactory.CreateClient(ZatcaHttpClientName)</c>.</summary>
-    public const string ZatcaHttpClientName = "zatca";
-
     /// <summary>
-    /// Registers ZATCA adapter services per Spec 04 §5 / Spec 02 §4.5:
-    /// - <see cref="ZatcaOptions"/> bound + data-annotation validated at startup
-    /// - <see cref="ZatcaAuthHandler"/> as a transient delegating handler
-    /// - Named <see cref="HttpClient"/> with BaseAddress, Timeout, auth handler, and the
-    ///   shared Polly v8 resilience pipeline (matches the Tajeer wiring exactly)
-    /// - Default <see cref="IZatcaClient"/> registration → real <see cref="ZatcaClient"/>
-    ///   (Phase-1 stub; switch to InMemory via <see cref="AutoLeaseNet.Adapters.Zatca.InMemory.ServiceCollectionExtensions.AddZatcaWithModeSwitch"/>)
+    /// Registers ZATCA adapter services per Spec 02 §4.5 / Spec 07:
+    /// - <see cref="ZatcaOptions"/> bound + validated at startup
+    /// - Real HTTP client (ZatcaClient) with configurable BaseAddress and timeout
+    /// - Wires IZatcaClient → ZatcaClient implementation
+    /// 
+    /// Phase-1 scope: ZatcaClient currently returns a clear-error stub.
+    /// Week-4 swaps that for UBL 2.1 + ECDSA + TLV-QR signing.
     /// </summary>
     public static IServiceCollection AddZatca(
         this IServiceCollection services,
@@ -35,24 +30,15 @@ public static class ServiceCollectionExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        services.AddTransient<ZatcaAuthHandler>();
+        // Register HTTP client for ZATCA
+        services.AddHttpClient<ZatcaClient>((sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<ZatcaOptions>>().Value;
+            client.BaseAddress = new Uri(opts.BaseUrl, UriKind.Absolute);
+            client.Timeout = opts.RequestTimeout;
+        });
 
-        services
-            .AddHttpClient(ZatcaHttpClientName, (sp, client) =>
-            {
-                var opts = sp.GetRequiredService<IOptions<ZatcaOptions>>().Value;
-                client.BaseAddress = new Uri(opts.BaseUrl, UriKind.Absolute);
-                client.Timeout = opts.RequestTimeout;
-            })
-            .AddHttpMessageHandler<ZatcaAuthHandler>()
-            .AddResilienceHandler("zatca-resilience", (pipelineBuilder, context) =>
-            {
-                ResiliencePolicies.DefaultHttpPipeline(pipelineBuilder, context);
-            });
-
-        // Default registration → real (stubbed) client. AddZatcaWithModeSwitch in the
-        // InMemory package swaps this for the fake when Zatca:Mode=InMemory.
-        services.AddScoped<ZatcaClient>();
+        // Register IZatcaClient implementation — real HTTP-backed client
         services.AddScoped<IZatcaClient>(sp => sp.GetRequiredService<ZatcaClient>());
 
         return services;
