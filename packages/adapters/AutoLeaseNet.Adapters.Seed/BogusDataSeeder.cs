@@ -8,6 +8,7 @@ using AutoLeaseNet.Domain.ExtendedCoverages;
 using AutoLeaseNet.Domain.Leases;
 using AutoLeaseNet.Domain.Operations;
 using AutoLeaseNet.Domain.RentPolicies;
+using AutoLeaseNet.Domain.Sales;
 using AutoLeaseNet.Domain.Vehicles;
 using Bogus;
 using Microsoft.Extensions.Logging;
@@ -20,10 +21,10 @@ namespace AutoLeaseNet.Adapters.Seed;
 ///   <item>3 Branches across Riyadh / Jeddah / Dammam.</item>
 ///   <item>4 RentPolicies (Standard Daily, Standard Hourly, Daily-with-Driver, Long-term Monthly).</item>
 ///   <item>3 ExtendedCoverages (Partial CDW, Full CDW, Super CDW).</item>
-///   <item>20 Customers — 6 B2B (Saudi Aramco, STC, Almarai, SABIC, Maaden, Bin Dawood) + 14 B2C with KSA-locale names + valid-shaped Saudi National / Iqama IDs.</item>
-///   <item>60 Vehicles — Toyota / Hyundai / Nissan / Kia / Mitsubishi fleet staples with real-format Saudi plate triples.</item>
-///   <item>80 Drivers — mix of customer-affiliated + freelance, with TAMM authorization status variety.</item>
-///   <item>10 Leases — spanning every LeaseStatus for richer reporting demos.</item>
+///   <item>20 Customers � 6 B2B (Saudi Aramco, STC, Almarai, SABIC, Maaden, Bin Dawood) + 14 B2C with KSA-locale names + valid-shaped Saudi National / Iqama IDs.</item>
+///   <item>60 Vehicles � Toyota / Hyundai / Nissan / Kia / Mitsubishi fleet staples with real-format Saudi plate triples.</item>
+///   <item>80 Drivers � mix of customer-affiliated + freelance, with TAMM authorization status variety.</item>
+///   <item>10 Leases � spanning every LeaseStatus for richer reporting demos.</item>
 /// </list>
 /// Idempotent: short-circuits when <see cref="ICustomerRepository.AnyAsync"/> returns true.
 /// All Bogus generators seeded from <see cref="SeedOptions.RandomSeed"/> for reproducibility.
@@ -39,6 +40,7 @@ public sealed partial class BogusDataSeeder(
     ILeaseRepository leases,
     IInspectionRepository inspections,
     IIncidentRepository incidents,
+    IApprovalTierRepository approvalTiers,
     IUnitOfWork uow,
     IClock clock,
     ILogger<BogusDataSeeder> logger) : IDataSeeder
@@ -47,14 +49,17 @@ public sealed partial class BogusDataSeeder(
 
     public async Task SeedAsync(CancellationToken ct)
     {
+        var nowUtc = clock.UtcNow;
+        await SeedApprovalTiersAsync(nowUtc, ct).ConfigureAwait(false);
+
         if (await customers.AnyAsync(TenantId, ct).ConfigureAwait(false))
         {
+            await uow.SaveChangesAsync(ct).ConfigureAwait(false);
             LogAlreadySeeded(TenantId);
             return;
         }
 
         Randomizer.Seed = new Random(options.RandomSeed);
-        var nowUtc = clock.UtcNow;
 
         var seededBranches = SeedBranches(nowUtc);
         var seededPolicies = SeedRentPolicies(nowUtc);
@@ -73,6 +78,15 @@ public sealed partial class BogusDataSeeder(
         LogSeedComplete(TenantId, seededCustomers.Count, seededVehicles.Count, seededDrivers.Count);
     }
 
+    private async Task SeedApprovalTiersAsync(DateTimeOffset nowUtc, CancellationToken ct)
+    {
+        if (await approvalTiers.AnyAsync(TenantId, ct).ConfigureAwait(false))
+            return;
+
+        approvalTiers.Add(ApprovalTier.Create(TenantId, 1, "SALES_TIER_1", 10_000m, nowUtc));
+        approvalTiers.Add(ApprovalTier.Create(TenantId, 2, "SALES_TIER_2", 50_000m, nowUtc));
+        approvalTiers.Add(ApprovalTier.Create(TenantId, 3, "SALES_TIER_3", 100_000m, nowUtc));
+    }
     // ─── Branches (3) ───────────────────────────────────────────────────────
     private List<Branch> SeedBranches(DateTimeOffset now)
     {
@@ -596,3 +610,5 @@ public sealed partial class BogusDataSeeder(
         Message = "Seeded tenant {TenantId}: {CustomerCount} customers, {VehicleCount} vehicles, {DriverCount} drivers.")]
     partial void LogSeedComplete(Guid tenantId, int customerCount, int vehicleCount, int driverCount);
 }
+
+
