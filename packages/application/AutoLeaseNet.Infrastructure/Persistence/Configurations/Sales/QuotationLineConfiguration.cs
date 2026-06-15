@@ -10,6 +10,7 @@ public sealed class QuotationLineConfiguration : IEntityTypeConfiguration<Quotat
     {
         builder.ToTable("QuotationLines", "dbo");
         builder.HasKey(l => l.Id);
+        builder.Property(l => l.Id).ValueGeneratedNever();
 
         builder.Property(l => l.TenantId).IsRequired();
         builder.Property(l => l.QuotationId).IsRequired();
