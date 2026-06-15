@@ -2,6 +2,7 @@
 
 **Status**: ⚠️ Critical path — these gate the schedule more than code does
 **Phase**: All phases — track as items move from pending → in-progress → done
+**Last reviewed**: 2026-06-15 — see workstream [`Plans/workstreams/2026-06-15-dependency-rfq-refresh/`](./workstreams/2026-06-15-dependency-rfq-refresh/)
 
 ---
 
@@ -14,15 +15,15 @@ Every external integration requires gov/partner onboarding **before** integratio
 | # | Item | Owner | Lead time | Status | Notes |
 |---|---|---|---|---|---|
 | 1 | **Tajeer Rabet registration** → App-id, App-key, Client-id | Tajeer team (Elm) | 2-4 weeks | ✅ DONE | Staging credentials in hand |
-| 2 | **Tajeer Authorization token** generated via portal | Self-service | Same day | ⏳ Generate on first run | https://tajeerstg.logisti.sa → User Management → API Registration |
+| 2 | **Tajeer Authorization token** generated via portal | Self-service | Same day | ⏳ Generate on first real staging run | https://tajeerstg.logisti.sa → User Management → API Registration. 5 dummy `TAJEER_*` Actions secrets seeded — rotate with real values before CI smoke. |
 | 3 | **ZATCA Fatoorah sandbox CSID** | ZATCA | 3-6 weeks | ✅ DONE | Sandbox CSID issued |
 | 4 | **Azure subscription** (dev) | Internal | 1-2 days | ⏳ Pending | Cost center + access set up |
-| 5 | **Azure landing zone** (RG, KeyVault, App Service plan, SQL, Redis, Storage, App Insights) | Internal (us) | Day 1 of Week 1 | ⏳ Pending | Bicep deploy from `infra/bicep/main.bicep` |
-| 6 | **Entra ID corporate tenant** access for internal users | IT Admin | 1-2 days | ⏳ Pending | App registration for BFF + Web Portal |
-| 7 | **Entra External ID (CIAM) tenant** for B2C/B2B portal users | IT Admin | 2-3 days | ⏳ Pending | Custom flows for email + SMS OTP via Unifonic |
-| 8 | **Unifonic SMS sandbox account** + sender ID approval | Unifonic | 3-5 days | ⏳ Pending | Sandbox first; production sender ID via separate approval |
-| 9 | **GitHub repo** with branch protection + CI secrets | Self-service | Same day | ⏳ Pending | Secrets: Tajeer creds, ZATCA, Azure deploy creds |
-| 10 | **Local dev tooling** (Node 20, pnpm 9, .NET 8 SDK, Docker Desktop, PowerShell 7) | Self | Same day | ⏳ Pending | Run scaffold's prerequisites checklist |
+| 5 | **Azure landing zone** (RG, KeyVault, App Service plan, SQL, Redis, Storage, App Insights) | Internal (us) | Day 1 of Week 1 | ⏳ Pending — `infra/bicep/` directory and `main.bicep` do not yet exist in repo | Bicep file must be created before any cloud deploy. Local dev runs on `STABREZ-LAPTOP` SQL Server (Docker-free). |
+| 6 | **Entra ID corporate tenant** access for internal users | IT Admin | 1-2 days | ⏳ Pending | App registration for BFF + Web Portal. `Adapters.Identity.Entra` package not yet on disk. `DevJwtStubHandler` is current workaround. |
+| 7 | **Entra External ID (CIAM) tenant** for B2C/B2B portal users | IT Admin | 2-3 days | ⏳ Pending — requires Unifonic sandbox (#8) first for SMS OTP flows | Custom flows for email + SMS OTP. `Adapters.Identity.EntraExternal` package not yet on disk. |
+| 8 | **Unifonic SMS sandbox account** + sender ID approval | Unifonic | 3-5 days | ⏳ Pending — see note | **Two separate unlocks**: (a) sandbox account + AppSid from Unifonic vendor portal; (b) implement `UnifonicSmsSender.SendAsync` (placeholder `NotImplementedException` — package on disk but not functional). `Adapters.Sms.InMemory` covers dev + tests until (a)+(b) land. |
+| 9 | **GitHub repo** with branch protection + CI secrets | Self-service | Same day | ✅ DONE | Repo is public; branch protection on `main` with required CI checks; 5 dummy `TAJEER_*` secrets seeded. |
+| 10 | **Local dev tooling** (Node 20, pnpm 9, .NET 8 SDK, Docker Desktop, PowerShell 7) | Self | Same day | ⚠️ Partial | .NET SDK 10.0.301 ✅; Node/pnpm/Docker ❌ not installed on this PC; `dotnet-ef` ❌ not installed; BFF user secrets ❌ not set up. See `Plans/workstreams/2026-06-15-pc-tooling-resync/plan.md`. |
 
 ## Pre-Phase 2 (must start now, parallel to Phase 1)
 
@@ -38,8 +39,8 @@ Every external integration requires gov/partner onboarding **before** integratio
 
 | # | Item | Owner | Lead time | Status |
 |---|---|---|---|---|
-| 16 | **Nafath integration agreement** with NIC/SDAIA | NIC | 4-8 weeks | ⏳ Submit Week 5 of Phase 1 |
-| 17 | **Nafath UAT credentials** + IP whitelisting | NIC | Part of #16 | ⏳ Same |
+| 16 | **Nafath integration agreement** with NIC/SDAIA | NIC | 4-8 weeks | ⏳ Submit Week 5 of Phase 1 | No adapter package on disk yet. Phase 1 uses email+SMS OTP via Entra External ID (feature flag shields portal). |
+| 17 | **Nafath UAT credentials** + IP whitelisting | NIC | Part of #16 | ⏳ Same | Part of #16 process |
 | 18 | **Telematics vendor selection** (Mix Telematics vs Geotab) | Internal decision | 1-2 weeks evaluation | ⏳ Decide by end of Phase 2 |
 | 19 | **Telematics dev API account** | Vendor | 1-2 weeks after selection | ⏳ After #18 |
 | 20 | **Wasl integration** (KSA TGA fleet tracking, mandatory) | TGA | 2-4 weeks | ⏳ After telematics is live |
@@ -87,6 +88,15 @@ Example smoke tests:
 | D365 access (Phase 2) | Phase 2 critical | InMemory adapters keep BFF building; defer D365 sync |
 | ZATCA prod CSID (Phase 2) | High | Sandbox keeps working; production submission deferred 1-2 weeks |
 | Nafath (Phase 3) | High | Email+SMS OTP keeps the portal working indefinitely |
+
+## Note on TAMM, NAQL, SHAMOOS, and SIMAH
+
+| Integration | Repo status | Action |
+|---|---|---|
+| **TAMM** (KSA owner authorization) | In scope **Phase 3+ / UAE expansion only**. Phase 1/2: subsumed by Tajeer's `tammExternalAuthorizationCountries`. Domain seed has `TammAuthorizationStatus` on Driver. No onboarding needed before Phase 3+. | Add item when Phase 3 or UAE expansion is confirmed. |
+| **NAQL** (vehicle ownership lookup) | In scope **Phase 3+ (standalone)**. Phase 1: vehicle ownership lookups flow through Tajeer internally; Tajeer adapter already handles `server.error.naql.not.available` as `ExternalDependency`. | Monitor Tajeer staging NAQL errors. Add item when standalone NAQL integration is planned. |
+| **SHAMOOS** | **Not referenced in any repository document** (no Spec, Plan, or code file). Cannot assign phase or status. | Product owner: decide if in scope; if yes, add an item to this checklist with phase + lead time. |
+| **SIMAH** (Saudi Credit Bureau / credit check) | **Not referenced in any repository document**. | Product owner: decide if in scope (likely Phase 2/3 for B2C lessee credit scoring); if yes, add an item to this checklist with phase + lead time. |
 
 ## Weekly cadence
 
