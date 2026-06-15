@@ -11,7 +11,7 @@
       NU1902/NU1903: transitive Grpc.Net.Client vulnerability via OpenTelemetry.Exporter.OpenTelemetryProtocol; no exporter version bumps the transitive yet. Re-enable when fixed upstream.
       CA1716: AutoLeaseNet.Domain.Shared is a deliberate DDD building-block namespace; not consumed cross-language.
     -->
-    <NoWarn>$(NoWarn);CS1591;NU1902;NU1903;CA1716</NoWarn>
+    <NoWarn>$(NoWarn);CS1591;NU1902;NU1903;CA1716;IDE0011</NoWarn>
     <AnalysisLevel>latest-Recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>

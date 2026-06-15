@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -6,28 +6,22 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
-    /// <remarks>
-    /// Week-4 Day-22 (2026-06-07). Creates the Quotation aggregate's four tables
-    /// (<c>Quotations</c>, <c>QuotationLines</c>, <c>QuotationApprovals</c>,
-    /// <c>ApprovalTiers</c>) and extends <c>dbo.TenancyPolicy</c> (from
-    /// <c>Add_RLS_TenancyPolicy</c>) to cover them — CLAUDE.md rule #4: the DB-engine
-    /// tenancy floor must not regress when tables are added. All four use
-    /// <c>fn_TenancyPredicate(TenantId, NULL)</c> — internal-only in Phase 1 (same stance
-    /// as Inspections / Incidents). Phase-2 follow-up: swap <c>Quotations</c> to a
-    /// CustomerId predicate when the customer accept-quote portal view lands.
-    /// </remarks>
     public partial class Add_Quotation_Aggregate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.EnsureSchema(
+                name: "dbo");
+
             migrationBuilder.CreateTable(
                 name: "ApprovalTiers",
+                schema: "dbo",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     TierLevel = table.Column<byte>(type: "tinyint", nullable: false),
-                    RequiredRoleCode = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    RequiredRoleCode = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
                     MinAmountSar = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
                     IsActive = table.Column<bool>(type: "bit", nullable: false),
                     TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
@@ -44,18 +38,19 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
 
             migrationBuilder.CreateTable(
                 name: "Quotations",
+                schema: "dbo",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    QuoteNumber = table.Column<string>(type: "nvarchar(30)", maxLength: 30, nullable: false),
+                    QuoteNumber = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
                     CustomerId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     AccountManagerId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Status = table.Column<int>(type: "int", nullable: false),
+                    Status = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
                     QuoteDate = table.Column<DateOnly>(type: "date", nullable: false),
                     ValidUntilDate = table.Column<DateOnly>(type: "date", nullable: false),
-                    ContractType = table.Column<int>(type: "int", nullable: false),
+                    ContractType = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
                     EstimatedDurationMonths = table.Column<int>(type: "int", nullable: false),
-                    TermsAndConditionsMd = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    TermsAndConditionsMd = table.Column<string>(type: "nvarchar(4000)", maxLength: 4000, nullable: true),
                     SubTotalSar = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
                     DiscountPercent = table.Column<decimal>(type: "decimal(5,2)", precision: 5, scale: 2, nullable: false),
                     VatSar = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
@@ -66,7 +61,7 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
                     AcceptedAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
                     ClosedAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
                     PdfBlobUri = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
-                    AcceptedByCustomerSignature = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    AcceptedByCustomerSignature = table.Column<string>(type: "nvarchar(4000)", maxLength: 4000, nullable: true),
                     TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     CreatedAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
                     CreatedBy = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
@@ -77,18 +72,24 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Quotations", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Quotations_Customers_CustomerId",
+                        column: x => x.CustomerId,
+                        principalTable: "Customers",
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
                 name: "QuotationApprovals",
+                schema: "dbo",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     QuotationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     TierLevel = table.Column<byte>(type: "tinyint", nullable: false),
-                    RequiredRoleCode = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    RequiredRoleCode = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
                     AssignedUserId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    Status = table.Column<int>(type: "int", nullable: false),
+                    Status = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
                     DecisionAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
                     DecidedByUserId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
                     Comment = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: true),
@@ -105,6 +106,7 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
                     table.ForeignKey(
                         name: "FK_QuotationApprovals_Quotations_QuotationId",
                         column: x => x.QuotationId,
+                        principalSchema: "dbo",
                         principalTable: "Quotations",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -112,14 +114,15 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
 
             migrationBuilder.CreateTable(
                 name: "QuotationLines",
+                schema: "dbo",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     QuotationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     LineNumber = table.Column<int>(type: "int", nullable: false),
-                    ItemType = table.Column<int>(type: "int", nullable: false),
+                    ItemType = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
                     Description = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    VehicleSpecRef = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
+                    VehicleSpecRef = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
                     Quantity = table.Column<int>(type: "int", nullable: false),
                     UnitPriceSar = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
                     DiscountPercent = table.Column<decimal>(type: "decimal(5,2)", precision: 5, scale: 2, nullable: false),
@@ -137,63 +140,87 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
                     table.ForeignKey(
                         name: "FK_QuotationLines_Quotations_QuotationId",
                         column: x => x.QuotationId,
+                        principalSchema: "dbo",
                         principalTable: "Quotations",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_ApprovalTiers_TenantId",
+                schema: "dbo",
+                table: "ApprovalTiers",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_ApprovalTiers_TenantId_TierLevel",
+                schema: "dbo",
                 table: "ApprovalTiers",
                 columns: new[] { "TenantId", "TierLevel" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_QuotationApprovals_QuotationId",
+                schema: "dbo",
                 table: "QuotationApprovals",
                 column: "QuotationId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_QuotationApprovals_TenantId_QuotationId_TierLevel",
+                name: "IX_QuotationApprovals_QuotationId_TierLevel",
+                schema: "dbo",
                 table: "QuotationApprovals",
-                columns: new[] { "TenantId", "QuotationId", "TierLevel" },
+                columns: new[] { "QuotationId", "TierLevel" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_QuotationApprovals_TenantId_Status_RequiredRoleCode",
+                name: "IX_QuotationApprovals_TenantId",
+                schema: "dbo",
                 table: "QuotationApprovals",
-                columns: new[] { "TenantId", "Status", "RequiredRoleCode" });
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_QuotationLines_QuotationId",
+                schema: "dbo",
                 table: "QuotationLines",
                 column: "QuotationId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_QuotationLines_TenantId_QuotationId_LineNumber",
+                name: "IX_QuotationLines_QuotationId_LineNumber",
+                schema: "dbo",
                 table: "QuotationLines",
-                columns: new[] { "TenantId", "QuotationId", "LineNumber" },
+                columns: new[] { "QuotationId", "LineNumber" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_Quotations_TenantId_CustomerId",
+                name: "IX_QuotationLines_TenantId",
+                schema: "dbo",
+                table: "QuotationLines",
+                column: "TenantId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Quotations_CustomerId",
+                schema: "dbo",
                 table: "Quotations",
-                columns: new[] { "TenantId", "CustomerId" });
+                column: "CustomerId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Quotations_TenantId",
+                schema: "dbo",
+                table: "Quotations",
+                column: "TenantId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Quotations_TenantId_QuoteNumber",
+                schema: "dbo",
                 table: "Quotations",
                 columns: new[] { "TenantId", "QuoteNumber" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Quotations_TenantId_Status",
+                schema: "dbo",
                 table: "Quotations",
                 columns: new[] { "TenantId", "Status" });
-
-            // Extend the existing security policy to the four new tables. Internal-only in
-            // Phase 1 (CustomerId arg = NULL → external users see no rows). Re-uses the
-            // dbo.fn_TenancyPredicate created in Add_RLS_TenancyPolicy.
             migrationBuilder.Sql(@"
 ALTER SECURITY POLICY dbo.TenancyPolicy
     ADD FILTER PREDICATE dbo.fn_TenancyPredicate(TenantId, NULL) ON dbo.Quotations,
@@ -217,8 +244,6 @@ ALTER SECURITY POLICY dbo.TenancyPolicy
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // Remove the policy predicates first — a table referenced by a security policy
-            // predicate cannot be dropped.
             migrationBuilder.Sql(@"
 ALTER SECURITY POLICY dbo.TenancyPolicy
     DROP FILTER PREDICATE ON dbo.Quotations,
@@ -239,16 +264,24 @@ ALTER SECURITY POLICY dbo.TenancyPolicy
 ");
 
             migrationBuilder.DropTable(
-                name: "ApprovalTiers");
+                name: "ApprovalTiers",
+                schema: "dbo");
 
             migrationBuilder.DropTable(
-                name: "QuotationApprovals");
+                name: "QuotationApprovals",
+                schema: "dbo");
 
             migrationBuilder.DropTable(
-                name: "QuotationLines");
+                name: "QuotationLines",
+                schema: "dbo");
 
             migrationBuilder.DropTable(
-                name: "Quotations");
+                name: "Quotations",
+                schema: "dbo");
         }
     }
 }
+
+
+
+

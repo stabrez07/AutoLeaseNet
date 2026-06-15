@@ -5,6 +5,14 @@ inside the repo so any future Copilot / Claude session can continue cleanly with
 relying on chat memory. **This file is the source of truth between sessions.** Read
 it first; update it after every meaningful change.
 
+> **Last updated: 2026-06-15** — PC-tooling resync workstream
+> (`Plans/workstreams/2026-06-15-pc-tooling-resync/`). Fixed CA1873 build regression
+> in `IncidentCommandHandlers` + `InspectionCommandHandlers` (SDK 10 stricter analyzer;
+> enum args now passed directly to `[LoggerMessage]` partials). Outstanding manual
+> blockers on this PC: Node/pnpm/Docker not installed; BFF user secrets not set up;
+> duplicate EF migration class `Add_Quotation_Aggregate` in `feat/day23-approval-saga`
+> blocks `dotnet build` until resolved — see retrospective for options.
+
 ## Working rules (user-set, 2026-05-24)
 
 1. Always read the latest repo state before doing anything.

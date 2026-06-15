@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AutoLeaseNetDbContext))]
-    [Migration("20260607172013_Add_Quotation_Aggregate")]
+    [Migration("20260607174509_Add_Quotation_Aggregate")]
     partial class Add_Quotation_Aggregate
     {
         /// <inheritdoc />
@@ -1208,8 +1208,8 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("RequiredRoleCode")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
@@ -1230,10 +1230,12 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TenantId");
+
                     b.HasIndex("TenantId", "TierLevel")
                         .IsUnique();
 
-                    b.ToTable("ApprovalTiers", (string)null);
+                    b.ToTable("ApprovalTiers", "dbo");
                 });
 
             modelBuilder.Entity("AutoLeaseNet.Domain.Sales.Quotation", b =>
@@ -1246,7 +1248,8 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.Property<string>("AcceptedByCustomerSignature")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
 
                     b.Property<Guid>("AccountManagerId")
                         .HasColumnType("uniqueidentifier");
@@ -1257,8 +1260,10 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ClosedAtUtc")
                         .HasColumnType("datetimeoffset");
 
-                    b.Property<int>("ContractType")
-                        .HasColumnType("int");
+                    b.Property<string>("ContractType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("datetimeoffset");
@@ -1285,8 +1290,8 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("QuoteNumber")
                         .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
@@ -1296,8 +1301,10 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("SentAtUtc")
                         .HasColumnType("datetimeoffset");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<decimal>("SubTotalSar")
                         .HasPrecision(18, 2)
@@ -1310,7 +1317,8 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("TermsAndConditionsMd")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
 
                     b.Property<decimal>("TotalSar")
                         .HasPrecision(18, 2)
@@ -1331,14 +1339,16 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "CustomerId");
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "QuoteNumber")
                         .IsUnique();
 
                     b.HasIndex("TenantId", "Status");
 
-                    b.ToTable("Quotations", (string)null);
+                    b.ToTable("Quotations", "dbo");
                 });
 
             modelBuilder.Entity("AutoLeaseNet.Domain.Sales.QuotationApproval", b =>
@@ -1371,16 +1381,18 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("RequiredRoleCode")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("rowversion");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
@@ -1398,12 +1410,12 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("QuotationId");
 
-                    b.HasIndex("TenantId", "QuotationId", "TierLevel")
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("QuotationId", "TierLevel")
                         .IsUnique();
 
-                    b.HasIndex("TenantId", "Status", "RequiredRoleCode");
-
-                    b.ToTable("QuotationApprovals", (string)null);
+                    b.ToTable("QuotationApprovals", "dbo");
                 });
 
             modelBuilder.Entity("AutoLeaseNet.Domain.Sales.QuotationLine", b =>
@@ -1427,8 +1439,10 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
                         .HasPrecision(5, 2)
                         .HasColumnType("decimal(5,2)");
 
-                    b.Property<int>("ItemType")
-                        .HasColumnType("int");
+                    b.Property<string>("ItemType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<int>("LineNumber")
                         .HasColumnType("int");
@@ -1462,17 +1476,19 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("VehicleSpecRef")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("QuotationId");
 
-                    b.HasIndex("TenantId", "QuotationId", "LineNumber")
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("QuotationId", "LineNumber")
                         .IsUnique();
 
-                    b.ToTable("QuotationLines", (string)null);
+                    b.ToTable("QuotationLines", "dbo");
                 });
 
             modelBuilder.Entity("AutoLeaseNet.Domain.Vehicles.Vehicle", b =>
@@ -1777,6 +1793,15 @@ namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
                         .WithMany("Photos")
                         .HasForeignKey("InspectionId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AutoLeaseNet.Domain.Sales.Quotation", b =>
+                {
+                    b.HasOne("AutoLeaseNet.Domain.Customers.Customer", null)
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });
 

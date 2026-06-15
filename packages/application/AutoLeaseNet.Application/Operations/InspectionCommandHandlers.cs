@@ -113,7 +113,7 @@ public sealed partial class StartInspectionCommandHandler(
 
         var result = Ok(inspection);
         await idempotency.SetAsync(idemKey, result, InspectionIdempotency.Ttl, cancellationToken).ConfigureAwait(false);
-        LogStarted(inspection.Id, inspection.Type.ToString());
+        LogStarted(inspection.Id, inspection.Type);
         return result;
     }
 
@@ -127,7 +127,7 @@ public sealed partial class StartInspectionCommandHandler(
     partial void LogReplay(string idempotencyKey);
 
     [LoggerMessage(EventId = 8002, Level = LogLevel.Information, Message = "Inspection {InspectionId} started (Type={Type})")]
-    partial void LogStarted(Guid inspectionId, string type);
+    partial void LogStarted(Guid inspectionId, InspectionType type);
 }
 
 /// <summary>Adds one photo to an IN_PROGRESS inspection.</summary>

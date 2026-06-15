@@ -1,7 +1,7 @@
 # 07 — Risk Register & Mitigations
 
 **Status**: 📋 Living document — update on every Friday review and after every incident
-**Last reviewed**: 2026-05-17
+**Last reviewed**: 2026-06-15 — dependency RFQ refresh workstream (`Plans/workstreams/2026-06-15-dependency-rfq-refresh/`)
 
 ---
 
@@ -69,6 +69,29 @@
   - Weekly checkpoints — defer rather than slip
   - Sustainable pace: no all-nighters; weekend rest mandatory
 - **Status**: Mitigated by process
+
+### DEP-04 — `infra/bicep/` does not exist; Azure landing zone unscaffolded
+
+- **Likelihood**: Certainty (confirmed 2026-06-15: directory absent from repo)
+- **Impact**: High (no cloud deploy path; Azure-backed adapters — AzureBlob, Redis — cannot be validated on staging until a real Azure environment exists)
+- **Priority**: High
+- **Description**: `Plans/05-dependency-onboarding-checklist.md` #5 references `infra/bicep/main.bicep`
+  for the landing zone deploy, but neither the file nor the `infra/` directory exists in the
+  repository. The `Adapters.Storage.AzureBlob` and `Adapters.Cache.Redis` packages are on disk
+  but cannot be smoke-tested without a real Azure Storage + Redis endpoint. Local dev currently
+  uses the Docker-free local SQL Server path; cloud staging is entirely unblocked by this gap.
+- **Mitigation**:
+  - Create `infra/bicep/main.bicep` as a code task (estimate: 1 day) defining: Resource Group,
+    Key Vault, App Service Plan (P1v3), Azure SQL, Redis Cache, Storage Account, Application
+    Insights, Log Analytics workspace.
+  - Wire Bicep deploy into a GitHub Actions workflow (`ci/deploy-dev.yml`) using OIDC
+    federated credentials.
+  - Until the landing zone exists, all staging validation uses local adapters (InMemory SMS,
+    local SQL, Docker Redis) — acceptable for Phase 1 but must be resolved before Phase 2
+    staging UAT with real Azure-backed services.
+- **Status**: Open — create `infra/bicep/` workstream to address
+
+---
 
 ### DEP-01 — Nafath onboarding delays B2C launch
 

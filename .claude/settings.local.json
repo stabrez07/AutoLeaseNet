@@ -47,7 +47,8 @@
       "Bash(gh api *)",
       "Bash(gh secret *)",
       "Bash(python -c \"import yaml,sys; yaml.safe_load\\(open\\('.github/workflows/ci.yml'\\)\\); print\\('YAML valid'\\)\")",
-      "Bash(gh run *)"
+      "Bash(gh run *)",
+      "Bash(gh pr *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Administrator\\Desktop\\AutoLeaseNet\\.git"

@@ -79,7 +79,7 @@ public sealed partial class ReportIncidentCommandHandler(
 
         var result = Ok(incident);
         await idempotency.SetAsync(idemKey, result, IncidentIdempotency.Ttl, ct).ConfigureAwait(false);
-        LogReported(incident.Id, incident.Type.ToString(), incident.Severity.ToString());
+        LogReported(incident.Id, incident.Type, incident.Severity);
         return result;
     }
 
@@ -93,7 +93,7 @@ public sealed partial class ReportIncidentCommandHandler(
     partial void LogReplay(string idempotencyKey);
 
     [LoggerMessage(EventId = 8102, Level = LogLevel.Information, Message = "Incident {IncidentId} reported (Type={Type}, Severity={Severity})")]
-    partial void LogReported(Guid incidentId, string type, string severity);
+    partial void LogReported(Guid incidentId, IncidentType type, IncidentSeverity severity);
 }
 
 public sealed partial class StartIncidentInvestigationCommandHandler(
