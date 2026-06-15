@@ -10,6 +10,7 @@ public sealed class QuotationApprovalConfiguration : IEntityTypeConfiguration<Qu
     {
         builder.ToTable("QuotationApprovals", "dbo");
         builder.HasKey(a => a.Id);
+        builder.Property(a => a.Id).ValueGeneratedNever();
 
         builder.Property(a => a.TenantId).IsRequired();
         builder.Property(a => a.QuotationId).IsRequired();
@@ -23,7 +24,9 @@ public sealed class QuotationApprovalConfiguration : IEntityTypeConfiguration<Qu
 
         builder.Property(a => a.CreatedAtUtc).IsRequired();
         builder.Property(a => a.UpdatedAtUtc).IsRequired();
-        builder.Property(a => a.RowVersion).IsRowVersion();
+        builder.Property(a => a.RowVersion)
+            .IsRowVersion()
+            .UsePropertyAccessMode(PropertyAccessMode.Property);
 
         builder.HasIndex(a => a.TenantId);
         builder.HasIndex(a => a.QuotationId);

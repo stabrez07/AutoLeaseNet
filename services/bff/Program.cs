@@ -144,6 +144,7 @@ v1.MapLookupEndpoints();
 v1.MapInspectionEndpoints();
 v1.MapIncidentEndpoints();
 v1.MapLeaseEndpoints();
+v1.MapQuotationEndpoints();
 v1.MapMeEndpoints();
 v1.MapTajeerWebhookEndpoints();
 

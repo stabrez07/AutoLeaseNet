@@ -39,7 +39,9 @@ public sealed class QuotationConfiguration : IEntityTypeConfiguration<Quotation>
 
         builder.Property(q => q.CreatedAtUtc).IsRequired();
         builder.Property(q => q.UpdatedAtUtc).IsRequired();
-        builder.Property(q => q.RowVersion).IsRowVersion();
+        builder.Property(q => q.RowVersion)
+            .IsRowVersion()
+            .UsePropertyAccessMode(PropertyAccessMode.Property);
 
         builder.HasIndex(q => q.TenantId);
         builder.HasIndex(q => new { q.TenantId, q.QuoteNumber }).IsUnique();
