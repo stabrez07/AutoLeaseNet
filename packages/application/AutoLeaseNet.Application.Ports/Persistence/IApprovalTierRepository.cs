@@ -8,6 +8,7 @@ namespace AutoLeaseNet.Application.Ports.Persistence;
 public interface IApprovalTierRepository
 {
     void Add(ApprovalTier tier);
+
     Task<bool> AnyAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>Returns all active tiers for the tenant, ordered by <see cref="ApprovalTier.TierLevel"/>.</summary>
