@@ -113,7 +113,11 @@ public sealed partial class StartInspectionCommandHandler(
 
         var result = Ok(inspection);
         await idempotency.SetAsync(idemKey, result, InspectionIdempotency.Ttl, cancellationToken).ConfigureAwait(false);
-        LogStarted(inspection.Id, inspection.Type.ToString());
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            var typeStr = inspection.Type.ToString();
+            LogStarted(inspection.Id, typeStr);
+        }
         return result;
     }
 

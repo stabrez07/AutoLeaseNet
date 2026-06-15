@@ -39,6 +39,10 @@ public sealed record CloseIncidentCommand(
     string IdempotencyKey,
     Guid IncidentId) : IRequest<IncidentCommandResult>;
 
+public sealed record TriggerIncidentReplacementCommand(
+    string IdempotencyKey,
+    Guid IncidentId) : IRequest<IncidentCommandResult>;
+
 public sealed record UpdateIncidentClaimCommand(
     string IdempotencyKey,
     Guid IncidentId,

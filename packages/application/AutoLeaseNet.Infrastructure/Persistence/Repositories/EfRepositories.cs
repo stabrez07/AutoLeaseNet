@@ -31,6 +31,26 @@ public sealed class EfVehicleRepository(AutoLeaseNetDbContext db) : IVehicleRepo
         db.Vehicles.SingleOrDefaultAsync(
             v => v.TenantId == tenantId && v.PlateNumber == plateNumber && v.PlateLetters == plateLetters,
             ct);
+
+    public Task<Vehicle?> FindAvailableReplacementAsync(
+        Guid tenantId,
+        Guid excludedVehicleId,
+        Guid preferredBranchId,
+        BodyType bodyType,
+        int seats,
+        CancellationToken ct)
+    {
+        return db.Vehicles
+            .Where(v =>
+                v.TenantId == tenantId &&
+                v.Id != excludedVehicleId &&
+                v.Status == VehicleStatus.Available &&
+                v.BodyType == bodyType &&
+                v.Seats == seats)
+            .OrderByDescending(v => v.CurrentBranchId == preferredBranchId)
+            .ThenBy(v => v.CurrentKm)
+            .FirstOrDefaultAsync(ct);
+    }
 }
 
 public sealed class EfDriverRepository(AutoLeaseNetDbContext db) : IDriverRepository

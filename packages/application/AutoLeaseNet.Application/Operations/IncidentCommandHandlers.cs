@@ -1,4 +1,5 @@
 using AutoLeaseNet.Application.Ports.Idempotency;
+using AutoLeaseNet.Application.Notifications;
 using AutoLeaseNet.Application.Ports.Persistence;
 using AutoLeaseNet.Application.Ports.Tenancy;
 using AutoLeaseNet.Application.Ports.Time;
@@ -79,7 +80,12 @@ public sealed partial class ReportIncidentCommandHandler(
 
         var result = Ok(incident);
         await idempotency.SetAsync(idemKey, result, IncidentIdempotency.Ttl, ct).ConfigureAwait(false);
-        LogReported(incident.Id, incident.Type.ToString(), incident.Severity.ToString());
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            var typeStr = incident.Type.ToString();
+            var severityStr = incident.Severity.ToString();
+            LogReported(incident.Id, typeStr, severityStr);
+        }
         return result;
     }
 
@@ -265,4 +271,54 @@ public sealed partial class UpdateIncidentClaimCommandHandler(
 
     [LoggerMessage(EventId = 8142, Level = LogLevel.Information, Message = "Incident {IncidentId} claim numbers updated")]
     partial void LogClaimUpdated(Guid incidentId);
+}
+
+public sealed partial class TriggerIncidentReplacementCommandHandler(
+    IIncidentRepository incidents,
+    IIdempotencyStore idempotency,
+    ITenantContext tenant,
+    IPublisher publisher,
+    ILogger<TriggerIncidentReplacementCommandHandler> logger)
+    : IRequestHandler<TriggerIncidentReplacementCommand, IncidentCommandResult>
+{
+    public async Task<IncidentCommandResult> Handle(TriggerIncidentReplacementCommand request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var ct = cancellationToken;
+        var tenantId = IncidentIdempotency.RequireTenantId(tenant);
+
+        var idemKey = IncidentIdempotency.Key(tenantId, $"trigger-replacement:{request.IncidentId:N}", request.IdempotencyKey);
+        var cached = await idempotency.GetAsync<IncidentCommandResult>(idemKey, ct).ConfigureAwait(false);
+        if (cached is not null) { LogReplay(idemKey.Value); return cached; }
+
+        var incident = await incidents.GetByIdAsync(tenantId, request.IncidentId, ct).ConfigureAwait(false);
+        if (incident is null) return Fail("incident.not_found", $"Incident {request.IncidentId} not found.");
+        if (!incident.RequiresReplacement)
+            return Fail("incident.replacement_not_required", $"Incident {request.IncidentId} does not require replacement.");
+
+        await publisher.Publish(new DomainEventNotification<IncidentReportedDomainEvent>(
+            new IncidentReportedDomainEvent(
+                IncidentId: incident.Id,
+                TenantId: incident.TenantId,
+                LeaseId: incident.LeaseId,
+                VehicleId: incident.VehicleId,
+                Type: incident.Type,
+                Severity: incident.Severity,
+                ReportedAtUtc: incident.ReportedAtUtc,
+                RequiresReplacement: true)), ct).ConfigureAwait(false);
+
+        var result = Ok(incident);
+        await idempotency.SetAsync(idemKey, result, IncidentIdempotency.Ttl, ct).ConfigureAwait(false);
+        LogTriggered(incident.Id);
+        return result;
+    }
+
+    private static IncidentCommandResult Ok(Incident i) => new(true, i.Id, i.Status, null, null);
+    private static IncidentCommandResult Fail(string code, string message) => new(false, null, null, code, message);
+
+    [LoggerMessage(EventId = 8151, Level = LogLevel.Information, Message = "TriggerReplacement idempotency replay for key {IdempotencyKey}")]
+    partial void LogReplay(string idempotencyKey);
+
+    [LoggerMessage(EventId = 8152, Level = LogLevel.Information, Message = "Incident {IncidentId} replacement flow manually triggered")]
+    partial void LogTriggered(Guid incidentId);
 }

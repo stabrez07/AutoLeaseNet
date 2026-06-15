@@ -75,6 +75,14 @@ public interface ITajeerContractClient
         CancellationToken ct = default);
 
     /// <summary>
+    /// Spec 03 §6.8 — cancel a saved contract before issuance. Used as the compensation
+    /// path when replacement orchestration fails after a new Tajeer save has succeeded.
+    /// </summary>
+    Task<IntegrationResult<Unit>> CancelAsync(
+        CancelContractRequest request,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Spec 03 §6.3 — read-only lookup of a contract's current state on Tajeer. Used by
     /// the reconciliation drift detector to verify our local mirror matches the vendor's
     /// view (CLAUDE.md §5 — Tajeer is system of record). Vendor 404 surfaces as

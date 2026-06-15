@@ -123,6 +123,15 @@ public sealed class Vehicle : Entity
         UpdatedAtUtc = nowUtc;
     }
 
+    public void ReleaseReservation(DateTimeOffset nowUtc)
+    {
+        if (Status == VehicleStatus.Available) return;
+        if (Status != VehicleStatus.Reserved)
+            throw new InvalidOperationException($"Vehicle {Id} must be Reserved to release reservation (was {Status}).");
+        Status = VehicleStatus.Available;
+        UpdatedAtUtc = nowUtc;
+    }
+
     public void StartRental(DateTimeOffset nowUtc)
     {
         if (Status != VehicleStatus.Reserved && Status != VehicleStatus.Available)

@@ -22,6 +22,7 @@ public static class IncidentEndpoints
         group.MapPost("/{id:guid}/investigate", InvestigateAsync).WithName("StartIncidentInvestigation").RequireAuthorization();
         group.MapPost("/{id:guid}/resolve", ResolveAsync).WithName("ResolveIncident").RequireAuthorization();
         group.MapPost("/{id:guid}/close", CloseAsync).WithName("CloseIncident").RequireAuthorization();
+        group.MapPost("/{id:guid}/trigger-replacement", TriggerReplacementAsync).WithName("TriggerIncidentReplacement").RequireAuthorization();
         group.MapPatch("/{id:guid}/claim", UpdateClaimAsync).WithName("UpdateIncidentClaim").RequireAuthorization();
         group.MapGet("/{id:guid}", GetByIdAsync).WithName("GetIncidentById").RequireAuthorization();
 
@@ -77,6 +78,13 @@ public static class IncidentEndpoints
     {
         if (!TryReadIdempotencyKey(ctx, out var idemKey, out var err)) return err;
         var result = await mediator.Send(new CloseIncidentCommand(idemKey, id), ct);
+        return result.Success ? Results.Ok(new { id = result.IncidentId, status = result.Status }) : ToProblem(result);
+    }
+
+    private static async Task<IResult> TriggerReplacementAsync(HttpContext ctx, IMediator mediator, Guid id, CancellationToken ct)
+    {
+        if (!TryReadIdempotencyKey(ctx, out var idemKey, out var err)) return err;
+        var result = await mediator.Send(new TriggerIncidentReplacementCommand(idemKey, id), ct);
         return result.Success ? Results.Ok(new { id = result.IncidentId, status = result.Status }) : ToProblem(result);
     }
 

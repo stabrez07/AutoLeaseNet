@@ -19,6 +19,7 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
     private readonly Func<CloseContractRequest, IntegrationResult<CloseContractResponse>>? _closeFactoryOverride;
     private readonly Func<ExtendContractRequest, IntegrationResult<ExtendContractResponse>>? _extendFactoryOverride;
     private readonly Func<SuspendContractRequest, IntegrationResult<SuspendContractResponse>>? _suspendFactoryOverride;
+    private readonly Func<CancelContractRequest, IntegrationResult<Unit>>? _cancelFactoryOverride;
     private readonly Func<long, IntegrationResult<GetContractResponse>>? _getFactoryOverride;
 
     private readonly List<SaveContractRequest> _saveCalls = new();
@@ -26,6 +27,7 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
     private readonly List<CloseContractRequest> _closeCalls = new();
     private readonly List<ExtendContractRequest> _extendCalls = new();
     private readonly List<SuspendContractRequest> _suspendCalls = new();
+    private readonly List<CancelContractRequest> _cancelCalls = new();
     private readonly List<long> _getCalls = new();
 
     // Per-contract latest-status projection — what GetAsync derives its response from
@@ -44,6 +46,7 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
         Func<CloseContractRequest, IntegrationResult<CloseContractResponse>>? closeFactory = null,
         Func<ExtendContractRequest, IntegrationResult<ExtendContractResponse>>? extendFactory = null,
         Func<SuspendContractRequest, IntegrationResult<SuspendContractResponse>>? suspendFactory = null,
+        Func<CancelContractRequest, IntegrationResult<Unit>>? cancelFactory = null,
         Func<long, IntegrationResult<GetContractResponse>>? getFactory = null)
     {
         _saveFactoryOverride = saveFactory;
@@ -51,6 +54,7 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
         _closeFactoryOverride = closeFactory;
         _extendFactoryOverride = extendFactory;
         _suspendFactoryOverride = suspendFactory;
+        _cancelFactoryOverride = cancelFactory;
         _getFactoryOverride = getFactory;
     }
 
@@ -68,6 +72,9 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
 
     /// <summary>All <see cref="SuspendAsync"/> calls observed since construction.</summary>
     public IReadOnlyList<SuspendContractRequest> SuspendCalls => _suspendCalls;
+
+    /// <summary>All <see cref="CancelAsync"/> calls observed since construction.</summary>
+    public IReadOnlyList<CancelContractRequest> CancelCalls => _cancelCalls;
 
     /// <summary>All <see cref="GetAsync"/> calls observed since construction (by contract number).</summary>
     public IReadOnlyList<long> GetCalls => _getCalls;
@@ -176,6 +183,28 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
             {
                 ContractStatusCode = 3,
                 SuspensionReasonCode = request.SuspensionReasonCode,
+            };
+        }
+
+        return Task.FromResult(result);
+    }
+
+    public Task<IntegrationResult<Unit>> CancelAsync(
+        CancelContractRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        _cancelCalls.Add(request);
+
+        var result = _cancelFactoryOverride is not null
+            ? _cancelFactoryOverride(request)
+            : DefaultCancelResponse(request);
+
+        if (result.IsSuccess)
+        {
+            _projection[request.ContractNumber] = ProjectionFor(request.ContractNumber) with
+            {
+                ContractStatusCode = 5,
             };
         }
 
@@ -332,5 +361,11 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
             ContractStatusCode = 3, // Tajeer status code for Suspended
             SuspendedAt = request.SuspendedAt,
         });
+    }
+
+    private static IntegrationResult<Unit> DefaultCancelResponse(CancelContractRequest request)
+    {
+        _ = request;
+        return IntegrationResult<Unit>.Success(Unit.Value);
     }
 }

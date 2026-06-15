@@ -143,6 +143,23 @@ public sealed class AggregateInvariantsTests
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
+    [Fact]
+    public void Vehicle_ReleaseReservation_returns_to_Available()
+    {
+        var v = Vehicle.Create(new VehicleCreateInput
+        {
+            TenantId = Tenant,
+            PlateNumber = "7777", PlateLetters = "ر س ش", PlateTypeCode = 1,
+            Vin = "Z", Make = "Nissan", Model = "Altima", ModelYear = 2024,
+            OwnerBranchId = Guid.NewGuid(), CurrentKm = 12_000, NowUtc = Now,
+        });
+
+        v.Reserve(Now);
+        v.ReleaseReservation(Now.AddMinutes(1));
+
+        v.Status.Should().Be(VehicleStatus.Available);
+    }
+
     // ─── Driver ─────────────────────────────────────────────────────────────
     [Fact]
     public void Driver_factory_initialises_with_TammNotRequested()

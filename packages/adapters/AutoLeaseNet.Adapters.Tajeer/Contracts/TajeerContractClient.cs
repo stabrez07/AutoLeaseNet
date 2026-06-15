@@ -20,6 +20,7 @@ public sealed partial class TajeerContractClient : ITajeerContractClient
     private const string ClosePath = "/api/contracts/closure";
     private const string ExtendPath = "/api/contracts/extend";
     private const string SuspendPath = "/api/contracts/suspend";
+    private const string CancelPath = "/api/contracts/cancel";
     // Read endpoint per Spec 03 §6.3. RESTful shape — confirmed (or corrected) on the
     // first staging round-trip; centralising the prefix keeps the eventual fix one-line.
     private const string GetPathPrefix = "/api/contracts/";
@@ -82,6 +83,15 @@ public sealed partial class TajeerContractClient : ITajeerContractClient
             HttpMethod.Put, SuspendPath, request, "SuspendContract", ct);
     }
 
+    public Task<IntegrationResult<Unit>> CancelAsync(
+        CancelContractRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return SendAsync<CancelContractRequest, Unit>(
+            HttpMethod.Put, CancelPath, request, "CancelContract", ct);
+    }
+
     public Task<IntegrationResult<GetContractResponse>> GetAsync(
         long contractNumber,
         CancellationToken ct = default)
@@ -139,6 +149,11 @@ public sealed partial class TajeerContractClient : ITajeerContractClient
                     errorCode: $"tajeer.http.{statusCode}",
                     errorMessage: $"Tajeer {method} {path} returned HTTP {statusCode}.",
                     isTransient: isTransient);
+            }
+
+            if (typeof(TResponse) == typeof(Unit))
+            {
+                return IntegrationResult<TResponse>.Success((TResponse)(object)Unit.Value);
             }
 
             var parsed = JsonSerializer.Deserialize<TResponse>(rawBody, JsonOptions);
