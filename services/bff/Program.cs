@@ -6,6 +6,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using AutoLeaseNet.Adapters.Cache.InMemory;
+using AutoLeaseNet.Adapters.Email.InMemory;
+using AutoLeaseNet.Adapters.Pdf.QuestPdf;
 using AutoLeaseNet.Adapters.Seed;
 using AutoLeaseNet.Adapters.Sms.InMemory;
 using AutoLeaseNet.Adapters.Tajeer;
@@ -96,8 +98,10 @@ builder.Services.AddTajeerWithModeSwitch(builder.Configuration.GetSection(Tajeer
 builder.Services.AddZatcaWithModeSwitch(builder.Configuration.GetSection(ZatcaOptions.SectionName));
 builder.Services.AddInMemoryCache();
 builder.Services.AddInMemorySms();
+builder.Services.AddQuestPdfRenderer();
+builder.Services.AddInMemoryEmail();
 builder.Services.AddSeed(builder.Configuration.GetSection(SeedOptions.SectionName));
-// Future: AddInMemoryStorage(), AddInMemoryEmail() etc.
+// Future: AddInMemoryStorage() etc.
 
 var app = builder.Build();
 
@@ -144,6 +148,7 @@ v1.MapLookupEndpoints();
 v1.MapInspectionEndpoints();
 v1.MapIncidentEndpoints();
 v1.MapLeaseEndpoints();
+v1.MapQuotationEndpoints();
 v1.MapMeEndpoints();
 v1.MapTajeerWebhookEndpoints();
 

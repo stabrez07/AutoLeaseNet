@@ -18,3 +18,28 @@ public enum PdfLocale
     EnglishLtr,
     BilingualArEn
 }
+
+/// <summary>
+/// Quotation PDF document record for rendering quotes.
+/// </summary>
+public sealed record QuotePdfDocument(
+    string Title,
+    PdfLocale Locale,
+    string CompanyName,
+    string QuoteNumber,
+    DateOnly QuoteDate,
+    DateOnly ValidUntilDate,
+    string CustomerName,
+    string CustomerIdNumber,
+    decimal SubTotalSar,
+    decimal DiscountPercent,
+    decimal VatSar,
+    decimal TotalSar,
+    List<QuoteLineItem> LineItems,
+    string TermsAndConditions) : PdfDocument(Title, Locale);
+
+public sealed record QuoteLineItem(
+    string Description,
+    int Quantity,
+    decimal UnitPriceSar,
+    decimal TotalSar);
