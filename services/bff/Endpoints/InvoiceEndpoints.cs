@@ -1,5 +1,7 @@
+using AutoLeaseNet.Application.Billing;
 using AutoLeaseNet.Application.Ports.Persistence;
 using AutoLeaseNet.Application.Ports.Tenancy;
+using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -22,6 +24,12 @@ public static class InvoiceEndpoints
             .WithName("GetInvoiceByLease")
             .WithDescription("Fetch invoice for a specific lease")
             .WithOpenApi();
+
+        group.MapPost("{id:guid}/submit-zatca", SubmitToZatcaAsync)
+            .WithName("SubmitInvoiceToZatca")
+            .WithDescription("Trigger ZATCA clearance submission for an invoice. Idempotent.")
+            .WithOpenApi()
+            .RequireAuthorization();
 
         return routes;
     }
@@ -67,6 +75,27 @@ public static class InvoiceEndpoints
             ClearedAtUtc: invoice.ClearedAtUtc);
 
         return Results.Ok(dto);
+    }
+
+    private static async Task<IResult> SubmitToZatcaAsync(
+        Guid id,
+        IMediator mediator,
+        ITenantContext tenant,
+        CancellationToken ct)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty)
+            return Results.Unauthorized();
+
+        if (id == Guid.Empty)
+            return Results.BadRequest("Invalid invoice ID.");
+
+        var command = new SubmitInvoiceToZatcaCommand(tenantId, id);
+        var result = await mediator.Send(command, ct);
+
+        return result.Success
+            ? Results.Ok(result)
+            : Results.Problem(detail: result.Message, title: "zatca.submission_failed", statusCode: 502);
     }
 }
 

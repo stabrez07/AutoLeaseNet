@@ -260,6 +260,15 @@ public sealed class Quotation : Entity
         AcceptedByCustomerSignature = customerSignature;
         ClosedAtUtc = nowUtc;
         UpdatedAtUtc = nowUtc;
+        RaiseDomainEvent(new QuotationAcceptedDomainEvent(
+            QuotationId: Id,
+            TenantId: TenantId,
+            CustomerId: CustomerId,
+            TotalSar: TotalSar,
+            EstimatedDurationMonths: EstimatedDurationMonths,
+            ContractType: ContractType,
+            CustomerSignature: customerSignature,
+            AcceptedAtUtc: nowUtc));
     }
 
     /// <summary>Customer rejects a sent quote. Terminal.</summary>

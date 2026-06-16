@@ -22,6 +22,7 @@ public static class QuotationEndpoints
         group.MapPost("/{id:guid}/approvals/{tierLevel:int}/decision", RecordApprovalDecisionAsync).WithName("RecordQuotationApprovalDecision").RequireAuthorization();
         group.MapGet("/approvals/pending", GetPendingApprovalsAsync).WithName("GetPendingQuotationApprovals").RequireAuthorization();
         group.MapPost("/{id:guid}/send-pdf", SendPdfAsync).WithName("SendQuotationPdf").RequireAuthorization();
+        group.MapPost("/{id:guid}/accept", AcceptAsync).WithName("AcceptQuotation").RequireAuthorization();
 
         return group;
     }
@@ -102,7 +103,26 @@ public static class QuotationEndpoints
             ? Results.Accepted()
             : Results.Problem(detail: result.ErrorMessage, title: result.ErrorCode, statusCode: 400);
     }
+
+    private static async Task<IResult> AcceptAsync(HttpContext ctx, IMediator mediator, Guid id, AcceptQuotationRequest? body, CancellationToken ct)
+    {
+        var idempotencyKey = ctx.Request.Headers["Idempotency-Key"].ToString();
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+            return Results.BadRequest("Missing Idempotency-Key header.");
+
+        var command = new AcceptQuotationCommand(
+            QuotationId: id,
+            CustomerSignature: body?.CustomerSignature,
+            IdempotencyKey: idempotencyKey);
+
+        var result = await mediator.Send(command, ct);
+
+        return result.Success
+            ? Results.Ok(result)
+            : Results.Problem(detail: result.ErrorMessage, title: result.ErrorCode, statusCode: 400);
+    }
 }
 
 public sealed record SendQuotePdfRequest(string RecipientEmail);
 public sealed record QuotationApprovalDecisionRequest(bool Approved, string? Comment);
+public sealed record AcceptQuotationRequest(string? CustomerSignature);
