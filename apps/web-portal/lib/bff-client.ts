@@ -99,6 +99,96 @@ export interface ProblemDetails {
   errorCode?: string
 }
 
+// ─── Quotation types ────────────────────────────────────────────────────────
+
+export interface QuotationSummary {
+  id: string
+  quoteNumber: string
+  customerId: string
+  customerDisplayName?: string
+  status: string
+  contractType: string
+  totalSar: number
+  subTotalSar: number
+  vatSar: number
+  discountPercent: number
+  quoteDate: string
+  validUntilDate: string
+  estimatedDurationMonths: number
+  submittedAtUtc?: string | null
+  approvedAtUtc?: string | null
+  sentAtUtc?: string | null
+  acceptedAtUtc?: string | null
+}
+
+export interface QuotationLine {
+  id: string
+  lineNumber: number
+  itemType: string
+  description: string
+  vehicleSpecRef?: string | null
+  quantity: number
+  unitPriceSar: number
+  discountPercent: number
+  lineTotalSar: number
+}
+
+export interface QuotationApproval {
+  tierLevel: number
+  requiredRoleCode: string
+  status: string
+  decidedByUserId?: string | null
+  comment?: string | null
+  decidedAtUtc?: string | null
+}
+
+export interface QuotationDetail extends QuotationSummary {
+  lines: QuotationLine[]
+  approvals: QuotationApproval[]
+  pdfBlobUri?: string | null
+  acceptedByCustomerSignature?: string | null
+}
+
+export interface CreateQuotationRequest {
+  customerId: string
+  accountManagerId: string
+  quoteDate: string         // YYYY-MM-DD
+  validUntilDate: string    // YYYY-MM-DD
+  contractType: string
+  estimatedDurationMonths: number
+  discountPercent: number
+  termsAndConditionsMd?: string
+}
+
+export interface AddQuotationLineRequest {
+  itemType: string
+  description: string
+  vehicleSpecRef?: string
+  quantity: number
+  unitPriceSar: number
+  discountPercent: number
+}
+
+export interface QuotationCommandResult {
+  success: boolean
+  quotationId?: string | null
+  status?: string | null
+  nextTierLevel?: number | null
+  nextRequiredRoleCode?: string | null
+  errorCode?: string | null
+  errorMessage?: string | null
+}
+
+export interface AcceptQuotationResult {
+  success: boolean
+  quotationId?: string | null
+  quoteNumber?: string | null
+  status?: string | null
+  acceptedAtUtc?: string | null
+  errorCode?: string | null
+  errorMessage?: string | null
+}
+
 class BffClient {
   private headers(extra: Record<string, string> = {}): HeadersInit {
     return {
@@ -187,6 +277,64 @@ class BffClient {
     return this.postJson<SaveContractResponse, SaveContractRequest>(
       '/api/v1/dev/save-contract',
       body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
+  // ─── Quotations ────────────────────────────────────────────────────────────
+
+  getQuotations(page = 1, pageSize = 20, search?: string) {
+    const q = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+    if (search) q.set('search', search)
+    return this.getJson<PagedResult<QuotationSummary>>(`/api/v1/quotations?${q.toString()}`)
+  }
+
+  getQuotation(id: string) {
+    return this.getJson<QuotationDetail>(`/api/v1/quotations/${id}`)
+  }
+
+  createQuotation(body: CreateQuotationRequest, idempotencyKey: string) {
+    return this.postJson<QuotationDetail, CreateQuotationRequest>(
+      '/api/v1/quotations',
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
+  addQuotationLine(quotationId: string, body: AddQuotationLineRequest, idempotencyKey: string) {
+    return this.postJson<QuotationDetail, AddQuotationLineRequest>(
+      `/api/v1/quotations/${quotationId}/lines`,
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
+  submitQuotationForApproval(quotationId: string, idempotencyKey: string) {
+    return this.postJson<QuotationCommandResult, Record<string, never>>(
+      `/api/v1/quotations/${quotationId}/submit-approval`,
+      {},
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
+  recordApprovalDecision(
+    quotationId: string,
+    tierLevel: number,
+    approved: boolean,
+    comment: string | undefined,
+    idempotencyKey: string,
+  ) {
+    return this.postJson<QuotationCommandResult, { approved: boolean; comment?: string }>(
+      `/api/v1/quotations/${quotationId}/approvals/${tierLevel}/decision`,
+      { approved, comment },
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
+  acceptQuotation(quotationId: string, customerSignature: string | undefined, idempotencyKey: string) {
+    return this.postJson<AcceptQuotationResult, { customerSignature?: string }>(
+      `/api/v1/quotations/${quotationId}/accept`,
+      { customerSignature },
       { 'Idempotency-Key': idempotencyKey },
     )
   }
