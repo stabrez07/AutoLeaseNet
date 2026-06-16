@@ -49,7 +49,7 @@ public sealed class IncidentReplacementSagaHandlerTests
             closeFactory: _ => IntegrationResult<CloseContractResponse>.Failure(
                 errorCode: "tajeer.http.503", errorMessage: "down", isTransient: true));
         using var h = new Harness(tajeer);
-        var seeded = h.Seed(totalLoss: true, withReplacementVehicle: true, reserveReplacementVehicle: true);
+        var seeded = h.Seed(totalLoss: true, withReplacementVehicle: true, reserveReplacementVehicle: false);
 
         h.Mediator
             .Send(Arg.Any<SaveContractCommand>(), Arg.Any<CancellationToken>())

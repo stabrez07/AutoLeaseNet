@@ -4,12 +4,10 @@ using AutoLeaseNet.Application.Ports.Tenancy;
 using AutoLeaseNet.Application.Ports.Time;
 using AutoLeaseNet.Application.Sales;
 using AutoLeaseNet.Domain.Sales;
-using AutoLeaseNet.Infrastructure.Persistence;
-using AutoLeaseNet.Infrastructure.Persistence.Repositories;
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using Xunit;
 
 namespace AutoLeaseNet.Application.Tests.Sales;
@@ -25,7 +23,6 @@ public sealed class QuotationApprovalCommandHandlersTests
     [Fact]
     public async Task Submit_handler_routes_quote_to_matching_tiers()
     {
-        await using var db = NewDb();
         var quote = NewDraft();
         quote.AddLine(new AddQuotationLineInput
         {
@@ -37,17 +34,27 @@ public sealed class QuotationApprovalCommandHandlersTests
             NowUtc = Now,
         });
 
-        db.Quotations.Add(quote);
-        db.ApprovalTiers.AddRange(
+        var quotations = Substitute.For<IQuotationRepository>();
+        quotations.GetByIdAsync(TenantId, quote.Id, Arg.Any<CancellationToken>())
+            .Returns(quote);
+
+        var tiers = new[]
+        {
             ApprovalTier.Create(TenantId, 1, "APPROVAL_T1", 0m, Now),
             ApprovalTier.Create(TenantId, 2, "APPROVAL_T2", 50_000m, Now),
-            ApprovalTier.Create(TenantId, 3, "APPROVAL_T3", 200_000m, Now));
-        await db.SaveChangesAsync();
+            ApprovalTier.Create(TenantId, 3, "APPROVAL_T3", 200_000m, Now),
+        };
+        var approvalTiers = Substitute.For<IApprovalTierRepository>();
+        approvalTiers.GetActiveForTenantAsync(TenantId, Arg.Any<CancellationToken>())
+            .Returns(tiers);
+
+        var uow = Substitute.For<IUnitOfWork>();
+        uow.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(1);
 
         var handler = new SubmitQuotationForApprovalCommandHandler(
-            new EfQuotationRepository(db),
-            new EfApprovalTierRepository(db),
-            new InMemoryUow(db),
+            quotations,
+            approvalTiers,
+            uow,
             new InMemoryIdempotencyStore(new MemoryCache(new MemoryCacheOptions())),
             new StubTenantContext(TenantId, ApproverId),
             new FixedClock(Now),
@@ -61,15 +68,13 @@ public sealed class QuotationApprovalCommandHandlersTests
         result.Status.Should().Be(QuotationStatus.PendingApproval);
         result.NextTierLevel.Should().Be(1);
         result.NextRequiredRoleCode.Should().Be("APPROVAL_T1");
-
-        var saved = await db.Quotations.Include(q => q.Approvals).SingleAsync(q => q.Id == quote.Id);
-        saved.Approvals.Select(a => a.TierLevel).Should().Equal((byte)1, (byte)2);
+        quote.Approvals.Select(a => a.TierLevel).Should().Equal((byte)1, (byte)2);
+        await uow.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Decision_handler_approves_in_sequence_until_quote_is_approved()
     {
-        await using var db = NewDb();
         var quote = NewDraft();
         quote.AddLine(new AddQuotationLineInput
         {
@@ -86,12 +91,16 @@ public sealed class QuotationApprovalCommandHandlersTests
             ApprovalTier.Create(TenantId, 2, "APPROVAL_T2", 50_000m, Now),
         ], Now);
 
-        db.Quotations.Add(quote);
-        await db.SaveChangesAsync();
+        var quotations = Substitute.For<IQuotationRepository>();
+        quotations.GetByIdAsync(TenantId, quote.Id, Arg.Any<CancellationToken>())
+            .Returns(quote);
+
+        var uow = Substitute.For<IUnitOfWork>();
+        uow.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(1);
 
         var handler = new RecordQuotationApprovalDecisionCommandHandler(
-            new EfQuotationRepository(db),
-            new InMemoryUow(db),
+            quotations,
+            uow,
             new InMemoryIdempotencyStore(new MemoryCache(new MemoryCacheOptions())),
             new StubTenantContext(TenantId, ApproverId),
             new FixedClock(Now.AddMinutes(10)),
@@ -108,10 +117,8 @@ public sealed class QuotationApprovalCommandHandlersTests
         first.Status.Should().Be(QuotationStatus.PendingApproval);
         second.Success.Should().BeTrue();
         second.Status.Should().Be(QuotationStatus.Approved);
-
-        var saved = await db.Quotations.Include(q => q.Approvals).SingleAsync(q => q.Id == quote.Id);
-        saved.Status.Should().Be(QuotationStatus.Approved);
-        saved.Approvals.Should().OnlyContain(a => a.Status == QuotationApprovalStatus.Approved);
+        quote.Approvals.Should().OnlyContain(a => a.Status == QuotationApprovalStatus.Approved);
+        await uow.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     private static Quotation NewDraft() =>
@@ -128,19 +135,6 @@ public sealed class QuotationApprovalCommandHandlersTests
             DiscountPercent = 0m,
             NowUtc = Now,
         });
-
-    private static AutoLeaseNetDbContext NewDb()
-    {
-        var options = new DbContextOptionsBuilder<AutoLeaseNetDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-        return new AutoLeaseNetDbContext(options);
-    }
-
-    private sealed class InMemoryUow(AutoLeaseNetDbContext db) : IUnitOfWork
-    {
-        public Task<int> SaveChangesAsync(CancellationToken ct) => db.SaveChangesAsync(ct);
-    }
 
     private sealed class FixedClock(DateTimeOffset now) : IClock
     {

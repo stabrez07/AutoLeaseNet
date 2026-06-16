@@ -96,6 +96,7 @@ builder.Services.AddTajeerWithModeSwitch(builder.Configuration.GetSection(Tajeer
 // ZATCA Phase-1 wires the shape only — the Real client is a clear-error stub until the Week-4
 // UBL+ECDSA+TLV workstream lands. Default Zatca:Mode=InMemory in dev keeps the demo path green.
 builder.Services.AddZatcaWithModeSwitch(builder.Configuration.GetSection(ZatcaOptions.SectionName));
+builder.Services.AddDistributedMemoryCache();
 builder.Services.AddInMemoryCache();
 builder.Services.AddInMemorySms();
 builder.Services.AddQuestPdfRenderer();
