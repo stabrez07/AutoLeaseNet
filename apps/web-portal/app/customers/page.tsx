@@ -4,7 +4,22 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from '../../lib/locale-provider'
 import { bff, type CustomerSummary, type PagedResult } from '../../lib/bff-client'
-import { Badge, Card, ErrorBox, PageHeader, Spinner } from '../../components/ui'
+import {
+  Badge,
+  DataTable,
+  DataTableMeta,
+  ErrorBox,
+  FilterSelect,
+  PageHeader,
+  PrimaryButton,
+  SearchInput,
+  SecondaryButton,
+  Spinner,
+  TableCell,
+  TableHeadCell,
+  Toolbar,
+  ToolbarGroup,
+} from '../../components/ui'
 
 export default function CustomersPage() {
   const { t } = useLocale()
@@ -47,91 +62,97 @@ export default function CustomersPage() {
         title={t.customers.title}
         subtitle={t.customers.subtitle}
         action={
-          <button
-            onClick={() => router.push('/customers/new')}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            + {t.customers.title.replace('Customers', 'Customer').replace('العملاء', 'عميل')}
-          </button>
+          <PrimaryButton onClick={() => router.push('/customers/new')}>+ {t.crudCustomers.newTitle}</PrimaryButton>
         }
       />
-      <Card className="flex flex-col gap-3 p-3 md:flex-row md:items-center">
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => { setPage(1); setSearch(e.target.value) }}
-          placeholder={t.customers.searchPlaceholder}
-          className="focus:border-brand-500 focus:ring-brand-500 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 md:w-72"
-        />
-        <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value === '' ? '' : Number(e.target.value))}
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-        >
-          <option value="">— {t.customers.columns.type} —</option>
-          <option value={1}>{t.customers.type.b2b}</option>
-          <option value={2}>{t.customers.type.b2c}</option>
-        </select>
-      </Card>
+      <Toolbar>
+        <ToolbarGroup>
+          <SearchInput
+            value={search}
+            onChange={(value) => { setPage(1); setSearch(value) }}
+            placeholder={t.customers.searchPlaceholder}
+          />
+          <FilterSelect
+            value={typeFilter}
+            onChange={(value) => { setPage(1); setTypeFilter(value) }}
+          >
+            <option value="">— {t.customers.columns.type} —</option>
+            <option value={1}>{t.customers.type.b2b}</option>
+            <option value={2}>{t.customers.type.b2c}</option>
+          </FilterSelect>
+        </ToolbarGroup>
+        <div className="text-xs text-slate-500">{t.table.total}: {data?.totalCount ?? 0}</div>
+      </Toolbar>
 
       {error && <ErrorBox message={error} onRetry={load} retryLabel={t.common.retry} />}
       {loading && <Spinner label={t.common.loading} />}
 
       {!loading && data && (
-        <Card className="overflow-hidden">
+        <DataTable>
+          <DataTableMeta>{t.table.page} {page} {t.table.of} {totalPages}</DataTableMeta>
           <table className="w-full text-sm">
-            <thead className="bg-slate-100 text-slate-700">
+            <thead className="border-b border-slate-200 bg-white">
               <tr>
-                <th className="px-3 py-2 text-start font-medium">{t.customers.columns.displayName}</th>
-                <th className="px-3 py-2 text-start font-medium">{t.customers.columns.type}</th>
-                <th className="px-3 py-2 text-start font-medium">{t.customers.columns.mobile}</th>
-                <th className="px-3 py-2 text-start font-medium">{t.customers.columns.status}</th>
-                <th className="px-3 py-2 text-start font-medium">{t.common.actions}</th>
+                <TableHeadCell>{t.customers.columns.displayName}</TableHeadCell>
+                <TableHeadCell>{t.customers.columns.type}</TableHeadCell>
+                <TableHeadCell>{t.customers.columns.mobile}</TableHeadCell>
+                <TableHeadCell>{t.customers.columns.status}</TableHeadCell>
+                <TableHeadCell>{t.common.actions}</TableHeadCell>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-slate-500">{t.customers.empty}</td>
+                  <td colSpan={5} className="px-3 py-8 text-center text-slate-500">{t.customers.empty}</td>
                 </tr>
               )}
               {filtered.map((c) => (
-                <tr key={c.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50"
+                <tr key={c.id} className="cursor-pointer border-t border-slate-100 transition hover:bg-brand-50/60"
                   onClick={() => router.push(`/customers/${c.id}`)}>
-                  <td className="px-3 py-2 font-medium">{c.displayName}</td>
-                  <td className="px-3 py-2">
+                  <TableCell className="font-medium text-slate-900">{c.displayName}</TableCell>
+                  <TableCell>
                     <Badge tone={c.type === 1 ? 'blue' : 'slate'}>
                       {c.type === 1 ? t.customers.type.b2b : t.customers.type.b2c}
                     </Badge>
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs">{c.mobile ?? '—'}</td>
-                  <td className="px-3 py-2">
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">{c.mobile ?? '—'}</TableCell>
+                  <TableCell>
                     <Badge tone={c.isActive ? 'green' : 'slate'}>
                       {c.isActive ? t.customers.status.active : t.customers.status.inactive}
                     </Badge>
-                  </td>
-                  <td className="px-3 py-2">
-                    <button
+                  </TableCell>
+                  <TableCell>
+                    <SecondaryButton
                       onClick={(e) => { e.stopPropagation(); router.push(`/customers/${c.id}`) }}
-                      className="rounded border border-slate-200 bg-white px-2 py-0.5 text-xs hover:bg-slate-50"
+                      className="px-2 py-1 text-xs"
                     >
                       {t.common.viewDetails}
-                    </button>
-                  </td>
+                    </SecondaryButton>
+                  </TableCell>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            <div>{t.table.page} {page} {t.table.of} {totalPages} · {t.table.total}: {data.totalCount}</div>
+          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/70 px-3 py-2 text-xs text-slate-600">
+            <div>{t.table.total}: {data.totalCount}</div>
             <div className="flex gap-2">
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
-                className="rounded border border-slate-300 bg-white px-2 py-1 disabled:opacity-40">{t.table.previous}</button>
-              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
-                className="rounded border border-slate-300 bg-white px-2 py-1 disabled:opacity-40">{t.table.next}</button>
+              <SecondaryButton
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="px-2 py-1 text-xs"
+              >
+                {t.table.previous}
+              </SecondaryButton>
+              <SecondaryButton
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="px-2 py-1 text-xs"
+              >
+                {t.table.next}
+              </SecondaryButton>
             </div>
           </div>
-        </Card>
+        </DataTable>
       )}
     </div>
   )

@@ -71,7 +71,7 @@ export default function QuotationDetailPage() {
   }
 
   const lbl = 'text-xs font-medium text-slate-700'
-  const inp = 'mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
+  const inp = 'mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500'
 
   if (loading) return <Spinner label={t.common.loading} />
   if (error) return <ErrorBox message={error} onRetry={reload} retryLabel={t.common.retry} />
@@ -291,7 +291,7 @@ export default function QuotationDetailPage() {
                     () => bff.submitQuotationForApproval(id, crypto.randomUUID()), // reuse PDF send when wired
                     d.successMsg
                   )}
-                  className="w-full rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  className="w-full rounded-md bg-brand-700 px-3 py-2 text-sm font-medium text-white hover:bg-brand-800 disabled:opacity-50"
                 >
                   {actionBusy ? d.sendingPdf : d.sendPdf}
                 </button>
@@ -330,7 +330,7 @@ export default function QuotationDetailPage() {
           <Card className="p-4">
             <button
               onClick={() => router.push('/quotations')}
-              className="text-xs text-blue-600 hover:underline"
+              className="text-xs text-brand-700 hover:underline"
             >
               ← Back to Quotations
             </button>

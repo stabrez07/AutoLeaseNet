@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useLocale } from '../../../lib/locale-provider'
 import { bff, type DriverDetail } from '../../../lib/bff-client'
-import { Badge, Card, ErrorBox, PageHeader, Spinner } from '../../../components/ui'
+import { Badge, Card, ErrorBox, PageHeader, SecondaryButton, Spinner } from '../../../components/ui'
 
 function Field({ label, value }: { label: string; value: string | number | boolean | null | undefined }) {
   return (
@@ -46,8 +46,7 @@ export default function DriverDetailPage() {
       <PageHeader
         title={data.personNameEn}
         subtitle={`${data.driverLicenseNumber} · ${data.id}`}
-        action={<button type="button" onClick={() => router.back()}
-          className="text-sm text-slate-500 hover:text-slate-700">{t.common.back}</button>}
+        action={<SecondaryButton onClick={() => router.back()}>{t.common.back}</SecondaryButton>}
       />
       <div className="flex items-center gap-2">
         <Badge tone={statusTone}>{data.status}</Badge>
@@ -57,7 +56,7 @@ export default function DriverDetailPage() {
         </Badge>
       </div>
 
-      <Card className="divide-y divide-slate-100 p-5 space-y-4">
+      <Card className="divide-y divide-slate-100 p-6 space-y-4">
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">{t.crudDrivers.sections.identity}</h3>
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3">

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useLocale } from '../../../lib/locale-provider'
 import { bff, type VehicleDetail } from '../../../lib/bff-client'
-import { Badge, Card, ErrorBox, PageHeader, Spinner } from '../../../components/ui'
+import { Badge, Card, ErrorBox, PageHeader, SecondaryButton, Spinner } from '../../../components/ui'
 
 function Field({ label, value }: { label: string; value: string | number | boolean | null | undefined }) {
   return (
@@ -65,8 +65,7 @@ export default function VehicleDetailPage() {
       <PageHeader
         title={`${data.make} ${data.model} (${data.modelYear})`}
         subtitle={`${data.plateLetters} ${data.plateNumber} · VIN: ${data.vin}`}
-        action={<button type="button" onClick={() => router.back()}
-          className="text-sm text-slate-500 hover:text-slate-700">{t.common.back}</button>}
+        action={<SecondaryButton onClick={() => router.back()}>{t.common.back}</SecondaryButton>}
       />
       <div className="flex gap-2">
         <Badge tone={statusTone}>{statusLabel}</Badge>
@@ -74,7 +73,7 @@ export default function VehicleDetailPage() {
         <Badge tone="slate">{(t.crudVehicles.transmissionTypes as Record<string, string>)[data.transmissionType] ?? data.transmissionType}</Badge>
       </div>
 
-      <Card className="divide-y divide-slate-100 p-5 space-y-4">
+      <Card className="divide-y divide-slate-100 p-6 space-y-4">
         <div>
           <p className={SECTION_HDR}>{t.crudVehicles.sections.plate}</p>
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">

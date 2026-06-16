@@ -4,13 +4,13 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from '../../../lib/locale-provider'
 import { bff, type CreateCustomerB2BRequest, type CreateCustomerB2CRequest } from '../../../lib/bff-client'
-import { Card, PageHeader } from '../../../components/ui'
+import { Card, PageHeader, PrimaryButton, SecondaryButton } from '../../../components/ui'
 
 type CustomerType = 'b2b' | 'b2c'
 
-const INPUT = 'w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
-const LABEL = 'block text-xs font-medium text-slate-600 mb-1'
-const SECTION = 'text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2 mt-4'
+const INPUT = 'w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500'
+const LABEL = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500'
+const SECTION = 'mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400'
 
 export default function NewCustomerPage() {
   const { t } = useLocale()
@@ -85,17 +85,16 @@ export default function NewCustomerPage() {
       <PageHeader
         title={t.crudCustomers.newTitle}
         action={
-          <button type="button" onClick={() => router.back()}
-            className="text-sm text-slate-500 hover:text-slate-700">{t.common.back}</button>
+          <SecondaryButton onClick={() => router.back()}>{t.common.back}</SecondaryButton>
         }
       />
 
       {/* Type selector */}
-      <Card className="flex gap-0 overflow-hidden p-0">
+      <Card className="flex gap-0 overflow-hidden p-0 shadow-sm">
         {(['b2b', 'b2c'] as CustomerType[]).map((tp) => (
           <button key={tp} type="button" onClick={() => setType(tp)}
             className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
-              type === tp ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
+              type === tp ? 'bg-brand-700 text-white' : 'bg-white text-slate-600 hover:bg-brand-50'
             }`}>
             {tp === 'b2b' ? t.crudCustomers.typeB2B : t.crudCustomers.typeB2C}
           </button>
@@ -103,7 +102,7 @@ export default function NewCustomerPage() {
       </Card>
 
       <form onSubmit={handleSubmit}>
-        <Card className="space-y-4 p-5">
+        <Card className="space-y-4 p-6">
           {type === 'b2b' ? (
             <>
               <p className={SECTION}>{t.crudCustomers.sections.identity}</p>
@@ -198,14 +197,12 @@ export default function NewCustomerPage() {
           {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
           <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
-            <button type="button" onClick={() => router.back()}
-              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+            <SecondaryButton type="button" onClick={() => router.back()}>
               {t.common.cancel}
-            </button>
-            <button type="submit" disabled={saving}
-              className="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            </SecondaryButton>
+            <PrimaryButton type="submit" disabled={saving} className="px-6">
               {saving ? t.common.creating : t.common.create}
-            </button>
+            </PrimaryButton>
           </div>
         </Card>
       </form>

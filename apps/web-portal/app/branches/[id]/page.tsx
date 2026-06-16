@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useLocale } from '../../../lib/locale-provider'
 import { bff, type BranchDetail } from '../../../lib/bff-client'
-import { Badge, Card, ErrorBox, PageHeader, Spinner } from '../../../components/ui'
+import { Badge, Card, ErrorBox, PageHeader, PrimaryButton, SecondaryButton, Spinner } from '../../../components/ui'
 
 function Field({ label, value }: { label: string; value: string | number | boolean | null | undefined }) {
   return (
@@ -62,14 +62,13 @@ export default function BranchDetailPage() {
       <PageHeader
         title={displayName}
         subtitle={`${data.code} · ${data.id}`}
-        action={<button type="button" onClick={() => router.back()}
-          className="text-sm text-slate-500 hover:text-slate-700">{t.common.back}</button>}
+        action={<SecondaryButton onClick={() => router.back()}>{t.common.back}</SecondaryButton>}
       />
       <div className="flex gap-2">
         <Badge tone={data.isActive ? 'green' : 'slate'}>{data.isActive ? t.common.yes : t.common.no}</Badge>
       </div>
 
-      <Card className="divide-y divide-slate-100 p-5 space-y-4">
+      <Card className="divide-y divide-slate-100 p-6 space-y-4">
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">{t.crudBranches.sections.identity}</h3>
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3">
@@ -117,15 +116,13 @@ export default function BranchDetailPage() {
         )}
         <div className="flex gap-2">
           {!data.isActive ? (
-            <button onClick={() => toggleStatus(true)} disabled={actionBusy}
-              className="rounded border border-green-300 bg-green-50 px-4 py-1.5 text-sm font-medium text-green-800 hover:bg-green-100 disabled:opacity-50">
+            <PrimaryButton onClick={() => toggleStatus(true)} disabled={actionBusy}>
               {t.crudBranches.actions.activate}
-            </button>
+            </PrimaryButton>
           ) : (
-            <button onClick={() => toggleStatus(false)} disabled={actionBusy}
-              className="rounded border border-amber-300 bg-amber-50 px-4 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50">
+            <SecondaryButton onClick={() => toggleStatus(false)} disabled={actionBusy}>
               {t.crudBranches.actions.deactivate}
-            </button>
+            </SecondaryButton>
           )}
         </div>
       </Card>

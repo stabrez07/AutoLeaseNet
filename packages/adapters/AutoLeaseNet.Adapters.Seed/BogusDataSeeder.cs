@@ -21,10 +21,10 @@ namespace AutoLeaseNet.Adapters.Seed;
 ///   <item>3 Branches across Riyadh / Jeddah / Dammam.</item>
 ///   <item>4 RentPolicies (Standard Daily, Standard Hourly, Daily-with-Driver, Long-term Monthly).</item>
 ///   <item>3 ExtendedCoverages (Partial CDW, Full CDW, Super CDW).</item>
-///   <item>20 Customers � 6 B2B (Saudi Aramco, STC, Almarai, SABIC, Maaden, Bin Dawood) + 14 B2C with KSA-locale names + valid-shaped Saudi National / Iqama IDs.</item>
-///   <item>60 Vehicles � Toyota / Hyundai / Nissan / Kia / Mitsubishi fleet staples with real-format Saudi plate triples.</item>
-///   <item>80 Drivers � mix of customer-affiliated + freelance, with TAMM authorization status variety.</item>
-///   <item>10 Leases � spanning every LeaseStatus for richer reporting demos.</item>
+///   <item>Configurable Customers via <c>Seed:CustomerCount</c> (6 fixed B2B + remainder B2C).</item>
+///   <item>Configurable Vehicles via <c>Seed:VehicleCount</c>.</item>
+///   <item>Configurable Drivers via <c>Seed:DriverCount</c>.</item>
+///   <item>Configurable Leases via <c>Seed:LeaseCount</c>.</item>
 /// </list>
 /// Idempotent: short-circuits when <see cref="ICustomerRepository.AnyAsync"/> returns true.
 /// All Bogus generators seeded from <see cref="SeedOptions.RandomSeed"/> for reproducibility.
@@ -69,7 +69,7 @@ public sealed partial class BogusDataSeeder(
         var seededDrivers = SeedDrivers(seededCustomers, nowUtc);
 
         var seededLeases = SeedLeases(seededCustomers, seededVehicles, seededDrivers, seededBranches,
-            seededPolicies, seededCoverages, nowUtc);
+            seededPolicies, seededCoverages, options.LeaseCount, nowUtc);
 
         SeedInspections(seededLeases, seededDrivers, nowUtc);
         SeedIncidents(seededLeases, seededDrivers, nowUtc);
@@ -167,7 +167,7 @@ public sealed partial class BogusDataSeeder(
         return created;
     }
 
-    // ─── Customers (20: 6 B2B + 14 B2C) ─────────────────────────────────────
+    // ─── Customers (configurable: min 20, includes fixed 6 B2B) ─────────────
     private List<Customer> SeedCustomers(DateTimeOffset now)
     {
         var b2b = new[]
@@ -198,8 +198,11 @@ public sealed partial class BogusDataSeeder(
             created.Add(c);
         }
 
+        var targetCustomers = NormalizeCount(options.CustomerCount, min: 20);
+        var b2cTarget = Math.Max(0, targetCustomers - b2b.Length);
+
         var personFaker = new Faker("ar"); // Arabic locale
-        for (var i = 0; i < 14; i++)
+        for (var i = 0; i < b2cTarget; i++)
         {
             var nameAr = personFaker.Name.FullName();
             var nameEn = TransliterateRough(nameAr, i);
@@ -227,7 +230,7 @@ public sealed partial class BogusDataSeeder(
         return created;
     }
 
-    // ─── Vehicles (60) ──────────────────────────────────────────────────────
+    // ─── Vehicles (configurable: min 60) ────────────────────────────────────
     private List<Vehicle> SeedVehicles(List<Branch> branchList, DateTimeOffset now)
     {
         var fleetTemplates = new (string Make, string Model, BodyType Body, FuelType Fuel, int Seats, decimal Price)[]
@@ -247,7 +250,8 @@ public sealed partial class BogusDataSeeder(
         var arabicLetterTriples = new[] { "أ ب ج", "د هـ و", "ز ح ط", "ي ك ل", "م ن س", "ع ف ص", "ق ر ش", "ت ث خ", "ذ ض ظ", "غ" };
 
         var created = new List<Vehicle>();
-        for (var i = 0; i < 60; i++)
+        var targetVehicles = NormalizeCount(options.VehicleCount, min: 60);
+        for (var i = 0; i < targetVehicles; i++)
         {
             var t = fleetTemplates[i % fleetTemplates.Length];
             var branch = branchList[i % branchList.Count];
@@ -282,17 +286,21 @@ public sealed partial class BogusDataSeeder(
         return created;
     }
 
-    // ─── Drivers (80) ───────────────────────────────────────────────────────
+    // ─── Drivers (configurable: min 80) ─────────────────────────────────────
     private List<Driver> SeedDrivers(List<Customer> customerList, DateTimeOffset now)
     {
         var b2bCustomers = customerList.Where(c => c.Type == CustomerType.B2B).ToList();
         var personFaker = new Faker("ar");
         var created = new List<Driver>();
+        var targetDrivers = NormalizeCount(options.DriverCount, min: 80);
+        var affiliatedTarget = b2bCustomers.Count == 0
+            ? 0
+            : Math.Min(targetDrivers, Math.Max(1, targetDrivers / 3));
 
-        for (var i = 0; i < 80; i++)
+        for (var i = 0; i < targetDrivers; i++)
         {
             // First ~30 drivers belong to B2B fleet pools; rest are freelance.
-            Customer? affiliation = i < 30 ? b2bCustomers[i % b2bCustomers.Count] : null;
+            Customer? affiliation = i < affiliatedTarget ? b2bCustomers[i % b2bCustomers.Count] : null;
             var nameAr = personFaker.Name.FullName();
             var nameEn = TransliterateRough(nameAr, i);
             var idType = i % 4 == 0 ? 2 : 1; // 25% Iqama, 75% Saudi National
@@ -335,10 +343,10 @@ public sealed partial class BogusDataSeeder(
         return created;
     }
 
-    // ─── Leases (10: spans every status) ────────────────────────────────────
+    // ─── Leases (configurable: min 10, spans every status) ──────────────────
     private List<SeededLease> SeedLeases(
         List<Customer> custs, List<Vehicle> vehs, List<Driver> drvs,
-        List<Branch> brs, List<RentPolicy> pols, List<ExtendedCoverage> covs, DateTimeOffset now)
+        List<Branch> brs, List<RentPolicy> pols, List<ExtendedCoverage> covs, int leaseCount, DateTimeOffset now)
     {
         var result = new List<SeededLease>();
         // Pair each lease with a customer/vehicle/driver to give realistic referential rows.
@@ -357,9 +365,11 @@ public sealed partial class BogusDataSeeder(
         };
 
         long contractCounter = 1_000_000_000L;
-        for (var i = 0; i < seedTemplates.Length; i++)
+        var targetLeases = NormalizeCount(leaseCount, min: 10);
+        for (var i = 0; i < targetLeases; i++)
         {
-            var (finalStatus, daysAgo, rent, paid) = seedTemplates[i];
+            var (finalStatus, templateDaysAgo, rent, paid) = seedTemplates[i % seedTemplates.Length];
+            var daysAgo = templateDaysAgo + (i / seedTemplates.Length);
             var savedAt = now.AddDays(-daysAgo);
             var startUtc = savedAt.AddHours(1);
             var endUtc = startUtc.AddDays(2);
@@ -602,6 +612,13 @@ public sealed partial class BogusDataSeeder(
         return $"Driver-{salt + 1:000} ({first})";
     }
 
+    private static int NormalizeCount(int configured, int min, int max = 5000)
+    {
+        if (configured < min) return min;
+        if (configured > max) return max;
+        return configured;
+    }
+
     [LoggerMessage(EventId = 9001, Level = LogLevel.Information,
         Message = "Tenant {TenantId} already seeded — skipping BogusDataSeeder.")]
     partial void LogAlreadySeeded(Guid tenantId);
@@ -610,5 +627,4 @@ public sealed partial class BogusDataSeeder(
         Message = "Seeded tenant {TenantId}: {CustomerCount} customers, {VehicleCount} vehicles, {DriverCount} drivers.")]
     partial void LogSeedComplete(Guid tenantId, int customerCount, int vehicleCount, int driverCount);
 }
-
 

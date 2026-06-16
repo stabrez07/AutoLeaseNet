@@ -34,7 +34,10 @@ pnpm infra:up
 # 4. Apply DB migrations
 pnpm db:migrate
 
-# 5. Run everything in dev mode
+# 5. Run BFF once to auto-seed demo data (Seed:Mode=Demo in appsettings.Development.json)
+pnpm bff
+
+# 6. Run everything in dev mode
 pnpm dev
 ```
 
@@ -52,6 +55,9 @@ pnpm dev
 | `pnpm infra:up` / `infra:down` / `infra:reset` | Docker Compose stack control |
 | `pnpm db:migrate` | Apply EF Core migrations |
 | `pnpm db:add-migration` | Create a new migration |
+
+Mock data volume is configurable in `services/bff/appsettings.Development.json` under:
+`Seed:CustomerCount`, `Seed:VehicleCount`, `Seed:DriverCount`, `Seed:LeaseCount` (recommended 100–1000).
 
 ## Repository layout
 

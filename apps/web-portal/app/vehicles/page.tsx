@@ -4,7 +4,22 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from '../../lib/locale-provider'
 import { bff, type PagedResult, type VehicleSummary } from '../../lib/bff-client'
-import { Badge, Card, ErrorBox, PageHeader, Spinner } from '../../components/ui'
+import {
+  Badge,
+  DataTable,
+  DataTableMeta,
+  ErrorBox,
+  FilterSelect,
+  PageHeader,
+  PrimaryButton,
+  SearchInput,
+  SecondaryButton,
+  Spinner,
+  TableCell,
+  TableHeadCell,
+  Toolbar,
+  ToolbarGroup,
+} from '../../components/ui'
 
 const STATUS_TONES: Record<number, 'green' | 'amber' | 'blue' | 'slate' | 'red'> = {
   1: 'green', 2: 'blue', 3: 'amber', 4: 'slate', 5: 'red',
@@ -15,15 +30,17 @@ export default function VehiclesPage() {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<number | ''>('')
+  const [page, setPage] = useState(1)
   const [data, setData] = useState<PagedResult<VehicleSummary> | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const pageSize = 20
 
   async function load() {
     setLoading(true)
     setError(null)
     try {
-      setData(await bff.getVehicles(1, 50, search || undefined, statusFilter === '' ? undefined : statusFilter))
+      setData(await bff.getVehicles(page, pageSize, search || undefined, statusFilter === '' ? undefined : statusFilter))
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -35,7 +52,9 @@ export default function VehiclesPage() {
     const handle = setTimeout(load, 200)
     return () => clearTimeout(handle)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, statusFilter])
+  }, [page, search, statusFilter])
+
+  const totalPages = data?.totalPages ?? 1
 
   return (
     <div className="space-y-4">
@@ -43,75 +62,94 @@ export default function VehiclesPage() {
         title={t.vehicles.title}
         subtitle={t.vehicles.subtitle}
         action={
-          <button
-            onClick={() => router.push('/vehicles/new')}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            + {t.crudVehicles.newTitle}
-          </button>
+          <PrimaryButton onClick={() => router.push('/vehicles/new')}>+ {t.crudVehicles.newTitle}</PrimaryButton>
         }
       />
-      <Card className="flex flex-col gap-3 p-3 md:flex-row md:items-center">
-        <input
-          type="search" value={search} onChange={(e) => setSearch(e.target.value)}
-          placeholder={t.vehicles.searchPlaceholder}
-          className="focus:border-brand-500 focus:ring-brand-500 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 md:w-72"
-        />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value === '' ? '' : Number(e.target.value))}
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-        >
-          <option value="">— {t.vehicles.columns.status} —</option>
-          {[1, 2, 3, 4, 5].map((s) => (
-            <option key={s} value={s}>{(t.vehicles.statuses as Record<number, string>)[s]}</option>
-          ))}
-        </select>
-      </Card>
+      <Toolbar>
+        <ToolbarGroup>
+          <SearchInput
+            value={search}
+            onChange={(value) => { setPage(1); setSearch(value) }}
+            placeholder={t.vehicles.searchPlaceholder}
+          />
+          <FilterSelect
+            value={statusFilter}
+            onChange={(value) => { setPage(1); setStatusFilter(value) }}
+          >
+            <option value="">— {t.vehicles.columns.status} —</option>
+            {[1, 2, 3, 4, 5].map((s) => (
+              <option key={s} value={s}>{(t.vehicles.statuses as Record<number, string>)[s]}</option>
+            ))}
+          </FilterSelect>
+        </ToolbarGroup>
+        <div className="text-xs text-slate-500">{t.table.total}: {data?.totalCount ?? 0}</div>
+      </Toolbar>
 
       {error && <ErrorBox message={error} onRetry={load} retryLabel={t.common.retry} />}
       {loading && <Spinner label={t.common.loading} />}
 
       {!loading && data && (
-        <Card className="overflow-hidden">
+        <DataTable>
+          <DataTableMeta>{t.table.page} {page} {t.table.of} {totalPages}</DataTableMeta>
           <table className="w-full text-sm">
-            <thead className="bg-slate-100 text-slate-700">
+            <thead className="border-b border-slate-200 bg-white">
               <tr>
-                <th className="px-3 py-2 text-start font-medium">{t.vehicles.columns.plate}</th>
-                <th className="px-3 py-2 text-start font-medium">{t.vehicles.columns.make}</th>
-                <th className="px-3 py-2 text-start font-medium">{t.vehicles.columns.model}</th>
-                <th className="px-3 py-2 text-start font-medium">{t.vehicles.columns.status}</th>
-                <th className="px-3 py-2 text-end font-medium">{t.vehicles.columns.odometer}</th>
-                <th className="px-3 py-2 text-start font-medium">{t.common.actions}</th>
+                <TableHeadCell>{t.vehicles.columns.plate}</TableHeadCell>
+                <TableHeadCell>{t.vehicles.columns.make}</TableHeadCell>
+                <TableHeadCell>{t.vehicles.columns.model}</TableHeadCell>
+                <TableHeadCell>{t.vehicles.columns.status}</TableHeadCell>
+                <TableHeadCell align="end">{t.vehicles.columns.odometer}</TableHeadCell>
+                <TableHeadCell>{t.common.actions}</TableHeadCell>
               </tr>
             </thead>
             <tbody>
               {data.items.length === 0 && (
-                <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-500">{t.vehicles.empty}</td></tr>
+                <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-500">{t.vehicles.empty}</td></tr>
               )}
               {data.items.map((v) => (
-                <tr key={v.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50"
+                <tr key={v.id} className="cursor-pointer border-t border-slate-100 transition hover:bg-brand-50/60"
                   onClick={() => router.push(`/vehicles/${v.id}`)}>
-                  <td className="px-3 py-2 font-mono text-xs">{v.plateNumber}</td>
-                  <td className="px-3 py-2">{v.make}</td>
-                  <td className="px-3 py-2">{v.model}</td>
-                  <td className="px-3 py-2">
+                  <TableCell className="font-mono text-xs">{v.plateNumber}</TableCell>
+                  <TableCell>{v.make}</TableCell>
+                  <TableCell>{v.model}</TableCell>
+                  <TableCell>
                     <Badge tone={STATUS_TONES[v.status] ?? 'slate'}>
                       {(t.vehicles.statuses as Record<number, string>)[v.status] ?? v.status}
                     </Badge>
-                  </td>
-                  <td className="px-3 py-2 text-end font-mono">{v.currentKm.toLocaleString()}</td>
-                  <td className="px-3 py-2">
-                    <button onClick={(e) => { e.stopPropagation(); router.push(`/vehicles/${v.id}`) }}
-                      className="rounded border border-slate-200 bg-white px-2 py-0.5 text-xs hover:bg-slate-50">
+                  </TableCell>
+                  <TableCell align="end" className="font-mono">{v.currentKm.toLocaleString()}</TableCell>
+                  <TableCell>
+                    <SecondaryButton
+                      onClick={(e) => { e.stopPropagation(); router.push(`/vehicles/${v.id}`) }}
+                      className="px-2 py-1 text-xs"
+                    >
                       {t.common.viewDetails}
-                    </button>
-                  </td>
+                    </SecondaryButton>
+                  </TableCell>
                 </tr>
               ))}
             </tbody>
           </table>
-        </Card>
+          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/70 px-3 py-2 text-xs text-slate-600">
+            <div>{t.table.total}: {data.totalCount}</div>
+            <div className="flex gap-2">
+              <SecondaryButton
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="px-2 py-1 text-xs"
+              >
+                {t.table.previous}
+              </SecondaryButton>
+              <SecondaryButton
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="px-2 py-1 text-xs"
+              >
+                {t.table.next}
+              </SecondaryButton>
+            </div>
+          </div>
+        </DataTable>
       )}
     </div>
   )

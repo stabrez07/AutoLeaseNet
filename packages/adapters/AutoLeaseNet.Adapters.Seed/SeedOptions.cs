@@ -15,6 +15,18 @@ public sealed class SeedOptions
 
     /// <summary>Bogus seed for reproducible runs across machines.</summary>
     public int RandomSeed { get; init; } = 20260524;
+
+    /// <summary>Target customer rows to seed (minimum 20).</summary>
+    public int CustomerCount { get; init; } = 200;
+
+    /// <summary>Target vehicle rows to seed (minimum 60).</summary>
+    public int VehicleCount { get; init; } = 250;
+
+    /// <summary>Target driver rows to seed (minimum 80).</summary>
+    public int DriverCount { get; init; } = 300;
+
+    /// <summary>Target lease rows to seed (minimum 10).</summary>
+    public int LeaseCount { get; init; } = 120;
 }
 
 public enum SeedMode

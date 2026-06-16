@@ -126,14 +126,14 @@ export default function NewLeasePage() {
 
   const labelClass = 'text-xs font-medium text-slate-700'
   const inputClass =
-    'mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500'
+    'mt-1 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500'
 
   return (
     <div className="space-y-4">
       <PageHeader title={t.newLease.title} subtitle={t.newLease.subtitle} />
 
-      <Card className="border-blue-200 bg-blue-50 p-3">
-        <p className="text-xs text-blue-900">{t.newLease.devHint}</p>
+      <Card className="border-brand-200 bg-brand-50 p-3">
+        <p className="text-xs text-brand-900">{t.newLease.devHint}</p>
       </Card>
 
       {bootError && <ErrorBox message={bootError} />}

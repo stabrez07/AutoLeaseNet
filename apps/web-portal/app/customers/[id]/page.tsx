@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useLocale } from '../../../lib/locale-provider'
 import { bff, type CustomerDetail } from '../../../lib/bff-client'
-import { Badge, Card, ErrorBox, PageHeader, Spinner } from '../../../components/ui'
+import { Badge, Card, ErrorBox, PageHeader, PrimaryButton, SecondaryButton, Spinner } from '../../../components/ui'
 
 function Field({ label, value }: { label: string; value: string | number | boolean | null | undefined }) {
   return (
@@ -73,8 +73,7 @@ export default function CustomerDetailPage() {
         title={data.displayName}
         subtitle={`${data.type} · ${data.id}`}
         action={
-          <button type="button" onClick={() => router.back()}
-            className="text-sm text-slate-500 hover:text-slate-700">{t.common.back}</button>
+          <SecondaryButton onClick={() => router.back()}>{t.common.back}</SecondaryButton>
         }
       />
 
@@ -84,7 +83,7 @@ export default function CustomerDetailPage() {
         {data.kycVerified && <Badge tone="green">{c.kycBadge}</Badge>}
       </div>
 
-      <Card className="divide-y divide-slate-100 p-5">
+      <Card className="divide-y divide-slate-100 p-6">
         {isB2B ? (
           <Section title={c.sections.identity}>
             <Field label={c.fields.legalName} value={data.legalName} />
@@ -132,22 +131,19 @@ export default function CustomerDetailPage() {
         )}
         <div className="flex flex-wrap gap-2">
           {data.status === 'Active' && (
-            <button onClick={() => handleStatusAction('suspend')} disabled={actionBusy}
-              className="rounded border border-amber-300 bg-amber-50 px-4 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50">
+            <SecondaryButton onClick={() => handleStatusAction('suspend')} disabled={actionBusy}>
               {c.actions.suspend}
-            </button>
+            </SecondaryButton>
           )}
           {data.status === 'Suspended' && (
-            <button onClick={() => handleStatusAction('reactivate')} disabled={actionBusy}
-              className="rounded border border-green-300 bg-green-50 px-4 py-1.5 text-sm font-medium text-green-800 hover:bg-green-100 disabled:opacity-50">
+            <PrimaryButton onClick={() => handleStatusAction('reactivate')} disabled={actionBusy}>
               {c.actions.reactivate}
-            </button>
+            </PrimaryButton>
           )}
           {data.status !== 'Closed' && (
-            <button onClick={() => handleStatusAction('close')} disabled={actionBusy}
-              className="rounded border border-red-300 bg-red-50 px-4 py-1.5 text-sm font-medium text-red-800 hover:bg-red-100 disabled:opacity-50">
+            <SecondaryButton onClick={() => handleStatusAction('close')} disabled={actionBusy}>
               {c.actions.close}
-            </button>
+            </SecondaryButton>
           )}
         </div>
       </Card>

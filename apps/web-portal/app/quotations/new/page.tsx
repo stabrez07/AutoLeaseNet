@@ -126,7 +126,7 @@ export default function NewQuotationPage() {
   }
 
   const lbl = 'text-xs font-medium text-slate-700'
-  const inp = 'mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
+  const inp = 'mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500'
   const sel = inp + ' bg-white'
 
   return (
@@ -204,7 +204,7 @@ export default function NewQuotationPage() {
               <h2 className="text-sm font-semibold text-slate-800">{f.addLine}</h2>
               <button type="button"
                 onClick={() => setLines(ls => [...ls, emptyLine()])}
-                className="rounded-md border border-dashed border-slate-300 px-3 py-1 text-xs text-slate-600 hover:border-blue-400 hover:text-blue-600">
+                className="rounded-md border border-dashed border-slate-300 px-3 py-1 text-xs text-slate-600 hover:border-brand-400 hover:text-brand-700">
                 + {f.addLine}
               </button>
             </div>
