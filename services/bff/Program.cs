@@ -154,6 +154,10 @@ v1.MapInvoiceEndpoints();
 v1.MapZatcaStatusEndpoints();
 v1.MapMeEndpoints();
 v1.MapTajeerWebhookEndpoints();
+v1.MapCustomerEndpoints();
+v1.MapVehicleEndpoints();
+v1.MapDriverEndpoints();
+v1.MapBranchEndpoints();
 
 if (app.Environment.IsDevelopment())
 {

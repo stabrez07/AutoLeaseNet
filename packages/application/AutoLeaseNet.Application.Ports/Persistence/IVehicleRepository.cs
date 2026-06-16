@@ -14,4 +14,5 @@ public interface IVehicleRepository
         BodyType bodyType,
         int seats,
         CancellationToken ct);
+    Task<(IReadOnlyList<Vehicle> Items, int TotalCount)> GetPagedAsync(Guid tenantId, int page, int pageSize, string? search, int? statusFilter, CancellationToken ct);
 }

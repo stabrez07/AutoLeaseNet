@@ -18,6 +18,19 @@ public sealed class EfCustomerRepository(AutoLeaseNetDbContext db) : ICustomerRe
 
     public Task<bool> AnyAsync(Guid tenantId, CancellationToken ct) =>
         db.Customers.AnyAsync(c => c.TenantId == tenantId, ct);
+
+    public async Task<(IReadOnlyList<Customer> Items, int TotalCount)> GetPagedAsync(Guid tenantId, int page, int pageSize, string? search, CancellationToken ct)
+    {
+        var q = db.Customers.AsNoTracking().Where(c => c.TenantId == tenantId);
+        if (!string.IsNullOrWhiteSpace(search))
+            q = q.Where(c => c.DisplayName.Contains(search) || (c.Mobile != null && c.Mobile.Contains(search)));
+        var total = await q.CountAsync(ct);
+        var items = await q.OrderBy(c => c.DisplayName)
+            .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        return (items, total);
+    }
+
+    public Task UpdateAsync(Customer customer, CancellationToken ct) { db.Customers.Update(customer); return Task.CompletedTask; }
 }
 
 public sealed class EfVehicleRepository(AutoLeaseNetDbContext db) : IVehicleRepository
@@ -51,6 +64,17 @@ public sealed class EfVehicleRepository(AutoLeaseNetDbContext db) : IVehicleRepo
             .ThenBy(v => v.CurrentKm)
             .FirstOrDefaultAsync(ct);
     }
+
+    public async Task<(IReadOnlyList<Vehicle> Items, int TotalCount)> GetPagedAsync(Guid tenantId, int page, int pageSize, string? search, int? statusFilter, CancellationToken ct)
+    {
+        var q = db.Vehicles.AsNoTracking().Where(v => v.TenantId == tenantId);
+        if (statusFilter.HasValue) q = q.Where(v => (int)v.Status == statusFilter.Value);
+        if (!string.IsNullOrWhiteSpace(search))
+            q = q.Where(v => v.PlateNumber.Contains(search) || v.Make.Contains(search) || v.Model.Contains(search) || v.Vin.Contains(search));
+        var total = await q.CountAsync(ct);
+        var items = await q.OrderBy(v => v.PlateNumber).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        return (items, total);
+    }
 }
 
 public sealed class EfDriverRepository(AutoLeaseNetDbContext db) : IDriverRepository
@@ -62,6 +86,16 @@ public sealed class EfDriverRepository(AutoLeaseNetDbContext db) : IDriverReposi
 
     public Task<Driver?> GetByIdNumberAsync(Guid tenantId, string personIdNumber, CancellationToken ct) =>
         db.Drivers.SingleOrDefaultAsync(d => d.TenantId == tenantId && d.PersonIdNumber == personIdNumber, ct);
+
+    public async Task<(IReadOnlyList<Driver> Items, int TotalCount)> GetPagedAsync(Guid tenantId, int page, int pageSize, string? search, CancellationToken ct)
+    {
+        var q = db.Drivers.AsNoTracking().Where(d => d.TenantId == tenantId);
+        if (!string.IsNullOrWhiteSpace(search))
+            q = q.Where(d => d.PersonNameEn.Contains(search) || d.DriverLicenseNumber.Contains(search));
+        var total = await q.CountAsync(ct);
+        var items = await q.OrderBy(d => d.PersonNameEn).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        return (items, total);
+    }
 }
 
 public sealed class EfBranchRepository(AutoLeaseNetDbContext db) : IBranchRepository
@@ -73,6 +107,16 @@ public sealed class EfBranchRepository(AutoLeaseNetDbContext db) : IBranchReposi
 
     public Task<Branch?> GetByTajeerBranchIdAsync(Guid tenantId, int tajeerBranchId, CancellationToken ct) =>
         db.Branches.SingleOrDefaultAsync(b => b.TenantId == tenantId && b.TajeerBranchId == tajeerBranchId, ct);
+
+    public async Task<(IReadOnlyList<Branch> Items, int TotalCount)> GetPagedAsync(Guid tenantId, int page, int pageSize, string? search, CancellationToken ct)
+    {
+        var q = db.Branches.AsNoTracking().Where(b => b.TenantId == tenantId);
+        if (!string.IsNullOrWhiteSpace(search))
+            q = q.Where(b => b.Code.Contains(search) || b.NameEn.Contains(search) || b.NameAr.Contains(search));
+        var total = await q.CountAsync(ct);
+        var items = await q.OrderBy(b => b.Code).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        return (items, total);
+    }
 }
 
 public sealed class EfRentPolicyRepository(AutoLeaseNetDbContext db) : IRentPolicyRepository
