@@ -1,4 +1,4 @@
-using AutoLeaseNet.Application.Ports.Persistence;
+﻿using AutoLeaseNet.Application.Ports.Persistence;
 using AutoLeaseNet.Application.Ports.Seeding;
 using AutoLeaseNet.Application.Ports.Time;
 using AutoLeaseNet.Domain.Branches;
@@ -43,7 +43,8 @@ public sealed partial class BogusDataSeeder(
     IApprovalTierRepository approvalTiers,
     IUnitOfWork uow,
     IClock clock,
-    ILogger<BogusDataSeeder> logger) : IDataSeeder
+    ILogger<BogusDataSeeder> logger,
+    IQuotationRepository quotations) : IDataSeeder
 {
     public Guid TenantId { get; } = options.TenantId;
 
@@ -73,6 +74,8 @@ public sealed partial class BogusDataSeeder(
 
         SeedInspections(seededLeases, seededDrivers, nowUtc);
         SeedIncidents(seededLeases, seededDrivers, nowUtc);
+
+        SeedQuotations(seededCustomers, seededVehicles, seededPolicies, seededCoverages, nowUtc);
 
         await uow.SaveChangesAsync(ct).ConfigureAwait(false);
         LogSeedComplete(TenantId, seededCustomers.Count, seededVehicles.Count, seededDrivers.Count);
@@ -185,12 +188,16 @@ public sealed partial class BogusDataSeeder(
             var c = Customer.CreateB2B(new B2BCreateInput
             {
                 TenantId = TenantId,
-                LegalName = legal, LegalNameAr = legalAr,
-                CommercialRegistration = cr, VatNumber = vat,
+                LegalName = legal,
+                LegalNameAr = legalAr,
+                CommercialRegistration = cr,
+                VatNumber = vat,
                 Email = $"fleet@{legal.Split(' ')[0].ToLowerInvariant()}.com.sa",
                 Mobile = $"+9665{Random.Shared.Next(10000000, 99999999)}",
-                NationalAddress = "RIYD2345-12345", BillingAddress = "Riyadh, Saudi Arabia",
-                CreditLimit = credit, CreditCurrency = "SAR",
+                NationalAddress = "RIYD2345-12345",
+                BillingAddress = "Riyadh, Saudi Arabia",
+                CreditLimit = credit,
+                CreditCurrency = "SAR",
                 PreferredLanguage = PreferredLanguage.Ar,
                 NowUtc = now,
             });
@@ -213,7 +220,8 @@ public sealed partial class BogusDataSeeder(
             var c = Customer.CreateB2C(new B2CCreateInput
             {
                 TenantId = TenantId,
-                PersonNameEn = nameEn, PersonNameAr = nameAr,
+                PersonNameEn = nameEn,
+                PersonNameAr = nameAr,
                 IdTypeCode = idType,
                 PersonIdNumber = idNumber,
                 DateOfBirth = new DateOnly(1970 + (i % 30), 1 + (i % 12), 1 + (i % 28)),
@@ -262,12 +270,19 @@ public sealed partial class BogusDataSeeder(
             var v = Vehicle.Create(new VehicleCreateInput
             {
                 TenantId = TenantId,
-                PlateNumber = plateNumber, PlateLetters = plateLetters, PlateTypeCode = 1,
+                PlateNumber = plateNumber,
+                PlateLetters = plateLetters,
+                PlateTypeCode = 1,
                 Vin = $"VINSA{i:D12}",
                 EngineNumber = $"ENG-{i:D8}",
-                Make = t.Make, Model = t.Model, ModelYear = modelYear,
+                Make = t.Make,
+                Model = t.Model,
+                ModelYear = modelYear,
                 Color = colors[i % colors.Length],
-                FuelType = t.Fuel, TransmissionType = TransmissionType.Automatic, BodyType = t.Body, Seats = t.Seats,
+                FuelType = t.Fuel,
+                TransmissionType = TransmissionType.Automatic,
+                BodyType = t.Body,
+                Seats = t.Seats,
                 LicenseExpiryDate = new DateOnly(2027 + (i % 3), 1 + (i % 12), 1 + (i % 28)),
                 InsuranceExpiryDate = new DateOnly(2027, 1 + (i % 12), 1 + (i % 28)),
                 InspectionExpiryDate = new DateOnly(2027, 1 + (i % 12), 1 + (i % 28)),
@@ -311,7 +326,8 @@ public sealed partial class BogusDataSeeder(
             {
                 TenantId = TenantId,
                 CustomerId = affiliation?.Id,
-                PersonNameEn = nameEn, PersonNameAr = nameAr,
+                PersonNameEn = nameEn,
+                PersonNameAr = nameAr,
                 IdTypeCode = idType,
                 PersonIdNumber = idNumber,
                 DateOfBirth = new DateOnly(1980 + (i % 25), 1 + (i % 12), 1 + (i % 28)),
@@ -330,10 +346,12 @@ public sealed partial class BogusDataSeeder(
             switch (i % 5)
             {
                 case 1: d.MarkTammAuthorizationPending($"tamm-{i:D6}", now.AddDays(-1)); break;
-                case 2: d.MarkTammAuthorizationPending($"tamm-{i:D6}", now.AddDays(-3));
-                         d.MarkTammAuthorized(now.AddDays(-1)); break;
-                case 3: d.MarkTammAuthorizationPending($"tamm-{i:D6}", now.AddDays(-3));
-                         d.MarkTammRejected(now.AddDays(-1)); break;
+                case 2:
+                    d.MarkTammAuthorizationPending($"tamm-{i:D6}", now.AddDays(-3));
+                    d.MarkTammAuthorized(now.AddDays(-1)); break;
+                case 3:
+                    d.MarkTammAuthorizationPending($"tamm-{i:D6}", now.AddDays(-3));
+                    d.MarkTammRejected(now.AddDays(-1)); break;
             }
             if (i % 7 == 0) d.MarkDefensiveDrivingCertHeld(now.AddDays(-30));
 
@@ -547,11 +565,18 @@ public sealed partial class BogusDataSeeder(
             PerformedByUserId = drvs[0].Id,
             OdometerKm = sl.Vehicle.CurrentKm,
             FuelLevel = FuelLevel.Full,
-            AcCondition = 1, RadioStereoCondition = 1, ScreenCondition = 1,
-            SpeedometerCondition = 1, KeysCondition = 1, CarSeatsCondition = 1,
-            SafetyTriangleCondition = 1, FireExtinguisherCondition = 1,
-            FirstAidKitCondition = 1, SpareTireToolsCondition = 1,
-            TiresCondition = 1, SpareTireCondition = 1,
+            AcCondition = 1,
+            RadioStereoCondition = 1,
+            ScreenCondition = 1,
+            SpeedometerCondition = 1,
+            KeysCondition = 1,
+            CarSeatsCondition = 1,
+            SafetyTriangleCondition = 1,
+            FireExtinguisherCondition = 1,
+            FirstAidKitCondition = 1,
+            SpareTireToolsCondition = 1,
+            TiresCondition = 1,
+            SpareTireCondition = 1,
             Notes = "Pre-delivery condition: clean.",
             NowUtc = checkOutAt,
         });
@@ -595,6 +620,150 @@ public sealed partial class BogusDataSeeder(
     }
 
     private sealed record SeededLease(Lease Lease, Vehicle Vehicle, Driver Driver, DateTimeOffset SavedAt);
+
+    // ─── Quotations (configurable: min 10, spans every lifecycle stage) ─────
+    // Each quotation is linked to a customer and references seeded vehicles in its lines.
+    // Lifecycle stages covered: Draft, PendingApproval, Approved, SentToCustomer, Accepted,
+    // Rejected, Expired, Withdrawn — giving portals full Quote→Contract lifecycle visibility.
+    private void SeedQuotations(
+        List<Customer> custs,
+        List<Vehicle> vehs,
+        List<RentPolicy> pols,
+        List<ExtendedCoverage> covs,
+        DateTimeOffset now)
+    {
+        // Fixed "account manager" identity — matches demo tenant's staff user.
+        var accountManagerId = Guid.Parse("b2b2b2b2-0001-0000-0000-000000000001");
+
+        // Per-stage templates: (FinalStatus, daysAgo, durationMonths, discountPct, vehicleCount)
+        var templates = new (QuotationStatus FinalStatus, int DaysAgo, int DurationMonths, decimal DiscountPct, int VehicleCount)[]
+        {
+            (QuotationStatus.Draft,             0,  3,  0m,   1),
+            (QuotationStatus.Draft,             1,  6,  5m,   3),
+            (QuotationStatus.PendingApproval,   3,  12, 0m,   5),
+            (QuotationStatus.PendingApproval,   5,  24, 10m,  8),
+            (QuotationStatus.Approved,          7,  12, 0m,   4),
+            (QuotationStatus.Approved,          10, 6,  5m,   2),
+            (QuotationStatus.SentToCustomer,    14, 12, 0m,   6),
+            (QuotationStatus.SentToCustomer,    20, 24, 8m,   10),
+            (QuotationStatus.Accepted,          30, 12, 0m,   4),
+            (QuotationStatus.Accepted,          45, 6,  15m,  2),
+            (QuotationStatus.Rejected,          25, 3,  0m,   1),
+            (QuotationStatus.Expired,           60, 6,  0m,   3),
+            (QuotationStatus.Withdrawn,         15, 3,  0m,   2),
+        };
+
+        var targetQuotations = NormalizeCount(options.QuotationCount, min: 10);
+        for (var i = 0; i < targetQuotations; i++)
+        {
+            var tmpl = templates[i % templates.Length];
+            var daysAgo = tmpl.DaysAgo + (i / templates.Length);
+            var createdAt = now.AddDays(-daysAgo);
+            var quoteDate = DateOnly.FromDateTime(createdAt.UtcDateTime);
+            var validUntil = quoteDate.AddDays(30);
+            var cust = custs[i % custs.Count];
+            var pol = pols[i % pols.Count];
+
+            var q = Quotation.CreateDraft(new CreateQuotationInput
+            {
+                TenantId = TenantId,
+                QuoteNumber = $"QT-{2026:D4}-{i + 1:D5}",
+                CustomerId = cust.Id,
+                AccountManagerId = accountManagerId,
+                QuoteDate = quoteDate,
+                ValidUntilDate = validUntil,
+                ContractType = (i % 3) switch
+                {
+                    0 => QuotationContractType.Daily,
+                    1 => QuotationContractType.LongTermLease,
+                    _ => QuotationContractType.Hourly,
+                },
+                EstimatedDurationMonths = tmpl.DurationMonths,
+                DiscountPercent = tmpl.DiscountPct,
+                TermsAndConditionsMd = "Standard KSA fleet leasing terms apply. VAT 15%.",
+                NowUtc = createdAt,
+            });
+
+            // Add vehicle-rental lines referencing actual seeded vehicles.
+            for (var ln = 0; ln < tmpl.VehicleCount; ln++)
+            {
+                var v = vehs[(i + ln) % vehs.Count];
+                var cov = covs[(i + ln) % covs.Count];
+                var dailyRate = pol.BaseDailyRate;
+                var days = tmpl.DurationMonths * 30;
+
+                q.AddLine(new AddQuotationLineInput
+                {
+                    ItemType = QuotationItemType.VehicleRental,
+                    Description = $"{v.Make} {v.Model} {v.ModelYear} — {days}d @ SAR {dailyRate}/day",
+                    VehicleSpecRef = v.Id.ToString(),
+                    Quantity = days,
+                    UnitPriceSar = dailyRate,
+                    DiscountPercent = 0m,
+                    NowUtc = createdAt,
+                });
+
+                // Add CDW insurance line.
+                q.AddLine(new AddQuotationLineInput
+                {
+                    ItemType = QuotationItemType.Insurance,
+                    Description = $"{cov.NameEn} — {days}d @ SAR {cov.DailyRate}/day",
+                    Quantity = days,
+                    UnitPriceSar = cov.DailyRate,
+                    DiscountPercent = 0m,
+                    NowUtc = createdAt,
+                });
+            }
+
+            // Walk lifecycle forward to target status.
+            var approvalTiersList = new List<ApprovalTier>();
+            switch (tmpl.FinalStatus)
+            {
+                case QuotationStatus.PendingApproval:
+                    q.SubmitForApproval(
+                        new[] { ApprovalTier.Create(TenantId, 1, "SALES_TIER_1", 10_000m, createdAt) },
+                        createdAt.AddHours(2));
+                    break;
+
+                case QuotationStatus.Approved:
+                    q.SubmitForApproval(Array.Empty<ApprovalTier>(), createdAt.AddHours(2));
+                    break;
+
+                case QuotationStatus.SentToCustomer:
+                    q.SubmitForApproval(Array.Empty<ApprovalTier>(), createdAt.AddHours(2));
+                    q.MarkSentToCustomer(null, createdAt.AddHours(4));
+                    break;
+
+                case QuotationStatus.Accepted:
+                    q.SubmitForApproval(Array.Empty<ApprovalTier>(), createdAt.AddHours(2));
+                    q.MarkSentToCustomer(null, createdAt.AddHours(4));
+                    q.Accept($"sig-{i:D6}", createdAt.AddDays(2));
+                    break;
+
+                case QuotationStatus.Rejected:
+                    q.SubmitForApproval(Array.Empty<ApprovalTier>(), createdAt.AddHours(2));
+                    q.MarkSentToCustomer(null, createdAt.AddHours(4));
+                    q.RejectByCustomer(createdAt.AddDays(3));
+                    break;
+
+                case QuotationStatus.Expired:
+                    q.SubmitForApproval(Array.Empty<ApprovalTier>(), createdAt.AddHours(2));
+                    q.MarkSentToCustomer(null, createdAt.AddHours(4));
+                    q.MarkExpired(createdAt.AddDays(31)); // past ValidUntilDate
+                    break;
+
+                case QuotationStatus.Withdrawn:
+                    q.Recall(createdAt.AddHours(6));
+                    break;
+
+                case QuotationStatus.Draft:
+                default:
+                    break; // stays Draft
+            }
+
+            quotations.Add(q);
+        }
+    }
 
     // Lifts a Vehicle from Available → Reserved → OnRent so seeded Active/Extended/
     // Suspended/Closed leases reflect realistic vehicle state for downstream check-in

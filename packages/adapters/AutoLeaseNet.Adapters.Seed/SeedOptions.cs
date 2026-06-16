@@ -1,4 +1,4 @@
-namespace AutoLeaseNet.Adapters.Seed;
+﻿namespace AutoLeaseNet.Adapters.Seed;
 
 /// <summary>
 /// Tunables for the seeding adapter — bound from <c>Seed</c> config section.
@@ -27,6 +27,9 @@ public sealed class SeedOptions
 
     /// <summary>Target lease rows to seed (minimum 10).</summary>
     public int LeaseCount { get; init; } = 120;
+
+    /// <summary>Target quotation rows to seed (minimum 10). Each quotation is linked to a customer and spans multiple lifecycle stages.</summary>
+    public int QuotationCount { get; init; } = 80;
 }
 
 public enum SeedMode
