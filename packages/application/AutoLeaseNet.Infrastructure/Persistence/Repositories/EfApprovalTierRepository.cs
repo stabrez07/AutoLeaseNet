@@ -16,4 +16,13 @@ public sealed class EfApprovalTierRepository(AutoLeaseNetDbContext db) : IApprov
     {
         return db.ApprovalTiers.AnyAsync(t => t.TenantId == tenantId, ct);
     }
+
+    public async Task<IReadOnlyList<ApprovalTier>> GetActiveForTenantAsync(Guid tenantId, CancellationToken ct)
+    {
+        return await db.ApprovalTiers
+            .Where(t => t.TenantId == tenantId && t.IsActive)
+            .OrderBy(t => t.TierLevel)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+    }
 }

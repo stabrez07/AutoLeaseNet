@@ -10,4 +10,6 @@ public interface IApprovalTierRepository
     void Add(ApprovalTier tier);
 
     Task<bool> AnyAsync(Guid tenantId, CancellationToken ct);
+
+    Task<IReadOnlyList<ApprovalTier>> GetActiveForTenantAsync(Guid tenantId, CancellationToken ct);
 }
