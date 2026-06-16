@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using AutoLeaseNet.Application.Ports.Images;
 using AutoLeaseNet.Application.Ports.Persistence;
 using AutoLeaseNet.Application.Ports.Time;
 using AutoLeaseNet.Infrastructure.Persistence;
@@ -47,6 +48,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IZatcaChainStateRepository, EfZatcaChainStateRepository>();
         services.AddScoped<IInvoiceRepository, EfInvoiceRepository>();
         services.AddScoped<IZatcaSubmissionRepository, EfZatcaSubmissionRepository>();
+        services.AddScoped<IVehicleHistoryRepository, EfVehicleHistoryRepository>();
+        services.AddScoped<IVehicleServiceRecordRepository, EfVehicleServiceRecordRepository>();
+        services.AddScoped<IVehicleImageRepository, EfVehicleImageRepository>();
 
         return services;
     }

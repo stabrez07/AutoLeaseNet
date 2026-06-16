@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>AutoLeaseNet.Adapters.Images.InMemory</RootNamespace>
+    <Description>In-memory mock IVehicleImageService. Returns deterministic Unsplash placeholder URLs for dev/tests. Swap for the real AI adapter in production.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\application\AutoLeaseNet.Application.Ports\AutoLeaseNet.Application.Ports.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+</Project>

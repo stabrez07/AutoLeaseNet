@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using AutoLeaseNet.Adapters.Cache.InMemory;
 using AutoLeaseNet.Adapters.Email.InMemory;
+using AutoLeaseNet.Adapters.Images.InMemory;
 using AutoLeaseNet.Adapters.Pdf.QuestPdf;
 using AutoLeaseNet.Adapters.Seed;
 using AutoLeaseNet.Adapters.Sms.InMemory;
@@ -102,6 +103,7 @@ builder.Services.AddInMemorySms();
 builder.Services.AddQuestPdfRenderer();
 builder.Services.AddInMemoryEmail();
 builder.Services.AddSeed(builder.Configuration.GetSection(SeedOptions.SectionName));
+builder.Services.AddInMemoryVehicleImages();
 // Future: AddInMemoryStorage() etc.
 
 var app = builder.Build();

@@ -6,6 +6,7 @@ using AutoLeaseNet.Domain.ExtendedCoverages;
 using AutoLeaseNet.Domain.RentPolicies;
 using AutoLeaseNet.Domain.Vehicles;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace AutoLeaseNet.Infrastructure.Persistence.Repositories;
 
@@ -45,6 +46,9 @@ public sealed class EfVehicleRepository(AutoLeaseNetDbContext db) : IVehicleRepo
             v => v.TenantId == tenantId && v.PlateNumber == plateNumber && v.PlateLetters == plateLetters,
             ct);
 
+    public Task<Vehicle?> GetByVinAsync(Guid tenantId, string vin, CancellationToken ct) =>
+        db.Vehicles.SingleOrDefaultAsync(v => v.TenantId == tenantId && v.Vin == vin, ct);
+
     public Task<Vehicle?> FindAvailableReplacementAsync(
         Guid tenantId,
         Guid excludedVehicleId,
@@ -70,10 +74,68 @@ public sealed class EfVehicleRepository(AutoLeaseNetDbContext db) : IVehicleRepo
         var q = db.Vehicles.AsNoTracking().Where(v => v.TenantId == tenantId);
         if (statusFilter.HasValue) q = q.Where(v => (int)v.Status == statusFilter.Value);
         if (!string.IsNullOrWhiteSpace(search))
-            q = q.Where(v => v.PlateNumber.Contains(search) || v.Make.Contains(search) || v.Model.Contains(search) || v.Vin.Contains(search));
+            q = q.Where(v => v.PlateNumber.Contains(search) || v.PlateLetters.Contains(search)
+                           || v.Make.Contains(search) || v.Model.Contains(search) || v.Vin.Contains(search));
         var total = await q.CountAsync(ct);
         var items = await q.OrderBy(v => v.PlateNumber).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
         return (items, total);
+    }
+
+    public Task UpdateAsync(Vehicle vehicle, CancellationToken ct)
+    {
+        db.Vehicles.Update(vehicle);
+        return Task.CompletedTask;
+    }
+
+    public async Task<bool> DeleteAsync(Guid tenantId, Guid id, CancellationToken ct)
+    {
+        var vehicle = await db.Vehicles.SingleOrDefaultAsync(v => v.TenantId == tenantId && v.Id == id, ct);
+        if (vehicle is null) return false;
+        db.Vehicles.Remove(vehicle);
+        return true;
+    }
+}
+
+public sealed class EfVehicleHistoryRepository(AutoLeaseNetDbContext db) : IVehicleHistoryRepository
+{
+    public void Add(VehicleHistoryEvent historyEvent) { ArgumentNullException.ThrowIfNull(historyEvent); db.VehicleHistoryEvents.Add(historyEvent); }
+
+    public async Task<IReadOnlyList<VehicleHistoryEvent>> GetByVehicleAsync(Guid tenantId, Guid vehicleId, CancellationToken ct)
+    {
+        return await db.VehicleHistoryEvents
+            .AsNoTracking()
+            .Where(e => e.TenantId == tenantId && e.VehicleId == vehicleId)
+            .OrderByDescending(e => e.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+}
+
+public sealed class EfVehicleServiceRecordRepository(AutoLeaseNetDbContext db) : IVehicleServiceRecordRepository
+{
+    public void Add(VehicleServiceRecord record) { ArgumentNullException.ThrowIfNull(record); db.VehicleServiceRecords.Add(record); }
+
+    public async Task<IReadOnlyList<VehicleServiceRecord>> GetByVehicleAsync(Guid tenantId, Guid vehicleId, CancellationToken ct)
+    {
+        return await db.VehicleServiceRecords
+            .AsNoTracking()
+            .Where(r => r.TenantId == tenantId && r.VehicleId == vehicleId)
+            .OrderByDescending(r => r.ServicedAt)
+            .ToListAsync(ct);
+    }
+}
+
+public sealed class EfVehicleImageRepository(AutoLeaseNetDbContext db) : IVehicleImageRepository
+{
+    public void Add(VehicleImage image) { ArgumentNullException.ThrowIfNull(image); db.VehicleImages.Add(image); }
+
+    public async Task<IReadOnlyList<VehicleImage>> GetByVehicleAsync(Guid tenantId, Guid vehicleId, CancellationToken ct)
+    {
+        return await db.VehicleImages
+            .AsNoTracking()
+            .Where(i => i.TenantId == tenantId && i.VehicleId == vehicleId)
+            .OrderBy(i => i.SortOrder)
+            .ThenBy(i => i.CreatedAtUtc)
+            .ToListAsync(ct);
     }
 }
 

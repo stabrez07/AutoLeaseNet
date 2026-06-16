@@ -239,6 +239,34 @@ class BffClient {
     return (await res.json()) as TResponse
   }
 
+  async putJson<TResponse, TBody>(
+    path: string,
+    body: TBody,
+    extraHeaders: Record<string, string> = {},
+  ): Promise<TResponse> {
+    const res = await fetch(`${BFF_BASE_URL}${path}`, {
+      method: 'PUT',
+      headers: { ...this.headers(extraHeaders), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const problem = await this.tryReadProblem(res)
+      throw Object.assign(new Error(problem.title ?? `BFF PUT ${path} failed (${res.status})`), { status: res.status, problem })
+    }
+    return (await res.json()) as TResponse
+  }
+
+  async deleteReq(path: string, extraHeaders: Record<string, string> = {}): Promise<void> {
+    const res = await fetch(`${BFF_BASE_URL}${path}`, {
+      method: 'DELETE',
+      headers: this.headers(extraHeaders),
+    })
+    if (!res.ok) {
+      const problem = await this.tryReadProblem(res)
+      throw Object.assign(new Error(problem.title ?? `BFF DELETE ${path} failed (${res.status})`), { status: res.status, problem })
+    }
+  }
+
   private async tryReadProblem(res: Response): Promise<ProblemDetails> {
     try {
       return (await res.json()) as ProblemDetails
@@ -385,6 +413,55 @@ class BffClient {
     )
   }
 
+  updateVehicle(id: string, body: UpdateVehicleRequest, idempotencyKey: string) {
+    return this.putJson<VehicleCommandResult, UpdateVehicleRequest>(
+      `/api/v1/vehicles/${id}`,
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
+  getVehicleHistory(id: string) {
+    return this.getJson<VehicleHistoryEvent[]>(`/api/v1/vehicles/${id}/history`)
+  }
+
+  getVehicleServiceRecords(id: string) {
+    return this.getJson<ServiceRecord[]>(`/api/v1/vehicles/${id}/service-records`)
+  }
+
+  createServiceRecord(vehicleId: string, body: CreateServiceRecordRequest, idempotencyKey: string) {
+    return this.postJson<VehicleCommandResult, CreateServiceRecordRequest>(
+      `/api/v1/vehicles/${vehicleId}/service-records`,
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
+  getVehicleImages(id: string) {
+    return this.getJson<VehicleImageDto[]>(`/api/v1/vehicles/${id}/images`)
+  }
+
+  generateVehicleImage(vehicleId: string, idempotencyKey: string) {
+    return this.postJson<VehicleCommandResult, Record<string, never>>(
+      `/api/v1/vehicles/${vehicleId}/images/generate`,
+      {},
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
+  bulkImportVehicles(file: File, idempotencyKey: string): Promise<BulkImportResult> {
+    const form = new FormData()
+    form.append('file', file)
+    return fetch(`${BFF_BASE_URL}/api/v1/vehicles/bulk-import`, {
+      method: 'POST',
+      headers: { ...this.headers(), 'Idempotency-Key': idempotencyKey },
+      body: form,
+    }).then(async (res) => {
+      if (!res.ok) throw new Error(`Bulk import failed (${res.status})`)
+      return (await res.json()) as BulkImportResult
+    })
+  }
+
   // ─── Drivers CRUD ───────────────────────────────────────────────────────────
 
   getDriverById(id: string) {
@@ -419,6 +496,48 @@ class BffClient {
       { activate },
       { 'Idempotency-Key': idempotencyKey },
     )
+  }
+
+  // ─── Leases ────────────────────────────────────────────────────────────────
+
+  getLeases(page = 1, pageSize = 20, search?: string, status?: string) {
+    const q = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+    if (search) q.set('search', search)
+    if (status) q.set('status', status)
+    return this.getJson<PagedResult<LeaseSummary>>(`/api/v1/leases?${q.toString()}`)
+  }
+  getLeaseById(id: string) {
+    return this.getJson<LeaseDetail>(`/api/v1/leases/${id}`)
+  }
+  getCustomerLeases(customerId: string) {
+    return this.getJson<LeaseSummary[]>(`/api/v1/customers/${customerId}/leases`)
+  }
+  getCustomerVehicles(customerId: string) {
+    return this.getJson<VehicleSummary[]>(`/api/v1/customers/${customerId}/vehicles`)
+  }
+  getCustomerDrivers(customerId: string) {
+    return this.getJson<DriverSummary[]>(`/api/v1/customers/${customerId}/drivers`)
+  }
+  getVehicleCurrentLease(vehicleId: string) {
+    return this.getJson<LeaseSummary | null>(`/api/v1/vehicles/${vehicleId}/current-lease`)
+  }
+  getDriverCurrentLease(driverId: string) {
+    return this.getJson<LeaseSummary | null>(`/api/v1/drivers/${driverId}/current-lease`)
+  }
+
+  // ─── Delete operations ─────────────────────────────────────────────────────
+
+  deleteVehicle(id: string, idempotencyKey: string): Promise<void> {
+    return this.deleteReq(`/api/v1/vehicles/${id}`, { 'Idempotency-Key': idempotencyKey })
+  }
+  deleteDriver(id: string, idempotencyKey: string) {
+    return this.postJson<DeleteResult, Record<string, never>>(`/api/v1/drivers/${id}/delete`, {}, { 'Idempotency-Key': idempotencyKey })
+  }
+  deleteBranch(id: string, idempotencyKey: string) {
+    return this.postJson<DeleteResult, Record<string, never>>(`/api/v1/branches/${id}/delete`, {}, { 'Idempotency-Key': idempotencyKey })
+  }
+  deleteCustomer(id: string, idempotencyKey: string) {
+    return this.postJson<DeleteResult, Record<string, never>>(`/api/v1/customers/${id}/delete`, {}, { 'Idempotency-Key': idempotencyKey })
   }
 }
 
@@ -471,7 +590,77 @@ export interface VehicleDetail {
   insuranceCompany?: string | null; insurancePolicyNumber?: string | null
   ownerBranchId: string; currentBranchId: string
   currentKm: number; purchasePrice?: number | null; purchaseDate?: string | null
+  notes?: string | null
   createdAtUtc: string; updatedAtUtc: string
+  serviceHistory: ServiceRecord[]
+  images?: VehicleImageDto[]
+}
+
+export interface UpdateVehicleRequest {
+  color?: string | undefined
+  seats?: number | undefined
+  make?: string | undefined
+  model?: string | undefined
+  modelYear?: number | undefined
+  insuranceCompany?: string | undefined
+  insurancePolicyNumber?: string | undefined
+  licenseExpiryDate?: string | undefined
+  insuranceExpiryDate?: string | undefined
+  inspectionExpiryDate?: string | undefined
+  currentBranchId?: string | undefined
+  currentKm?: number | undefined
+  purchasePrice?: number | undefined
+  purchaseDate?: string | undefined
+  notes?: string | undefined
+}
+
+export interface VehicleHistoryEvent {
+  id: string
+  vehicleId: string
+  eventType: string
+  description: string
+  previousValue?: string | null
+  newValue?: string | null
+  performedByName: string
+  occurredAtUtc: string
+}
+
+export interface CreateServiceRecordRequest {
+  type: number  // 1=PMS, 2=CMS
+  serviceCode: string
+  description: string
+  servicedAt: string
+  odometerAtService: number
+  costSar: number
+  branch: string
+  technician: string
+  partsReplaced?: string[] | undefined
+  nextServiceOdometer?: number | undefined
+  nextServiceDate?: string | undefined
+  notes?: string | undefined
+}
+
+export interface BulkImportRowError {
+  rowIndex: number
+  errorCode: string
+  errorMessage: string
+}
+
+export interface BulkImportResult {
+  success: boolean
+  createdCount: number
+  skippedCount: number
+  errors: BulkImportRowError[]
+}
+
+export interface VehicleImageDto {
+  id: string
+  vehicleId: string
+  imageUrl: string
+  thumbnailUrl?: string | null
+  altText?: string | null
+  isAiGenerated: boolean
+  sortOrder: number
 }
 
 export interface VehicleCommandResult {
@@ -541,12 +730,105 @@ export interface CreateBranchRequest {
   tajeerBranchId: number; tajeerOperatorId: number
 }
 
+// ─── Lease types ─────────────────────────────────────────────────────────────
+
+export interface LeaseInspection {
+  id: string
+  type: string // CheckOut | CheckIn | Periodic
+  inspectedAtUtc: string
+  odometer: number
+  conditionCode: string // Good | Fair | Damaged
+  notes: string | null
+  branch: string
+  inspector: string
+}
+
+export interface LeaseIncident {
+  id: string
+  type: string // Accident | Traffic | Mechanical | Theft
+  occurredAtUtc: string
+  description: string
+  estimatedCostSar: number | null
+  claimNumber: string | null
+  resolved: boolean
+}
+
+export interface LeaseSummary {
+  id: string
+  leaseNumber: string
+  customerId: string
+  customerDisplayName: string
+  vehicleId: string
+  vehiclePlate: string
+  vehicleMakeModel: string
+  primaryDriverId: string | null
+  primaryDriverName: string | null
+  status: string // Draft | PendingIssuance | Active | Extended | Suspended | Closed | Cancelled
+  contractTypeCode: string // Daily | Monthly | Annual
+  contractStartUtc: string
+  contractEndUtc: string
+  tajeerContractNumber: number | null
+  rentAmountSar: number
+  workingBranchCode: string
+  workingBranchName: string
+  createdAtUtc: string
+}
+
+export interface LeaseDetail extends LeaseSummary {
+  rentPolicyId: string
+  paidAmountSar: number
+  vatAmountSar: number
+  totalAmountSar: number
+  remainingAmountSar: number
+  allowedKmPerDay: number
+  paymentMethodCode: string
+  issuedAtUtc: string | null
+  suspendedAtUtc: string | null
+  resumedAtUtc: string | null
+  closedAtUtc: string | null
+  cancelledAtUtc: string | null
+  tajeerStatus: string | null
+  tajeerIssuanceUrl: string | null
+  zatcaSubmissionStatus: string | null
+  zatcaInvoiceNumber: string | null
+  inspections: LeaseInspection[]
+  incidents: LeaseIncident[]
+}
+
+export interface DeleteResult {
+  success: boolean
+  errorCode?: string | null
+  errorMessage?: string | null
+}
+
+// ─── Service history ──────────────────────────────────────────────────────────
+
+export type ServiceType = 'PMS' | 'CMS'
+
+export interface ServiceRecord {
+  id: string
+  vehicleId: string
+  type: ServiceType
+  serviceCode: string
+  description: string
+  servicedAt: string        // YYYY-MM-DD
+  odometerAtService: number
+  costSar: number
+  branch: string
+  technician: string
+  partsReplaced: string[]
+  nextServiceOdometer: number | null
+  nextServiceDate: string | null
+  notes: string | null
+}
+
 type MockState = {
   customers: CustomerDetail[]
   vehicles: VehicleDetail[]
   drivers: DriverDetail[]
   branches: BranchDetail[]
   quotations: QuotationDetail[]
+  leases: LeaseDetail[]
 }
 
 function mockId(prefix: string, n: number) {
@@ -574,6 +856,65 @@ function pick<T>(arr: T[], i: number): T {
 
 function buildMockState(): MockState {
   const now = new Date()
+  // ─── Service record helpers ────────────────────────────────────────────────
+  const PMS_SERVICES = [
+    { code: 'PMS-OIL', desc: 'Engine Oil & Filter Change', parts: ['Engine Oil 5L', 'Oil Filter'], cost: 380 },
+    { code: 'PMS-AIR', desc: 'Air Filter Replacement', parts: ['Air Filter'], cost: 120 },
+    { code: 'PMS-CAB', desc: 'Cabin Air Filter Replacement', parts: ['Cabin Filter'], cost: 95 },
+    { code: 'PMS-TIRE', desc: 'Tire Rotation & Balancing', parts: [], cost: 200 },
+    { code: 'PMS-BRK', desc: 'Brake Inspection & Fluid Top-Up', parts: ['Brake Fluid'], cost: 180 },
+    { code: 'PMS-FULL', desc: 'Full Scheduled Service (60k)', parts: ['Engine Oil 5L', 'Oil Filter', 'Air Filter', 'Spark Plugs', 'Brake Fluid', 'Coolant'], cost: 1200 },
+    { code: 'PMS-COOL', desc: 'Coolant Flush & Replacement', parts: ['Coolant 4L'], cost: 320 },
+    { code: 'PMS-TRANS', desc: 'Transmission Fluid Service', parts: ['ATF Fluid 4L'], cost: 450 },
+  ]
+  const CMS_SERVICES = [
+    { code: 'CMS-BRK', desc: 'Brake Pad Replacement (Front)', parts: ['Front Brake Pads x2', 'Brake Cleaner'], cost: 680 },
+    { code: 'CMS-AC', desc: 'AC Compressor & Gas Recharge', parts: ['AC Refrigerant', 'Compressor Belt'], cost: 950 },
+    { code: 'CMS-BAT', desc: 'Battery Replacement', parts: ['12V Battery 70Ah'], cost: 420 },
+    { code: 'CMS-TIRE', desc: 'Tyre Replacement (2 units)', parts: ['225/60R17 Tyre x2'], cost: 780 },
+    { code: 'CMS-SUSP', desc: 'Shock Absorber Replacement', parts: ['Front Shock Absorber x2'], cost: 1100 },
+    { code: 'CMS-BELT', desc: 'Serpentine Belt Replacement', parts: ['Serpentine Belt'], cost: 340 },
+    { code: 'CMS-ALT', desc: 'Alternator Replacement', parts: ['Alternator 90A'], cost: 1400 },
+    { code: 'CMS-BODY', desc: 'Body Panel Repair & Repaint', parts: ['Paint', 'Filler', 'Clear Coat'], cost: 2200 },
+  ]
+  const TECHNICIANS = ['Ahmed Al-Rashidi', 'Khalid Bin Saleh', 'Faisal Al-Zahrani', 'Omar Mansour', 'Nawaf Al-Otaibi']
+
+  function buildServiceHistory(vehicleId: string, branchName: string, baseKm: number, purchaseDateStr: string): ServiceRecord[] {
+    const purchaseDate = new Date(purchaseDateStr || '2022-01-01')
+    const records: ServiceRecord[] = []
+    let km = Math.max(5000, baseKm - 80000)
+    let serviceDate = new Date(purchaseDate.getTime() + 90 * 86400000)
+    const vehicleHash = vehicleId.charCodeAt(vehicleId.length - 1)
+    const numRecords = 3 + (vehicleHash % 6) // 3–8 records
+
+    for (let j = 0; j < numRecords; j++) {
+      const isPms = j % 3 !== 2
+      const pool = isPms ? PMS_SERVICES : CMS_SERVICES
+      const svc = pool[(j + vehicleHash) % pool.length]!
+      const rec: ServiceRecord = {
+        id: `svc-${vehicleId}-${j + 1}`,
+        vehicleId,
+        type: isPms ? 'PMS' : 'CMS',
+        serviceCode: svc.code,
+        description: svc.desc,
+        servicedAt: serviceDate.toISOString().substring(0, 10),
+        odometerAtService: km,
+        costSar: svc.cost + (j % 3) * 50,
+        branch: branchName,
+        technician: pick(TECHNICIANS, j + vehicleHash),
+        partsReplaced: [...svc.parts],
+        nextServiceOdometer: isPms ? km + 10000 : null,
+        nextServiceDate: isPms ? new Date(serviceDate.getTime() + 180 * 86400000).toISOString().substring(0, 10) : null,
+        notes: j === 0 ? 'Initial service after delivery' : null,
+      }
+      records.push(rec)
+      km += 10000 + (j % 5) * 2000
+      serviceDate = new Date(serviceDate.getTime() + (150 + j * 30) * 86400000)
+      if (serviceDate > now) break
+    }
+    return records.reverse() // most recent first
+  }
+
   const branches: BranchDetail[] = Array.from({ length: 80 }).map((_, i) => ({
     id: mockId('branch', i + 1),
     tenantId: DEV_TENANT_ID,
@@ -596,7 +937,7 @@ function buildMockState(): MockState {
     updatedAtUtc: now.toISOString(),
   }))
 
-  const customers: CustomerDetail[] = Array.from({ length: 320 }).map((_, i) => {
+  const customers: CustomerDetail[] = Array.from({ length: 500 }).map((_, i) => {
     const isB2B = i % 5 === 0
     const status = i % 11 === 0 ? 'Suspended' : i % 17 === 0 ? 'Closed' : 'Active'
     return {
@@ -631,42 +972,76 @@ function buildMockState(): MockState {
     }
   })
 
-  const vehicles: VehicleDetail[] = Array.from({ length: 420 }).map((_, i) => {
+  const MAKES_MODELS: [string, string, string][] = [
+    ['Toyota', 'Camry', 'Sedan'],
+    ['Toyota', 'Land Cruiser', 'Suv'],
+    ['Toyota', 'Hilux', 'Pickup'],
+    ['Hyundai', 'Sonata', 'Sedan'],
+    ['Hyundai', 'Tucson', 'Suv'],
+    ['Hyundai', 'H-1', 'Van'],
+    ['Nissan', 'Altima', 'Sedan'],
+    ['Nissan', 'Patrol', 'Suv'],
+    ['Nissan', 'Navara', 'Pickup'],
+    ['Kia', 'Sportage', 'Suv'],
+    ['Kia', 'Carnival', 'Van'],
+    ['Kia', 'K5', 'Sedan'],
+    ['GMC', 'Yukon', 'Suv'],
+    ['Chevrolet', 'Tahoe', 'Suv'],
+    ['Ford', 'F-150', 'Pickup'],
+    ['Mercedes', 'E-Class', 'Sedan'],
+    ['BMW', '5 Series', 'Sedan'],
+    ['Honda', 'Accord', 'Sedan'],
+    ['Lexus', 'LX 600', 'Suv'],
+    ['Mitsubishi', 'L200', 'Pickup'],
+    ['Toyota', 'Coaster', 'Bus'],
+    ['Toyota', 'Corolla', 'Hatchback'],
+    ['Hyundai', 'Accent', 'Hatchback'],
+    ['BMW', '4 Series', 'Coupe'],
+    ['Mercedes', 'C-Class Coupe', 'Coupe'],
+    ['Toyota', 'HiAce', 'Van'],
+  ]
+
+  const vehicles: VehicleDetail[] = Array.from({ length: 600 }).map((_, i) => {
+    const [make, model, bodyType] = MAKES_MODELS[i % MAKES_MODELS.length]!
     const st = pick(['Available', 'Reserved', 'OnRent', 'InService', 'Damaged'], i)
     const branch = pick(branches, i)
+    const baseKm = 8000 + i * 180
+    const purchaseDateStr = `202${i % 4}-${String((i % 12) + 1).padStart(2, '0')}-10`
+    const vehicleId = mockId('vehicle', i + 1)
     return {
-      id: mockId('vehicle', i + 1),
+      id: vehicleId,
       tenantId: DEV_TENANT_ID,
       status: st,
       plateNumber: `${1000 + i}`,
-      plateLetters: pick(['أ ب ج', 'د هـ و', 'ز ح ط', 'ي ك ل'], i),
+      plateLetters: pick(['أ ب ج', 'د هـ و', 'ز ح ط', 'ي ك ل', 'م ن هـ'], i),
       plateTypeCode: 1,
       vin: `VIN${(100000000000 + i).toString().slice(-12)}`,
       engineNumber: `ENG-${i + 1}`,
-      make: pick(['Toyota', 'Hyundai', 'Nissan', 'Kia'], i),
-      model: pick(['Camry', 'Sonata', 'Altima', 'Sportage'], i),
-      modelYear: 2021 + (i % 5),
-      color: pick(['White', 'Silver', 'Black', 'Grey'], i),
-      fuelType: pick(['Petrol91', 'Petrol95', 'Diesel', 'Hybrid'], i),
+      make,
+      model,
+      modelYear: 2020 + (i % 6),
+      color: pick(['White', 'Silver', 'Black', 'Grey', 'Navy', 'Red', 'Bronze'], i),
+      fuelType: pick(['Petrol91', 'Petrol95', 'Diesel', 'Hybrid', 'Electric'], i),
       transmissionType: pick(['Automatic', 'Manual', 'CVT'], i),
-      bodyType: pick(['Sedan', 'Suv', 'Pickup', 'Van'], i),
-      seats: pick([4, 5, 7], i),
+      bodyType,
+      seats: bodyType === 'Bus' ? pick([14, 20, 26], i) : bodyType === 'Van' ? pick([7, 9, 12], i) : bodyType === 'Suv' ? pick([5, 7], i) : pick([4, 5], i),
       licenseExpiryDate: `2027-${String((i % 12) + 1).padStart(2, '0')}-15`,
       insuranceExpiryDate: `2027-${String((i % 12) + 1).padStart(2, '0')}-20`,
       inspectionExpiryDate: `2027-${String((i % 12) + 1).padStart(2, '0')}-25`,
-      insuranceCompany: 'Tawuniya',
+      insuranceCompany: pick(['Tawuniya', 'Bupa Arabia', 'Walaa', 'Al Rajhi Takaful', 'AXA Cooperative'], i),
       insurancePolicyNumber: `POL-${100000 + i}`,
       ownerBranchId: branch.id,
       currentBranchId: branch.id,
-      currentKm: 10000 + i * 120,
-      purchasePrice: 80000 + i * 50,
-      purchaseDate: `202${i % 4}-01-10`,
+      currentKm: baseKm,
+      purchasePrice: 60000 + i * 80,
+      purchaseDate: purchaseDateStr,
       createdAtUtc: now.toISOString(),
       updatedAtUtc: now.toISOString(),
+      serviceHistory: buildServiceHistory(vehicleId, branch.nameEn, baseKm, purchaseDateStr),
     }
   })
 
-  const drivers: DriverDetail[] = Array.from({ length: 520 }).map((_, i) => ({
+  const drivers: DriverDetail[] = Array.from({ length: 800 }).map((_, i) => ({
     id: mockId('driver', i + 1),
     tenantId: DEV_TENANT_ID,
     status: pick(['Active', 'Suspended', 'Retired'], i),
@@ -688,7 +1063,7 @@ function buildMockState(): MockState {
     updatedAtUtc: now.toISOString(),
   }))
 
-  const quotations: QuotationDetail[] = Array.from({ length: 180 }).map((_, i) => {
+  const quotations: QuotationDetail[] = Array.from({ length: 300 }).map((_, i) => {
     const id = mockId('quote', i + 1)
     const sub = 3000 + i * 120
     const vat = Math.round(sub * 0.15 * 100) / 100
@@ -731,7 +1106,95 @@ function buildMockState(): MockState {
     }
   })
 
-  return { customers, vehicles, drivers, branches, quotations }
+  // ─── Leases (200) — built after vehicles so we can mark OnRent ──────────────
+  const LEASE_STATUSES = ['Draft', 'PendingIssuance', 'Active', 'Active', 'Extended', 'Suspended', 'Closed', 'Cancelled']
+  const CONTRACT_TYPES_L = ['Daily', 'Monthly', 'Annual']
+  const PAYMENT_METHODS_L = ['Cash', 'CreditCard', 'BankTransfer']
+  const INCIDENT_TYPES = ['Accident', 'Traffic', 'Mechanical', 'Theft']
+  const CONDITIONS = ['Good', 'Fair', 'Damaged']
+
+  const leases: LeaseDetail[] = Array.from({ length: 350 }).map((_, i) => {
+    const customer = pick(customers, i * 7)
+    const driver = pick(drivers, i * 3)
+    const lsStatus = pick(LEASE_STATUSES, i)
+    const isActive = lsStatus === 'Active' || lsStatus === 'Extended'
+    const isClosed = lsStatus === 'Closed'
+
+    // Active leases get a dedicated vehicle (first ~100 vehicles); others share
+    const vIdx = isActive ? i % 120 : (i * 2 + 120) % 600
+    const vehicle = vehicles[vIdx]!
+    if (isActive) vehicle.status = 'OnRent'
+
+    const contractStart = new Date(now.getTime() - (365 - i * 1.5) * 86400000)
+    const contractEnd = new Date(contractStart.getTime() + (6 + i % 18) * 30 * 86400000)
+    const rentSar = 1500 + (i % 30) * 200
+    const vatSar = Math.round(rentSar * 0.15 * 100) / 100
+    const totalSar = rentSar + vatSar
+    const hasInspections = lsStatus !== 'Draft' && lsStatus !== 'PendingIssuance'
+    const hasIncident = i % 7 === 0
+
+    return {
+      id: mockId('lease', i + 1),
+      leaseNumber: `LC-${(i + 1).toString().padStart(6, '0')}`,
+      customerId: customer.id,
+      customerDisplayName: customer.displayName,
+      vehicleId: vehicle.id,
+      vehiclePlate: `${vehicle.plateLetters} ${vehicle.plateNumber}`,
+      vehicleMakeModel: `${vehicle.make} ${vehicle.model} (${vehicle.modelYear})`,
+      primaryDriverId: driver.id,
+      primaryDriverName: driver.personNameEn,
+      status: lsStatus,
+      contractTypeCode: pick(CONTRACT_TYPES_L, i),
+      contractStartUtc: contractStart.toISOString(),
+      contractEndUtc: contractEnd.toISOString(),
+      tajeerContractNumber: lsStatus === 'Draft' ? null : 9000000000 + i + 1,
+      rentAmountSar: rentSar,
+      workingBranchCode: pick(branches, i).code,
+      workingBranchName: pick(branches, i).nameEn,
+      createdAtUtc: contractStart.toISOString(),
+      rentPolicyId: 'rp-1',
+      paidAmountSar: isActive || isClosed ? rentSar : 0,
+      vatAmountSar: vatSar,
+      totalAmountSar: totalSar,
+      remainingAmountSar: isActive ? vatSar : isClosed ? 0 : totalSar,
+      allowedKmPerDay: pick([100, 150, 200, 250, 300], i),
+      paymentMethodCode: pick(PAYMENT_METHODS_L, i),
+      issuedAtUtc: lsStatus === 'Draft' || lsStatus === 'PendingIssuance' ? null : contractStart.toISOString(),
+      suspendedAtUtc: lsStatus === 'Suspended' ? new Date(contractStart.getTime() + 30 * 86400000).toISOString() : null,
+      resumedAtUtc: null,
+      closedAtUtc: isClosed ? contractEnd.toISOString() : null,
+      cancelledAtUtc: lsStatus === 'Cancelled' ? new Date(contractStart.getTime() + 5 * 86400000).toISOString() : null,
+      tajeerStatus: lsStatus === 'Draft' ? null : lsStatus === 'PendingIssuance' ? 'Pending' : 'Confirmed',
+      tajeerIssuanceUrl: lsStatus !== 'Draft' && lsStatus !== 'PendingIssuance' ? `https://rabet.staging/contract/${9000000000 + i}` : null,
+      zatcaSubmissionStatus: isClosed ? 'Cleared' : isActive ? 'Pending' : null,
+      zatcaInvoiceNumber: isClosed ? `INV-${(1000 + i).toString().padStart(6, '0')}` : null,
+      inspections: hasInspections ? [
+        {
+          id: mockId('insp', i * 2 + 1), type: 'CheckOut',
+          inspectedAtUtc: contractStart.toISOString(),
+          odometer: vehicle.currentKm - 5000, conditionCode: 'Good',
+          notes: 'Vehicle checked out — no damage.', branch: pick(branches, i).nameEn, inspector: `Staff ${i + 1}`,
+        },
+        ...(isClosed ? [{
+          id: mockId('insp', i * 2 + 2), type: 'CheckIn',
+          inspectedAtUtc: contractEnd.toISOString(),
+          odometer: vehicle.currentKm, conditionCode: pick(CONDITIONS, i),
+          notes: pick(CONDITIONS, i) === 'Damaged' ? 'Minor scratches on rear bumper.' : 'Returned in good condition.',
+          branch: pick(branches, i).nameEn, inspector: `Staff ${i + 2}`,
+        }] : []),
+      ] : [],
+      incidents: hasIncident ? [{
+        id: mockId('inc', i + 1), type: pick(INCIDENT_TYPES, i),
+        occurredAtUtc: new Date(contractStart.getTime() + 30 * 86400000).toISOString(),
+        description: `${pick(INCIDENT_TYPES, i)} incident reported during rental period.`,
+        estimatedCostSar: i % 3 === 0 ? null : 1500 + (i % 10) * 500,
+        claimNumber: `CLM-${(100 + i).toString().padStart(6, '0')}`,
+        resolved: i % 2 === 0,
+      }] : [],
+    }
+  })
+
+  return { customers, vehicles, drivers, branches, quotations, leases }
 }
 
 class MockBffClient {
@@ -880,6 +1343,7 @@ class MockBffClient {
       insuranceCompany: body.insuranceCompany ?? null, insurancePolicyNumber: body.insurancePolicyNumber ?? null,
       ownerBranchId: body.ownerBranchId, currentBranchId: body.ownerBranchId, currentKm: body.currentKm, purchasePrice: body.purchasePrice ?? null, purchaseDate: body.purchaseDate ?? null,
       createdAtUtc: new Date().toISOString(), updatedAtUtc: new Date().toISOString(),
+      serviceHistory: [],
     })
     return Promise.resolve({ success: true, vehicleId: id })
   }
@@ -912,6 +1376,225 @@ class MockBffClient {
     const x = this.state.branches.find((b) => b.id === id); if (!x) throw new Error('Branch not found')
     x.isActive = activate; x.updatedAtUtc = new Date().toISOString()
     return Promise.resolve({ success: true, branchId: id })
+  }
+
+  // ─── Leases ────────────────────────────────────────────────────────────────
+
+  getLeases(page = 1, pageSize = 20, search?: string, status?: string) {
+    const filtered = this.state.leases.filter((l) =>
+      (!search || `${l.leaseNumber} ${l.customerDisplayName} ${l.vehiclePlate} ${l.vehicleMakeModel}`.toLowerCase().includes(search.toLowerCase())) &&
+      (!status || l.status === status)
+    )
+    const summaries: LeaseSummary[] = filtered.map(({ inspections, incidents, rentPolicyId, paidAmountSar, vatAmountSar, totalAmountSar, remainingAmountSar, allowedKmPerDay, paymentMethodCode, issuedAtUtc, suspendedAtUtc, resumedAtUtc, closedAtUtc, cancelledAtUtc, tajeerStatus, tajeerIssuanceUrl, zatcaSubmissionStatus, zatcaInvoiceNumber, ...s }) => s)
+    return Promise.resolve(paginate(summaries, page, pageSize))
+  }
+  getLeaseById(id: string) {
+    const x = this.state.leases.find((l) => l.id === id)
+    if (!x) throw new Error('Lease not found')
+    return Promise.resolve(x)
+  }
+  getCustomerLeases(customerId: string): Promise<LeaseSummary[]> {
+    const result = this.state.leases
+      .filter((l) => l.customerId === customerId)
+      .map(({ inspections, incidents, rentPolicyId, paidAmountSar, vatAmountSar, totalAmountSar, remainingAmountSar, allowedKmPerDay, paymentMethodCode, issuedAtUtc, suspendedAtUtc, resumedAtUtc, closedAtUtc, cancelledAtUtc, tajeerStatus, tajeerIssuanceUrl, zatcaSubmissionStatus, zatcaInvoiceNumber, ...s }) => s)
+    return Promise.resolve(result)
+  }
+  getCustomerVehicles(customerId: string): Promise<VehicleSummary[]> {
+    const vehicleIds = new Set(this.state.leases.filter((l) => l.customerId === customerId).map((l) => l.vehicleId))
+    return Promise.resolve(this.state.vehicles.filter((v) => vehicleIds.has(v.id)).map((v) => ({
+      id: v.id, plateNumber: v.plateNumber, make: v.make, model: v.model, modelYear: v.modelYear, currentKm: v.currentKm,
+      status: v.status === 'Available' ? 1 : v.status === 'Reserved' ? 2 : v.status === 'OnRent' ? 3 : v.status === 'InService' ? 4 : 5,
+    })))
+  }
+  getCustomerDrivers(customerId: string): Promise<DriverSummary[]> {
+    return Promise.resolve(this.state.drivers.filter((d) => d.customerId === customerId).map((d) => ({
+      id: d.id,
+      personNameEn: d.personNameEn,
+      ...(d.personNameAr ? { personNameAr: d.personNameAr } : {}),
+      driverLicenseNumber: d.driverLicenseNumber,
+      licenseExpiryDate: d.licenseExpiryDate,
+      status: d.status === 'Active' ? 1 : d.status === 'Suspended' ? 2 : 3,
+    })))
+  }
+  getVehicleCurrentLease(vehicleId: string): Promise<LeaseSummary | null> {
+    const lease = this.state.leases.find((l) => l.vehicleId === vehicleId && (l.status === 'Active' || l.status === 'Extended'))
+    if (!lease) return Promise.resolve(null)
+    const { inspections, incidents, rentPolicyId, paidAmountSar, vatAmountSar, totalAmountSar, remainingAmountSar, allowedKmPerDay, paymentMethodCode, issuedAtUtc, suspendedAtUtc, resumedAtUtc, closedAtUtc, cancelledAtUtc, tajeerStatus, tajeerIssuanceUrl, zatcaSubmissionStatus, zatcaInvoiceNumber, ...s } = lease
+    return Promise.resolve(s)
+  }
+  getDriverCurrentLease(driverId: string): Promise<LeaseSummary | null> {
+    const lease = this.state.leases.find((l) => l.primaryDriverId === driverId && (l.status === 'Active' || l.status === 'Extended'))
+    if (!lease) return Promise.resolve(null)
+    const { inspections, incidents, rentPolicyId, paidAmountSar, vatAmountSar, totalAmountSar, remainingAmountSar, allowedKmPerDay, paymentMethodCode, issuedAtUtc, suspendedAtUtc, resumedAtUtc, closedAtUtc, cancelledAtUtc, tajeerStatus, tajeerIssuanceUrl, zatcaSubmissionStatus, zatcaInvoiceNumber, ...s } = lease
+    return Promise.resolve(s)
+  }
+
+  // ─── Delete operations ─────────────────────────────────────────────────────
+
+  deleteVehicle(id: string, _idempotencyKey: string): Promise<void> {
+    const idx = this.state.vehicles.findIndex((v) => v.id === id)
+    if (idx === -1) throw new Error('Vehicle not found')
+    this.state.vehicles.splice(idx, 1)
+    return Promise.resolve()
+  }
+  deleteDriver(id: string, _idempotencyKey: string): Promise<DeleteResult> {
+    const idx = this.state.drivers.findIndex((d) => d.id === id)
+    if (idx === -1) throw new Error('Driver not found')
+    this.state.drivers.splice(idx, 1)
+    return Promise.resolve({ success: true })
+  }
+  deleteBranch(id: string, _idempotencyKey: string): Promise<DeleteResult> {
+    const idx = this.state.branches.findIndex((b) => b.id === id)
+    if (idx === -1) throw new Error('Branch not found')
+    this.state.branches.splice(idx, 1)
+    return Promise.resolve({ success: true })
+  }
+  deleteCustomer(id: string, _idempotencyKey: string): Promise<DeleteResult> {
+    const idx = this.state.customers.findIndex((c) => c.id === id)
+    if (idx === -1) throw new Error('Customer not found')
+    this.state.customers.splice(idx, 1)
+    return Promise.resolve({ success: true })
+  }
+
+  // ─── Vehicle extended ops ──────────────────────────────────────────────────
+
+  updateVehicle(id: string, body: UpdateVehicleRequest, _idempotencyKey: string): Promise<VehicleCommandResult> {
+    const v = this.state.vehicles.find((x) => x.id === id)
+    if (!v) throw new Error('Vehicle not found')
+    if (body.color != null) v.color = body.color
+    if (body.seats != null) v.seats = body.seats
+    if (body.make != null) v.make = body.make
+    if (body.model != null) v.model = body.model
+    if (body.modelYear != null) v.modelYear = body.modelYear
+    if (body.insuranceCompany != null) v.insuranceCompany = body.insuranceCompany
+    if (body.insurancePolicyNumber != null) v.insurancePolicyNumber = body.insurancePolicyNumber
+    if (body.licenseExpiryDate != null) v.licenseExpiryDate = body.licenseExpiryDate
+    if (body.insuranceExpiryDate != null) v.insuranceExpiryDate = body.insuranceExpiryDate
+    if (body.inspectionExpiryDate != null) v.inspectionExpiryDate = body.inspectionExpiryDate
+    if (body.currentBranchId != null) v.currentBranchId = body.currentBranchId
+    if (body.currentKm != null) v.currentKm = body.currentKm
+    if (body.purchasePrice != null) v.purchasePrice = body.purchasePrice
+    if (body.purchaseDate != null) v.purchaseDate = body.purchaseDate
+    if (body.notes != null) v.notes = body.notes
+    v.updatedAtUtc = new Date().toISOString()
+    return Promise.resolve({ success: true, vehicleId: id })
+  }
+
+  getVehicleHistory(id: string): Promise<VehicleHistoryEvent[]> {
+    const v = this.state.vehicles.find((x) => x.id === id)
+    if (!v) throw new Error('Vehicle not found')
+    // Generate history events from the vehicle's service records
+    const events: VehicleHistoryEvent[] = v.serviceHistory.map((sr, idx) => ({
+      id: `hist-${id}-svc-${idx}`,
+      vehicleId: id,
+      eventType: 'ServiceRecorded',
+      description: `${sr.type === 'PMS' ? 'Preventive' : 'Corrective'} service: ${sr.description}`,
+      previousValue: null,
+      newValue: String(sr.odometerAtService),
+      performedByName: sr.technician,
+      occurredAtUtc: new Date(sr.servicedAt).toISOString(),
+    }))
+    events.push({
+      id: `hist-${id}-created`,
+      vehicleId: id,
+      eventType: 'BulkImported',
+      description: `Vehicle ${v.plateNumber} added to fleet`,
+      previousValue: null,
+      newValue: null,
+      performedByName: 'System',
+      occurredAtUtc: v.createdAtUtc,
+    })
+    return Promise.resolve(events.sort((a, b) => b.occurredAtUtc.localeCompare(a.occurredAtUtc)))
+  }
+
+  getVehicleServiceRecords(id: string): Promise<ServiceRecord[]> {
+    const v = this.state.vehicles.find((x) => x.id === id)
+    if (!v) throw new Error('Vehicle not found')
+    return Promise.resolve(v.serviceHistory)
+  }
+
+  createServiceRecord(vehicleId: string, body: CreateServiceRecordRequest, _idempotencyKey: string): Promise<VehicleCommandResult> {
+    const v = this.state.vehicles.find((x) => x.id === vehicleId)
+    if (!v) throw new Error('Vehicle not found')
+    const id = `svc-${vehicleId}-${v.serviceHistory.length + 1}`
+    const record: ServiceRecord = {
+      id,
+      vehicleId,
+      type: body.type === 1 ? 'PMS' : 'CMS',
+      serviceCode: body.serviceCode,
+      description: body.description,
+      servicedAt: body.servicedAt,
+      odometerAtService: body.odometerAtService,
+      costSar: body.costSar,
+      branch: body.branch,
+      technician: body.technician,
+      partsReplaced: body.partsReplaced ?? [],
+      nextServiceOdometer: body.nextServiceOdometer ?? null,
+      nextServiceDate: body.nextServiceDate ?? null,
+      notes: body.notes ?? null,
+    }
+    v.serviceHistory.unshift(record)
+    return Promise.resolve({ success: true, vehicleId })
+  }
+
+  getVehicleImages(id: string): Promise<VehicleImageDto[]> {
+    const v = this.state.vehicles.find((x) => x.id === id)
+    if (!v) throw new Error('Vehicle not found')
+    return Promise.resolve(v.images ?? [])
+  }
+
+  generateVehicleImage(vehicleId: string, _idempotencyKey: string): Promise<VehicleCommandResult> {
+    const v = this.state.vehicles.find((x) => x.id === vehicleId)
+    if (!v) throw new Error('Vehicle not found')
+    if (!v.images) v.images = []
+    const imageId = `img-${vehicleId}-${v.images.length + 1}`
+    const colorSlug = (v.color ?? 'auto').toLowerCase().replace(/ /g, '+')
+    const makeSlug = encodeURIComponent(v.make.toLowerCase())
+    const modelSlug = encodeURIComponent(v.model.toLowerCase())
+    v.images.push({
+      id: imageId,
+      vehicleId,
+      imageUrl: `https://source.unsplash.com/800x500/?car,${makeSlug},${modelSlug},${colorSlug}`,
+      thumbnailUrl: `https://source.unsplash.com/320x200/?car,${makeSlug},${modelSlug},${colorSlug}`,
+      altText: `${v.color ?? ''} ${v.make} ${v.model}`.trim(),
+      isAiGenerated: true,
+      sortOrder: v.images.length,
+    })
+    return Promise.resolve({ success: true, vehicleId: imageId })
+  }
+
+  bulkImportVehicles(file: File, _idempotencyKey: string): Promise<BulkImportResult> {
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const text = (e.target?.result as string) ?? ''
+        const lines = text.split('\n').filter(Boolean)
+        const errors: BulkImportRowError[] = []
+        let created = 0
+        lines.slice(1).forEach((line, idx) => {
+          const cols = line.split(',')
+          if (cols.length < 14) { errors.push({ rowIndex: idx + 2, errorCode: 'PARSE_ERROR', errorMessage: `Row ${idx + 2}: need ≥14 cols, got ${cols.length}` }); return }
+          const id = mockId('vehicle', this.state.vehicles.length + created + 1)
+          this.state.vehicles.unshift({
+            id, tenantId: DEV_TENANT_ID, status: 'Available',
+            plateNumber: cols[0]!.trim(), plateLetters: cols[1]!.trim(), plateTypeCode: parseInt(cols[2]!.trim(), 10) || 1,
+            vin: cols[3]!.trim(), engineNumber: null,
+            make: cols[4]!.trim(), model: cols[5]!.trim(), modelYear: parseInt(cols[6]!.trim(), 10) || 2024,
+            color: cols[7]!.trim() || null, fuelType: cols[8]!.trim() || 'Petrol91', transmissionType: cols[9]!.trim() || 'Automatic',
+            bodyType: cols[10]!.trim() || 'Sedan', seats: parseInt(cols[11]!.trim(), 10) || 5,
+            licenseExpiryDate: null, insuranceExpiryDate: null, inspectionExpiryDate: null,
+            insuranceCompany: null, insurancePolicyNumber: null,
+            ownerBranchId: cols[12]!.trim(), currentBranchId: cols[12]!.trim(),
+            currentKm: parseInt(cols[13]!.trim(), 10) || 0, purchasePrice: null, purchaseDate: null,
+            notes: null, createdAtUtc: new Date().toISOString(), updatedAtUtc: new Date().toISOString(),
+            serviceHistory: [], images: [],
+          })
+          created++
+        })
+        resolve({ success: errors.length === 0, createdCount: created, skippedCount: 0, errors })
+      }
+      reader.readAsText(file)
+    })
   }
 }
 

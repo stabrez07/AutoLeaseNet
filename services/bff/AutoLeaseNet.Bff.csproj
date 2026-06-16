@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Cache.InMemory\AutoLeaseNet.Adapters.Cache.InMemory.csproj" />
     <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Email.InMemory\AutoLeaseNet.Adapters.Email.InMemory.csproj" />
     <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Pdf.QuestPdf\AutoLeaseNet.Adapters.Pdf.QuestPdf.csproj" />
+    <ProjectReference Include="..\..\packages\adapters\AutoLeaseNet.Adapters.Images.InMemory\AutoLeaseNet.Adapters.Images.InMemory.csproj" />
   </ItemGroup>
 
   <ItemGroup>

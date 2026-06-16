@@ -163,6 +163,92 @@ public sealed class Vehicle : Entity
         Notes = notes;
         UpdatedAtUtc = nowUtc;
     }
+
+    public void Sell(DateTimeOffset nowUtc)
+    {
+        if (Status == VehicleStatus.OnRent)
+            throw new InvalidOperationException($"Vehicle {Id} cannot be sold while on active rental.");
+        Status = VehicleStatus.Sold;
+        UpdatedAtUtc = nowUtc;
+    }
+
+    public void Dispose(DateTimeOffset nowUtc)
+    {
+        if (Status == VehicleStatus.OnRent)
+            throw new InvalidOperationException($"Vehicle {Id} cannot be disposed while on active rental.");
+        Status = VehicleStatus.Disposed;
+        UpdatedAtUtc = nowUtc;
+    }
+
+    public void TransferBranch(Guid newBranchId, DateTimeOffset nowUtc)
+    {
+        if (newBranchId == Guid.Empty) throw new ArgumentException("BranchId required.", nameof(newBranchId));
+        if (Status == VehicleStatus.OnRent)
+            throw new InvalidOperationException($"Vehicle {Id} cannot be transferred while on active rental.");
+        CurrentBranchId = newBranchId;
+        UpdatedAtUtc = nowUtc;
+    }
+
+    public void UpdateOdometer(int newKm, DateTimeOffset nowUtc)
+    {
+        if (newKm < CurrentKm)
+            throw new ArgumentException($"New odometer {newKm} is less than current {CurrentKm}.", nameof(newKm));
+        CurrentKm = newKm;
+        UpdatedAtUtc = nowUtc;
+    }
+
+    public void RecordServiceCompletion(DateOnly servicedAt, int odometerAtService, int? nextServiceKm, DateOnly? nextServiceDate, DateTimeOffset nowUtc)
+    {
+        LastServiceKm = odometerAtService;
+        LastServiceDate = servicedAt;
+        NextServiceDueKm = nextServiceKm;
+        NextServiceDueDate = nextServiceDate;
+        if (odometerAtService > CurrentKm) CurrentKm = odometerAtService;
+        UpdatedAtUtc = nowUtc;
+    }
+
+    public void Update(VehicleUpdateInput input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (input.Color is not null) Color = input.Color;
+        if (input.Seats.HasValue) Seats = input.Seats.Value;
+        if (input.Make is not null) Make = input.Make;
+        if (input.Model is not null) Model = input.Model;
+        if (input.ModelYear.HasValue) ModelYear = input.ModelYear.Value;
+        if (input.InsuranceCompany is not null) InsuranceCompany = input.InsuranceCompany;
+        if (input.InsurancePolicyNumber is not null) InsurancePolicyNumber = input.InsurancePolicyNumber;
+        if (input.LicenseExpiryDate.HasValue) LicenseExpiryDate = input.LicenseExpiryDate;
+        if (input.InsuranceExpiryDate.HasValue) InsuranceExpiryDate = input.InsuranceExpiryDate;
+        if (input.InspectionExpiryDate.HasValue) InspectionExpiryDate = input.InspectionExpiryDate;
+        if (input.CurrentBranchId.HasValue) CurrentBranchId = input.CurrentBranchId.Value;
+        if (input.CurrentKm.HasValue && input.CurrentKm.Value >= CurrentKm) CurrentKm = input.CurrentKm.Value;
+        if (input.PurchasePrice.HasValue) PurchasePrice = input.PurchasePrice;
+        if (input.PurchaseDate.HasValue) PurchaseDate = input.PurchaseDate;
+        if (input.Notes is not null) Notes = input.Notes;
+        UpdatedAtUtc = input.NowUtc;
+        UpdatedBy = input.UpdatedBy;
+    }
+}
+
+public sealed record VehicleUpdateInput
+{
+    public string? Color { get; init; }
+    public int? Seats { get; init; }
+    public string? Make { get; init; }
+    public string? Model { get; init; }
+    public int? ModelYear { get; init; }
+    public string? InsuranceCompany { get; init; }
+    public string? InsurancePolicyNumber { get; init; }
+    public DateOnly? LicenseExpiryDate { get; init; }
+    public DateOnly? InsuranceExpiryDate { get; init; }
+    public DateOnly? InspectionExpiryDate { get; init; }
+    public Guid? CurrentBranchId { get; init; }
+    public int? CurrentKm { get; init; }
+    public decimal? PurchasePrice { get; init; }
+    public DateOnly? PurchaseDate { get; init; }
+    public string? Notes { get; init; }
+    public required DateTimeOffset NowUtc { get; init; }
+    public required Guid UpdatedBy { get; init; }
 }
 
 public sealed record VehicleCreateInput

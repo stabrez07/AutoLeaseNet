@@ -25,6 +25,9 @@ public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> optio
     public DbSet<Lease> Leases => Set<Lease>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
+    public DbSet<VehicleHistoryEvent> VehicleHistoryEvents => Set<VehicleHistoryEvent>();
+    public DbSet<VehicleServiceRecord> VehicleServiceRecords => Set<VehicleServiceRecord>();
+    public DbSet<VehicleImage> VehicleImages => Set<VehicleImage>();
     public DbSet<Driver> Drivers => Set<Driver>();
     public DbSet<Branch> Branches => Set<Branch>();
     public DbSet<RentPolicy> RentPolicies => Set<RentPolicy>();
