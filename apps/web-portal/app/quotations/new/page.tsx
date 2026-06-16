@@ -76,7 +76,7 @@ export default function NewQuotationPage() {
   useEffect(() => {
     bff.getCustomers(1, 100).then(res => {
       setCustomers(res.items)
-      if (res.items[0]) setForm(prev => ({ ...prev, customerId: res.items[0].id }))
+      if (res.items[0]) setForm(prev => ({ ...prev, customerId: res.items[0]!.id }))
     }).catch(e => setBootError((e as Error).message)).finally(() => setBooting(false))
   }, [])
 

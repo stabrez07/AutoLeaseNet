@@ -157,13 +157,13 @@ export interface CreateQuotationRequest {
   contractType: string
   estimatedDurationMonths: number
   discountPercent: number
-  termsAndConditionsMd?: string
+  termsAndConditionsMd?: string | undefined
 }
 
 export interface AddQuotationLineRequest {
   itemType: string
   description: string
-  vehicleSpecRef?: string
+  vehicleSpecRef?: string | undefined
   quantity: number
   unitPriceSar: number
   discountPercent: number
@@ -324,7 +324,7 @@ class BffClient {
     comment: string | undefined,
     idempotencyKey: string,
   ) {
-    return this.postJson<QuotationCommandResult, { approved: boolean; comment?: string }>(
+    return this.postJson<QuotationCommandResult, { approved: boolean; comment?: string | undefined }>(
       `/api/v1/quotations/${quotationId}/approvals/${tierLevel}/decision`,
       { approved, comment },
       { 'Idempotency-Key': idempotencyKey },
@@ -332,12 +332,211 @@ class BffClient {
   }
 
   acceptQuotation(quotationId: string, customerSignature: string | undefined, idempotencyKey: string) {
-    return this.postJson<AcceptQuotationResult, { customerSignature?: string }>(
+    return this.postJson<AcceptQuotationResult, { customerSignature?: string | undefined }>(
       `/api/v1/quotations/${quotationId}/accept`,
       { customerSignature },
       { 'Idempotency-Key': idempotencyKey },
     )
   }
+
+  // ─── Customers CRUD ─────────────────────────────────────────────────────────
+
+  getCustomerById(id: string) {
+    return this.getJson<CustomerDetail>(`/api/v1/customers/${id}`)
+  }
+
+  createCustomerB2B(body: CreateCustomerB2BRequest, idempotencyKey: string) {
+    return this.postJson<CustomerCommandResult, CreateCustomerB2BRequest>(
+      '/api/v1/customers/b2b',
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
+  createCustomerB2C(body: CreateCustomerB2CRequest, idempotencyKey: string) {
+    return this.postJson<CustomerCommandResult, CreateCustomerB2CRequest>(
+      '/api/v1/customers/b2c',
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
+  updateCustomerStatus(id: string, action: string, idempotencyKey: string) {
+    return this.postJson<CustomerCommandResult, { action: string }>(
+      `/api/v1/customers/${id}/status`,
+      { action },
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
+  // ─── Vehicles CRUD ──────────────────────────────────────────────────────────
+
+  getVehicleById(id: string) {
+    return this.getJson<VehicleDetail>(`/api/v1/vehicles/${id}`)
+  }
+
+  createVehicle(body: CreateVehicleRequest, idempotencyKey: string) {
+    return this.postJson<VehicleCommandResult, CreateVehicleRequest>(
+      '/api/v1/vehicles',
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
+  // ─── Drivers CRUD ───────────────────────────────────────────────────────────
+
+  getDriverById(id: string) {
+    return this.getJson<DriverDetail>(`/api/v1/drivers/${id}`)
+  }
+
+  createDriver(body: CreateDriverRequest, idempotencyKey: string) {
+    return this.postJson<DriverCommandResult, CreateDriverRequest>(
+      '/api/v1/drivers',
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
+  // ─── Branches CRUD ──────────────────────────────────────────────────────────
+
+  getBranchById(id: string) {
+    return this.getJson<BranchDetail>(`/api/v1/branches/${id}`)
+  }
+
+  createBranch(body: CreateBranchRequest, idempotencyKey: string) {
+    return this.postJson<BranchCommandResult, CreateBranchRequest>(
+      '/api/v1/branches',
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
+  updateBranchStatus(id: string, activate: boolean, idempotencyKey: string) {
+    return this.postJson<BranchCommandResult, { activate: boolean }>(
+      `/api/v1/branches/${id}/status`,
+      { activate },
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+}
+
+// ─── CRUD types ─────────────────────────────────────────────────────────────
+
+export interface CustomerDetail {
+  id: string; tenantId: string
+  type: string; status: string
+  displayName: string; displayNameAr?: string | null
+  email?: string | null; mobile?: string | null
+  nationalAddress?: string | null; preferredLanguage: string
+  legalName?: string | null; legalNameAr?: string | null
+  commercialRegistration?: string | null; vatNumber?: string | null
+  billingAddress?: string | null
+  creditLimit?: number | null; creditCurrency?: string | null
+  personNameEn?: string | null; personNameAr?: string | null
+  idTypeCode?: number | null; personIdNumber?: string | null
+  dateOfBirth?: string | null; nationalityCode?: string | null
+  kycVerified: boolean; kycVerifiedAtUtc?: string | null; kycVerifiedBy?: string | null
+  createdAtUtc: string; updatedAtUtc: string
+}
+
+export interface CustomerCommandResult {
+  success: boolean; customerId?: string | null; status?: string | null
+  errorCode?: string | null; errorMessage?: string | null
+}
+
+export interface CreateCustomerB2BRequest {
+  legalName: string; legalNameAr?: string | undefined
+  commercialRegistration: string; vatNumber?: string | undefined
+  email?: string | undefined; mobile?: string | undefined
+  nationalAddress?: string | undefined; billingAddress?: string | undefined
+  creditLimit?: number | undefined; creditCurrency?: string | undefined
+}
+
+export interface CreateCustomerB2CRequest {
+  personNameEn: string; personNameAr?: string | undefined
+  idTypeCode: number; personIdNumber: string
+  dateOfBirth?: string | undefined; nationalityCode?: string | undefined
+  email?: string | undefined; mobile?: string | undefined; nationalAddress?: string | undefined
+}
+
+export interface VehicleDetail {
+  id: string; tenantId: string; status: string
+  plateNumber: string; plateLetters: string; plateTypeCode: number
+  vin: string; engineNumber?: string | null
+  make: string; model: string; modelYear: number; color?: string | null
+  fuelType: string; transmissionType: string; bodyType: string; seats: number
+  licenseExpiryDate?: string | null; insuranceExpiryDate?: string | null; inspectionExpiryDate?: string | null
+  insuranceCompany?: string | null; insurancePolicyNumber?: string | null
+  ownerBranchId: string; currentBranchId: string
+  currentKm: number; purchasePrice?: number | null; purchaseDate?: string | null
+  createdAtUtc: string; updatedAtUtc: string
+}
+
+export interface VehicleCommandResult {
+  success: boolean; vehicleId?: string | null
+  errorCode?: string | null; errorMessage?: string | null
+}
+
+export interface CreateVehicleRequest {
+  plateNumber: string; plateLetters: string; plateTypeCode: number
+  vin: string; engineNumber?: string | undefined
+  make: string; model: string; modelYear: number; color?: string | undefined
+  fuelType: number; transmissionType: number; bodyType: number; seats: number
+  licenseExpiryDate?: string | undefined; insuranceExpiryDate?: string | undefined; inspectionExpiryDate?: string | undefined
+  insuranceCompany?: string | undefined; insurancePolicyNumber?: string | undefined
+  ownerBranchId: string; currentKm: number
+  purchasePrice?: number | undefined; purchaseDate?: string | undefined
+}
+
+export interface DriverDetail {
+  id: string; tenantId: string; status: string
+  customerId?: string | null
+  personNameEn: string; personNameAr?: string | null
+  idTypeCode: number; personIdNumber: string
+  dateOfBirth?: string | null; nationalityCode?: string | null
+  driverLicenseNumber: string; licenseClass: number; licenseExpiryDate: string
+  mobile?: string | null; email?: string | null; nationalAddress?: string | null
+  tammAuthorizationStatus: string
+  createdAtUtc: string; updatedAtUtc: string
+}
+
+export interface DriverCommandResult {
+  success: boolean; driverId?: string | null
+  errorCode?: string | null; errorMessage?: string | null
+}
+
+export interface CreateDriverRequest {
+  personNameEn: string; personNameAr?: string | undefined
+  idTypeCode: number; personIdNumber: string
+  dateOfBirth?: string | undefined; nationalityCode?: string | undefined
+  driverLicenseNumber: string; licenseClass: number; licenseExpiryDate: string
+  mobile?: string | undefined; email?: string | undefined; nationalAddress?: string | undefined
+  customerId?: string | undefined
+}
+
+export interface BranchDetail {
+  id: string; tenantId: string
+  code: string; nameEn: string; nameAr: string
+  cityEn?: string | null; cityAr?: string | null
+  regionEn?: string | null; regionAr?: string | null
+  licenseNumber?: string | null; address?: string | null; phoneNumber?: string | null
+  latitude?: number | null; longitude?: number | null
+  tajeerBranchId: number; tajeerOperatorId: number
+  isActive: boolean; createdAtUtc: string; updatedAtUtc: string
+}
+
+export interface BranchCommandResult {
+  success: boolean; branchId?: string | null
+  errorCode?: string | null; errorMessage?: string | null
+}
+
+export interface CreateBranchRequest {
+  code: string; nameEn: string; nameAr: string
+  cityEn?: string | undefined; cityAr?: string | undefined
+  regionEn?: string | undefined; regionAr?: string | undefined
+  address?: string | undefined; phoneNumber?: string | undefined; licenseNumber?: string | undefined
+  latitude?: number | undefined; longitude?: number | undefined
+  tajeerBranchId: number; tajeerOperatorId: number
 }
 
 export const bff = new BffClient()
