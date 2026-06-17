@@ -31,6 +31,9 @@ export const messagesEn = {
     newLease: 'New Lease',
     quotations: 'Quotations',
     invoices: 'Invoices',
+    generateInvoices: 'Generate Invoices',
+    payments: 'Payments',
+    setup: 'Setup',
   },
   dashboard: {
     title: 'Dashboard',
@@ -548,6 +551,9 @@ export const messagesAr: Messages = {
     newLease: 'عقد جديد',
     quotations: 'العروض',
     invoices: 'الفواتير',
+    generateInvoices: 'إنشاء الفواتير',
+    payments: 'المدفوعات',
+    setup: 'الإعدادات',
   },
   dashboard: {
     title: 'لوحة المعلومات',

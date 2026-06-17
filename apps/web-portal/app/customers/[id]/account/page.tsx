@@ -149,7 +149,7 @@ export default function CustomerAccountPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm text-slate-500">{payments?.totalCount ?? 0} payment{(payments?.totalCount ?? 0) !== 1 ? 's' : ''}</p>
                 <div className="flex gap-2">
-                  <SecondaryButton onClick={downloadPaymentsCsv} className="px-3 py-1.5 text-xs">⬇ Export CSV</SecondaryButton>
+                  <SecondaryButton onClick={downloadPaymentsCsv} className="px-3 py-1.5 text-xs">Export CSV</SecondaryButton>
                   <SecondaryButton onClick={handleApplyFifo} disabled={applyingFifo || totalCredit === 0} className="px-3 py-1.5 text-xs text-blue-700 border-blue-300">
                     {applyingFifo ? 'Applying…' : '⚡ Apply FIFO'}
                   </SecondaryButton>
@@ -248,7 +248,7 @@ export default function CustomerAccountPage() {
             <PrimaryButton onClick={loadSoa} disabled={soaLoading} className="px-4 py-2 text-sm">
               {soaLoading ? 'Loading…' : 'Generate SOA'}
             </PrimaryButton>
-            {soa && <SecondaryButton onClick={downloadSoaCsv} className="px-3 py-2 text-sm">⬇ Download CSV</SecondaryButton>}
+            {soa && <SecondaryButton onClick={downloadSoaCsv} className="px-3 py-2 text-sm">Download CSV</SecondaryButton>}
           </div>
 
           {soaLoading && <Spinner label="Generating statement…" />}

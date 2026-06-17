@@ -77,7 +77,7 @@ export default function LeasesPage() {
         subtitle={tl.subtitle}
         action={
           <div className="flex gap-2">
-            <SecondaryButton onClick={downloadCsv}>⬇ Export CSV</SecondaryButton>
+            <SecondaryButton onClick={downloadCsv}>Export CSV</SecondaryButton>
             <PrimaryButton onClick={() => router.push('/leases/new')}>+ {t.newLease.title.split('—')[0]?.trim()}</PrimaryButton>
           </div>
         }

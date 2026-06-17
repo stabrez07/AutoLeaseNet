@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { bff, type Invoice, type InvoiceStatus } from '../../../lib/bff-client'
-import { Badge, Card, ErrorBox, PageHeader, PrimaryButton, SecondaryButton, Spinner } from '../../../components/ui'
+import { Badge, Card, ErrorBox, PageHeader, Spinner } from '../../../components/ui'
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 const STATUS_TONES: Record<InvoiceStatus, 'green' | 'amber' | 'blue' | 'slate' | 'red'> = {
   Paid: 'green', PartiallyPaid: 'amber', Issued: 'blue', Draft: 'slate', Overdue: 'red', Cancelled: 'slate',
@@ -16,6 +18,53 @@ function fmt(n: number) {
 function safeDate(s: string) {
   return new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
 }
+
+// ── Company Logo ─────────────────────────────────────────────────────────────
+
+function CompanyLogo() {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-700 text-white font-bold text-lg">AL</div>
+      <div>
+        <p className="text-xl font-bold text-slate-900 leading-tight">Auto Lead Company</p>
+        <p className="text-xs text-slate-500">Vehicle Leasing Services</p>
+      </div>
+    </div>
+  )
+}
+
+// ── ZATCA QR Placeholder ─────────────────────────────────────────────────────
+
+function ZatcaQr() {
+  return (
+    <div className="flex flex-col items-center">
+      <div className="h-20 w-20 rounded border border-slate-300 bg-white p-1">
+        <svg viewBox="0 0 100 100" className="h-full w-full">
+          {/* Simple QR placeholder pattern */}
+          <rect width="100" height="100" fill="white"/>
+          <rect x="5" y="5" width="25" height="25" fill="#1e293b"/>
+          <rect x="70" y="5" width="25" height="25" fill="#1e293b"/>
+          <rect x="5" y="70" width="25" height="25" fill="#1e293b"/>
+          <rect x="10" y="10" width="15" height="15" fill="white"/>
+          <rect x="75" y="10" width="15" height="15" fill="white"/>
+          <rect x="10" y="75" width="15" height="15" fill="white"/>
+          <rect x="13" y="13" width="9" height="9" fill="#1e293b"/>
+          <rect x="78" y="13" width="9" height="9" fill="#1e293b"/>
+          <rect x="13" y="78" width="9" height="9" fill="#1e293b"/>
+          <rect x="35" y="5" width="5" height="5" fill="#1e293b"/>
+          <rect x="45" y="5" width="5" height="5" fill="#1e293b"/>
+          <rect x="55" y="5" width="5" height="5" fill="#1e293b"/>
+          <rect x="35" y="35" width="30" height="30" fill="#1e293b"/>
+          <rect x="40" y="40" width="20" height="20" fill="white"/>
+          <rect x="45" y="45" width="10" height="10" fill="#1e293b"/>
+        </svg>
+      </div>
+      <p className="mt-1 text-[9px] text-slate-400">ZATCA e-Invoice</p>
+    </div>
+  )
+}
+
+// ── Main Page ────────────────────────────────────────────────────────────────
 
 export default function InvoiceDetailPage() {
   const router = useRouter()
@@ -60,7 +109,7 @@ export default function InvoiceDetailPage() {
       ['Vehicle', invoice.vehicleMakeModel],
       ['Plate EN', invoice.vehiclePlate],
       ['Plate AR', invoice.vehiclePlateAr],
-      ['Billing Period', `${invoice.billingPeriodStart} – ${invoice.billingPeriodEnd}`],
+      ['Billing Period', `${invoice.billingPeriodStart} to ${invoice.billingPeriodEnd}`],
       ['Issued Date', invoice.issuedDate],
       ['Due Date', invoice.dueDate],
       ['Status', invoice.status],
@@ -86,212 +135,259 @@ export default function InvoiceDetailPage() {
     bff.getInvoiceById(id).then(setInvoice).catch((e: Error) => setError(e.message)).finally(() => setLoading(false))
   }
 
-  if (loading) return <Spinner label="Loading invoice…" />
+  if (loading) return <Spinner label="Loading invoice..." />
   if (error) return <ErrorBox message={error} onRetry={handleRetry} retryLabel="Retry" />
   if (!invoice) return null
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title={invoice.invoiceNumber}
-        subtitle={`${invoice.customerDisplayName} · ${invoice.vehicleMakeModel}`}
-        action={
-          <div className="flex flex-wrap gap-2 print:hidden">
-            <SecondaryButton onClick={handlePrint} className="px-3 py-1.5 text-xs">Print</SecondaryButton>
-            <SecondaryButton onClick={downloadCsv} className="px-3 py-1.5 text-xs">CSV</SecondaryButton>
-            <SecondaryButton onClick={() => router.push(`/leases/${invoice.leaseId}`)} className="px-3 py-1.5 text-xs">View Contract</SecondaryButton>
-            <SecondaryButton onClick={() => router.back()} className="px-3 py-1.5 text-xs">Back</SecondaryButton>
-          </div>
+    <>
+      <style jsx global>{`
+        @media print {
+          @page { size: A4; margin: 15mm; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
-      />
+      `}</style>
 
-      {/* ── Print-ready invoice layout ── */}
-      <div className="print:block">
+      <div className="space-y-4">
+        {/* ── Screen-only page header ── */}
+        <div className="print:hidden">
+          <PageHeader
+            title={invoice.invoiceNumber}
+            subtitle={`${invoice.customerDisplayName} / ${invoice.vehicleMakeModel}`}
+          />
+        </div>
 
-        {/* ── Invoice header card ── */}
-        <Card className="p-6 print:shadow-none print:border-none">
-          <div className="flex items-start justify-between gap-6">
+        {/* ── Printable invoice layout ── */}
+        <div className="print:block">
 
-            {/* Left: company branding */}
-            <div>
-              <p className="text-2xl font-bold text-brand-800 leading-tight">{invoice.supplierName}</p>
-              <p className="text-sm text-slate-500 mt-0.5">Vehicle Leasing Services</p>
-              <div className="mt-3 space-y-0.5">
-                <p className="font-mono text-xs text-slate-500">CR No: {invoice.supplierCrNo}</p>
+          {/* ── Section 1: Logo + TAX INVOICE + QR ── */}
+          <Card className="p-6 print:shadow-none print:border-none print:p-0">
+            <div className="flex items-start justify-between gap-4">
+              {/* Left: company logo */}
+              <CompanyLogo />
+
+              {/* Center: title + invoice number + status */}
+              <div className="text-center shrink-0">
+                <p className="text-2xl font-bold text-slate-900 tracking-wide">TAX INVOICE</p>
+                <p className="mt-1 font-mono text-sm text-slate-600">{invoice.invoiceNumber}</p>
+                <div className="mt-2 flex justify-center">
+                  <Badge tone={STATUS_TONES[invoice.status]}>{invoice.status}</Badge>
+                </div>
+                {invoice.zatcaInvoiceNumber && (
+                  <p className="mt-1.5 font-mono text-xs text-slate-400">ZATCA: {invoice.zatcaInvoiceNumber}</p>
+                )}
+              </div>
+
+              {/* Right: QR code */}
+              <ZatcaQr />
+            </div>
+
+            {/* ── Horizontal rule ── */}
+            <hr className="my-5 border-slate-200" />
+
+            {/* ── Section 3: Info grid ── */}
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3 print:grid-cols-3">
+
+              {/* Supplier */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Supplier</p>
+                <p className="mt-1 font-semibold text-slate-900">{invoice.supplierName}</p>
+                <p className="font-mono text-xs text-slate-500 mt-0.5">CR No: {invoice.supplierCrNo}</p>
                 <p className="font-mono text-xs text-slate-500">VAT No: {invoice.supplierVatNo}</p>
               </div>
-            </div>
 
-            {/* Right: invoice identity */}
-            <div className="text-right shrink-0">
-              <p className="text-2xl font-bold text-slate-900 tracking-wide">TAX INVOICE</p>
-              <p className="mt-1 font-mono text-sm text-slate-600">{invoice.invoiceNumber}</p>
-              <div className="mt-2 flex justify-end">
-                <Badge tone={STATUS_TONES[invoice.status]}>{invoice.status}</Badge>
+              {/* Billed To */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Billed To</p>
+                <p className="mt-1 font-semibold text-slate-900">{invoice.customerDisplayName}</p>
               </div>
-              {invoice.zatcaInvoiceNumber && (
-                <p className="mt-1.5 font-mono text-xs text-slate-400">ZATCA: {invoice.zatcaInvoiceNumber}</p>
-              )}
+
+              {/* Contract */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Contract</p>
+                <p className="mt-1 font-mono text-sm text-slate-800">{invoice.leaseNumber}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{invoice.vehicleMakeModel}</p>
+                <p className="text-xs text-slate-500">
+                  Plate EN: <span className="font-semibold">{invoice.vehiclePlate}</span>
+                  {' | '}
+                  Plate AR: <span className="font-semibold" dir="rtl">{invoice.vehiclePlateAr}</span>
+                </p>
+              </div>
+
+              {/* Reference */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Reference</p>
+                <p className="mt-1 text-sm text-slate-800">
+                  Quotation: <span className="font-mono">{invoice.quotationNumber ?? 'N/A'}</span>
+                </p>
+                <p className="text-sm text-slate-800">
+                  PO No: <span className="font-mono">{invoice.poNumber ?? 'N/A'}</span>
+                </p>
+              </div>
+
+              {/* Dates */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Dates</p>
+                <p className="mt-1 text-sm text-slate-800">Issued: {safeDate(invoice.issuedDate)}</p>
+                <p className="text-sm text-slate-800">
+                  Due:{' '}
+                  <span className={invoice.balanceSar > 0 ? 'font-semibold text-red-700' : ''}>
+                    {safeDate(invoice.dueDate)}
+                  </span>
+                </p>
+              </div>
+
+              {/* Billing Period */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Billing Period</p>
+                <p className="mt-1 text-sm text-slate-800">
+                  <span className="font-semibold">{invoice.billingPeriodStart}</span>
+                  {' to '}
+                  <span className="font-semibold">{invoice.billingPeriodEnd}</span>
+                </p>
+              </div>
             </div>
-          </div>
+          </Card>
 
-          {/* ── Info grid ── */}
-          <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3">
-
-            {/* Billed To */}
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Billed To</p>
-              <p className="mt-1 font-semibold text-slate-900">{invoice.customerDisplayName}</p>
-            </div>
-
-            {/* Contract */}
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Contract</p>
-              <p className="mt-1 font-mono text-sm text-slate-800">{invoice.leaseNumber}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{invoice.vehicleMakeModel}</p>
-              <p className="text-xs text-slate-500">
-                Plate EN: <span className="font-semibold">{invoice.vehiclePlate}</span>
-                {' '}|{' '}
-                Plate AR: <span className="font-semibold" dir="rtl">{invoice.vehiclePlateAr}</span>
-              </p>
-            </div>
-
-            {/* Quotation & PO */}
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Reference</p>
-              <p className="mt-1 text-sm text-slate-800">
-                Quotation: <span className="font-mono">{invoice.quotationNumber ?? '—'}</span>
-              </p>
-              <p className="text-sm text-slate-800">
-                PO No: <span className="font-mono">{invoice.poNumber ?? '—'}</span>
-              </p>
-            </div>
-
-            {/* Dates */}
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Dates</p>
-              <p className="mt-1 text-sm text-slate-800">Issued: {safeDate(invoice.issuedDate)}</p>
-              <p className="text-sm text-slate-800">
-                Due:{' '}
-                <span className={invoice.balanceSar > 0 ? 'font-semibold text-red-700' : ''}>
-                  {safeDate(invoice.dueDate)}
-                </span>
-              </p>
-            </div>
-
-            {/* Billing period */}
-            <div className="sm:col-span-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Billing Period</p>
-              <p className="mt-1 text-sm text-slate-800">
-                <span className="font-semibold">{invoice.billingPeriodStart}</span>
-                {' – '}
-                <span className="font-semibold">{invoice.billingPeriodEnd}</span>
-              </p>
-            </div>
-          </div>
-        </Card>
-
-        {/* ── Line items table ── */}
-        <Card className="mt-4 overflow-hidden p-0 print:shadow-none print:border-none">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50/80">
-                <tr>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 w-12">Line #</th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Plate (EN)</th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Plate (AR)</th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Description</th>
-                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Qty</th>
-                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Unit Price (SAR)</th>
-                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">VAT %</th>
-                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">VAT Amount (SAR)</th>
-                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Line Total (SAR)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoice.lines.map((line) => (
-                  <tr key={line.id} className="border-t border-slate-100 hover:bg-slate-50/50">
-                    <td className="px-3 py-3 text-center font-mono text-xs text-slate-500">{line.lineNumber}</td>
-                    <td className="px-3 py-3 font-mono text-xs text-slate-600">{line.plateNumberEn ?? '—'}</td>
-                    <td className="px-3 py-3 font-mono text-xs text-slate-600" dir="rtl">{line.plateNumberAr ?? '—'}</td>
-                    <td className="px-3 py-3 text-slate-800">{line.description}</td>
-                    <td className="px-3 py-3 text-right text-slate-600">{line.quantity}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs">{fmt(line.unitPriceSar)}</td>
-                    <td className="px-3 py-3 text-right text-slate-600">{line.vatPercent}%</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs">{fmt(line.vatAmountSar)}</td>
-                    <td className="px-3 py-3 text-right font-mono text-xs font-semibold">{fmt(line.lineTotalSar)}</td>
+          {/* ── Section 4: Line items table ── */}
+          <Card className="mt-4 overflow-hidden p-0 print:shadow-none print:border-none print:mt-6">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" style={{ pageBreakInside: 'auto' }}>
+                <thead className="border-b border-slate-200 bg-slate-50/80 print:bg-slate-100">
+                  <tr>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 w-10">#</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Plate EN</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Plate AR</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Description</th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Qty</th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Unit Price</th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">VAT%</th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">VAT Amt</th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Total</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* ── Totals box ── */}
-          <div className="border-t border-slate-200 bg-slate-50/60 px-4 py-4">
-            <div className="ms-auto max-w-xs space-y-1.5">
-              <div className="flex justify-between text-sm text-slate-600">
-                <span>Sub-Total</span>
-                <span className="font-mono">{fmt(invoice.subTotalSar)}</span>
-              </div>
-              <div className="flex justify-between text-sm text-slate-600">
-                <span>VAT (15%)</span>
-                <span className="font-mono">{fmt(invoice.vatAmountSar)}</span>
-              </div>
-              <div className="flex justify-between border-t border-slate-200 pt-1.5 text-base font-bold text-slate-900">
-                <span>Total</span>
-                <span className="font-mono">{fmt(invoice.totalSar)}</span>
-              </div>
-              {invoice.paidAmountSar > 0 && (
-                <div className="flex justify-between text-sm font-semibold text-green-700">
-                  <span>Paid</span>
-                  <span className="font-mono">-{fmt(invoice.paidAmountSar)}</span>
-                </div>
-              )}
-              {invoice.balanceSar > 0 && (
-                <div className="flex justify-between border-t border-slate-200 pt-1.5 font-bold text-red-700">
-                  <span>Balance Due</span>
-                  <span className="font-mono">{fmt(invoice.balanceSar)}</span>
-                </div>
-              )}
+                </thead>
+                <tbody>
+                  {invoice.lines.map((line) => (
+                    <tr
+                      key={line.id}
+                      className="border-t border-slate-100 hover:bg-slate-50/50 print:hover:bg-transparent"
+                      style={{ pageBreakInside: 'avoid' }}
+                    >
+                      <td className="px-3 py-3 text-center font-mono text-xs text-slate-500">{line.lineNumber}</td>
+                      <td className="px-3 py-3 font-mono text-xs text-slate-600">{line.plateNumberEn ?? 'N/A'}</td>
+                      <td className="px-3 py-3 font-mono text-xs text-slate-600" dir="rtl">{line.plateNumberAr ?? 'N/A'}</td>
+                      <td className="px-3 py-3 text-slate-800">{line.description}</td>
+                      <td className="px-3 py-3 text-right text-slate-600">{line.quantity}</td>
+                      <td className="px-3 py-3 text-right font-mono text-xs">{fmt(line.unitPriceSar)}</td>
+                      <td className="px-3 py-3 text-right text-slate-600">{line.vatPercent}%</td>
+                      <td className="px-3 py-3 text-right font-mono text-xs">{fmt(line.vatAmountSar)}</td>
+                      <td className="px-3 py-3 text-right font-mono text-xs font-semibold">{fmt(line.lineTotalSar)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-        </Card>
 
-        {/* ── Notes ── */}
-        {invoice.notes && (
-          <Card className="mt-4 p-4 print:shadow-none print:border-none">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</p>
-            <p className="mt-1 text-sm text-slate-700">{invoice.notes}</p>
+            {/* ── Section 5: Totals box ── */}
+            <div className="border-t border-slate-200 bg-slate-50/60 px-4 py-4 print:bg-slate-50" style={{ pageBreakInside: 'avoid' }}>
+              <div className="ms-auto max-w-xs space-y-1.5">
+                <div className="flex justify-between text-sm text-slate-600">
+                  <span>Sub-Total</span>
+                  <span className="font-mono">{fmt(invoice.subTotalSar)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-slate-600">
+                  <span>VAT (15%)</span>
+                  <span className="font-mono">{fmt(invoice.vatAmountSar)}</span>
+                </div>
+                <div className="flex justify-between border-t border-slate-200 pt-1.5 text-base font-bold text-slate-900">
+                  <span>Total</span>
+                  <span className="font-mono">{fmt(invoice.totalSar)}</span>
+                </div>
+                {invoice.paidAmountSar > 0 && (
+                  <div className="flex justify-between text-sm font-semibold text-green-700">
+                    <span>Paid</span>
+                    <span className="font-mono">-{fmt(invoice.paidAmountSar)}</span>
+                  </div>
+                )}
+                {invoice.balanceSar > 0 && (
+                  <div className="flex justify-between border-t border-slate-200 pt-1.5 font-bold text-red-700">
+                    <span>Balance Due</span>
+                    <span className="font-mono">{fmt(invoice.balanceSar)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </Card>
+
+          {/* ── Section 6: Notes ── */}
+          {invoice.notes && (
+            <Card className="mt-4 p-4 print:shadow-none print:border-none print:mt-6">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</p>
+              <p className="mt-1 text-sm text-slate-700 whitespace-pre-line">{invoice.notes}</p>
+            </Card>
+          )}
+        </div>
+
+        {/* ── Section 7: Record Payment (print:hidden) ── */}
+        {invoice.balanceSar > 0 && (
+          <Card className="p-4 print:hidden">
+            <h4 className="mb-3 font-semibold text-slate-800">Record Payment</h4>
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                type="number"
+                className="w-44 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder={`Max: ${fmt(invoice.balanceSar)}`}
+                value={paidInput}
+                onChange={(e) => setPaidInput(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={handleMarkPaid}
+                disabled={markingPaid || !paidInput}
+                className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {markingPaid ? 'Saving...' : 'Mark Paid'}
+              </button>
+              <p className="text-xs text-slate-400">
+                Balance outstanding:{' '}
+                <span className="font-semibold text-red-700">{fmt(invoice.balanceSar)}</span>
+              </p>
+            </div>
           </Card>
         )}
-      </div>
 
-      {/* ── Record Payment — hidden on print ── */}
-      {invoice.balanceSar > 0 && (
-        <Card className="p-4 print:hidden">
-          <h4 className="mb-3 font-semibold text-slate-800">Record Payment</h4>
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              type="number"
-              className="w-44 rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              placeholder={`Max: ${fmt(invoice.balanceSar)}`}
-              value={paidInput}
-              onChange={(e) => setPaidInput(e.target.value)}
-            />
-            <PrimaryButton
-              onClick={handleMarkPaid}
-              disabled={markingPaid || !paidInput}
-              className="px-4 py-2 text-sm"
-            >
-              {markingPaid ? 'Saving…' : 'Mark Paid'}
-            </PrimaryButton>
-            <p className="text-xs text-slate-400">
-              Balance outstanding:{' '}
-              <span className="font-semibold text-red-700">{fmt(invoice.balanceSar)}</span>
-            </p>
-          </div>
-        </Card>
-      )}
-    </div>
+        {/* ── Section 8: Action buttons (print:hidden) ── */}
+        <div className="flex flex-wrap gap-2 print:hidden">
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Print
+          </button>
+          <button
+            type="button"
+            onClick={downloadCsv}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Download CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push(`/leases/${invoice.leaseId}`)}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            View Contract
+          </button>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Back
+          </button>
+        </div>
+      </div>
+    </>
   )
 }

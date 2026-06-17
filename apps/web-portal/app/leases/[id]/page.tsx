@@ -92,7 +92,7 @@ function DamagesTab({ leaseId, vehicleId }: { leaseId: string; vehicleId: string
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">{damages.length} damage record{damages.length !== 1 ? 's' : ''}</p>
         <div className="flex gap-2">
-          <SecondaryButton onClick={downloadCsv} className="px-3 py-1.5 text-xs">⬇ Export CSV</SecondaryButton>
+          <SecondaryButton onClick={downloadCsv} className="px-3 py-1.5 text-xs">Export CSV</SecondaryButton>
           <PrimaryButton onClick={() => setShowForm((f) => !f)} className="px-3 py-1.5 text-xs">
             {showForm ? 'Cancel' : '+ Record Damage'}
           </PrimaryButton>
@@ -226,7 +226,7 @@ function ViolationsTab({ leaseId, vehicleId, driverId }: { leaseId: string; vehi
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">{violations.length} violation{violations.length !== 1 ? 's' : ''}</p>
         <div className="flex gap-2">
-          <SecondaryButton onClick={downloadCsv} className="px-3 py-1.5 text-xs">⬇ Export CSV</SecondaryButton>
+          <SecondaryButton onClick={downloadCsv} className="px-3 py-1.5 text-xs">Export CSV</SecondaryButton>
           <PrimaryButton onClick={() => setShowForm((f) => !f)} className="px-3 py-1.5 text-xs">{showForm ? 'Cancel' : '+ Add Violation'}</PrimaryButton>
         </div>
       </div>
@@ -348,7 +348,7 @@ function InvoicesTab({ leaseId }: { leaseId: string; lease: LeaseDetail }) {
           {totalOutstanding > 0 && <Badge tone="red">Outstanding: {fmt(totalOutstanding)}</Badge>}
         </div>
         <div className="flex items-center gap-2">
-          <SecondaryButton onClick={downloadCsv} className="px-3 py-1.5 text-xs">⬇ Export CSV</SecondaryButton>
+          <SecondaryButton onClick={downloadCsv} className="px-3 py-1.5 text-xs">Export CSV</SecondaryButton>
           <input type="month" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm" value={period.start.substring(0, 7)} onChange={(e) => { const m = e.target.value; setPeriod({ start: `${m}-01`, end: `${m}-30` }) }} />
           <PrimaryButton onClick={handleGenerate} disabled={generating} className="px-3 py-1.5 text-xs">
             {generating ? 'Generating…' : '+ Generate Invoice'}
@@ -477,7 +477,7 @@ export default function LeaseDetailPage() {
         subtitle={`${lease.customerDisplayName} · ${lease.vehicleMakeModel}`}
         action={
           <div className="flex flex-wrap gap-2">
-            <SecondaryButton onClick={downloadCsv} className="px-3 py-1.5 text-xs">⬇ Export</SecondaryButton>
+            <SecondaryButton onClick={downloadCsv} className="px-3 py-1.5 text-xs">Export</SecondaryButton>
             {canSuspend && <SecondaryButton onClick={() => doOperation('Suspend', 'Suspend this contract?')} disabled={operating} className="px-3 py-1.5 text-xs text-amber-700 border-amber-300">Suspend</SecondaryButton>}
             {canClose && <SecondaryButton onClick={() => doOperation('Close', 'Close this contract?')} disabled={operating} className="px-3 py-1.5 text-xs text-red-700 border-red-300">Close Contract</SecondaryButton>}
             {isActive && <SecondaryButton onClick={() => doOperation('Extend', 'Extend this contract by 3 months?')} disabled={operating} className="px-3 py-1.5 text-xs">Extend</SecondaryButton>}
