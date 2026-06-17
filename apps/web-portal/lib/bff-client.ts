@@ -24,6 +24,12 @@ export interface CustomerSummary {
   displayName: string
   type: number // 1 = B2B, 2 = B2C
   mobile?: string | null
+  email?: string | null
+  commercialRegistration?: string | null
+  vatNumber?: string | null
+  contactPerson?: string | null
+  contactPersonMobile?: string | null
+  city?: string | null
   isActive: boolean
 }
 
@@ -826,6 +832,11 @@ class BffClient {
   getStatementOfAccount(customerId: string, from: string, to: string) {
     return this.getJson<StatementOfAccount>(`/api/v1/customers/${customerId}/statement?from=${from}&to=${to}`)
   }
+
+  // ─── Audit ──────────────────────────────────────────────────────────────────
+  getAuditEvents(entityType: string, entityId: string) {
+    return this.getJson<AuditEvent[]>(`/api/v1/audit/${entityType}/${entityId}`)
+  }
 }
 
 // ─── CRUD types ─────────────────────────────────────────────────────────────
@@ -839,6 +850,9 @@ export interface CustomerDetail {
   legalName?: string | null; legalNameAr?: string | null
   commercialRegistration?: string | null; vatNumber?: string | null
   billingAddress?: string | null
+  contactPersonNameEn?: string | null; contactPersonNameAr?: string | null
+  contactPersonMobile?: string | null; contactPersonEmail?: string | null
+  contactPersonPosition?: string | null
   creditLimit?: number | null; creditCurrency?: string | null
   personNameEn?: string | null; personNameAr?: string | null
   idTypeCode?: number | null; personIdNumber?: string | null
@@ -1082,6 +1096,18 @@ export interface LeaseDetail extends LeaseSummary {
   incidents: LeaseIncident[]
 }
 
+export interface AuditEvent {
+  id: string
+  entityType: string
+  entityId: string
+  action: string
+  performedBy: string
+  performedAtUtc: string
+  previousValue: string | null
+  newValue: string | null
+  comment: string | null
+}
+
 export interface DeleteResult {
   success: boolean
   errorCode?: string | null
@@ -1209,9 +1235,9 @@ function buildMockState(): MockState {
   const branches: BranchDetail[] = Array.from({ length: 80 }).map((_, i) => ({
     id: mockId('branch', i + 1),
     tenantId: DEV_TENANT_ID,
-    code: `BR-${(i + 1).toString().padStart(3, '0')}`,
-    nameEn: `Branch ${i + 1}`,
-    nameAr: `فرع ${i + 1}`,
+    code: `QL-${(i + 1).toString().padStart(3, '0')}`,
+    nameEn: pick(['Quick Lead — Riyadh Olaya', 'Quick Lead — Riyadh Exit 15', 'Quick Lead — Jeddah Tahlia', 'Quick Lead — Jeddah Corniche', 'Quick Lead — Dammam Corniche', 'Quick Lead — Al Khobar', 'Quick Lead — Makkah Aziziyah', 'Quick Lead — Madinah Quba', 'Quick Lead — Tabuk', 'Quick Lead — Abha', 'Quick Lead — Hail', 'Quick Lead — Yanbu', 'Quick Lead — Jubail Industrial', 'Quick Lead — Jizan', 'Quick Lead — Najran'], i),
+    nameAr: pick(['كويك ليد — الرياض العليا', 'كويك ليد — الرياض مخرج 15', 'كويك ليد — جدة التحلية', 'كويك ليد — جدة الكورنيش', 'كويك ليد — الدمام الكورنيش', 'كويك ليد — الخبر', 'كويك ليد — مكة العزيزية', 'كويك ليد — المدينة قباء', 'كويك ليد — تبوك', 'كويك ليد — أبها', 'كويك ليد — حائل', 'كويك ليد — ينبع', 'كويك ليد — الجبيل الصناعية', 'كويك ليد — جيزان', 'كويك ليد — نجران'], i),
     cityEn: pick(['Riyadh', 'Jeddah', 'Dammam', 'Makkah', 'Madinah'], i),
     cityAr: pick(['الرياض', 'جدة', 'الدمام', 'مكة', 'المدينة'], i),
     regionEn: 'KSA',
@@ -1228,29 +1254,72 @@ function buildMockState(): MockState {
     updatedAtUtc: now.toISOString(),
   }))
 
+  const SAUDI_COS = [
+    { en: 'Saudi Aramco', ar: 'أرامكو السعودية', cr: '1010000100', vat: '300000000100003', cp: 'Khalid Al-Falih', cpAr: 'خالد الفالح', pos: 'Fleet Manager' },
+    { en: 'SABIC', ar: 'سابك', cr: '1010001500', vat: '300000001500003', cp: 'Omar Al-Rashid', cpAr: 'عمر الراشد', pos: 'Transport Director' },
+    { en: 'STC Group', ar: 'مجموعة stc', cr: '1010003434', vat: '300000003434003', cp: 'Faisal Al-Ghamdi', cpAr: 'فيصل الغامدي', pos: 'Procurement Head' },
+    { en: 'Al Rajhi Bank', ar: 'مصرف الراجحي', cr: '1010028610', vat: '300028610000003', cp: 'Nasser Al-Dossary', cpAr: 'ناصر الدوسري', pos: 'Admin Services' },
+    { en: 'Almarai Company', ar: 'شركة المراعي', cr: '1010084450', vat: '300084450000003', cp: 'Sultan Al-Mutairi', cpAr: 'سلطان المطيري', pos: 'Logistics Manager' },
+    { en: 'ACWA Power', ar: 'أكوا باور', cr: '1010245670', vat: '300245670000003', cp: 'Tariq Al-Harbi', cpAr: 'طارق الحربي', pos: 'Operations Head' },
+    { en: 'Abdul Latif Jameel', ar: 'عبداللطيف جميل', cr: '4030012345', vat: '300012345000003', cp: 'Youssef Jameel', cpAr: 'يوسف جميل', pos: 'Fleet Coordinator' },
+    { en: 'Zahid Group', ar: 'مجموعة زاهد', cr: '4030067890', vat: '300067890000003', cp: 'Hamad Al-Zahid', cpAr: 'حمد الزاهد', pos: 'Vehicle Admin' },
+    { en: 'Saudi Binladin Group', ar: 'مجموعة بن لادن', cr: '4030098765', vat: '300098765000003', cp: 'Ahmed Al-Qahtani', cpAr: 'أحمد القحطاني', pos: 'Transport Manager' },
+    { en: 'Savola Group', ar: 'مجموعة صافولا', cr: '4030045678', vat: '300045678000003', cp: 'Rashed Al-Shehri', cpAr: 'راشد الشهري', pos: 'Fleet Director' },
+    { en: 'National Water Co.', ar: 'شركة المياه الوطنية', cr: '1010156789', vat: '300156789000003', cp: 'Majed Al-Otaibi', cpAr: 'ماجد العتيبي', pos: 'Admin Manager' },
+    { en: 'Saudi Electricity Co.', ar: 'الشركة السعودية للكهرباء', cr: '1010023456', vat: '300023456000003', cp: 'Bandar Al-Zahrani', cpAr: 'بندر الزهراني', pos: 'Procurement Officer' },
+    { en: 'Jarir Marketing', ar: 'مكتبة جرير', cr: '1010189012', vat: '300189012000003', cp: 'Nawaf Al-Subaie', cpAr: 'نواف السبيعي', pos: 'Admin Head' },
+    { en: 'Extra Electronics', ar: 'اكسترا', cr: '1010234567', vat: '300234567000003', cp: 'Turki Al-Harthy', cpAr: 'تركي الحارثي', pos: 'Logistics Officer' },
+    { en: 'Riyad Bank', ar: 'بنك الرياض', cr: '1010010010', vat: '300010010000003', cp: 'Abdulaziz Al-Jasser', cpAr: 'عبدالعزيز الجاسر', pos: 'Services Director' },
+    { en: 'Bupa Arabia', ar: 'بوبا العربية', cr: '4030034567', vat: '300034567000003', cp: 'Adel Al-Malki', cpAr: 'عادل المالكي', pos: 'Admin Director' },
+    { en: 'Al Faisaliah Group', ar: 'مجموعة الفيصلية', cr: '1010345678', vat: '300345678000003', cp: 'Saad Al-Faisal', cpAr: 'سعد الفيصل', pos: 'Fleet Coordinator' },
+    { en: 'SACO Hardware', ar: 'ساكو', cr: '4030156789', vat: '304156789000003', cp: 'Saleh Al-Yamani', cpAr: 'صالح اليماني', pos: 'Fleet Ops' },
+    { en: 'Ma\'aden Mining', ar: 'شركة معادن', cr: '1010234500', vat: '300234500000003', cp: 'Ibrahim Al-Thumairy', cpAr: 'إبراهيم الثميري', pos: 'Operations Manager' },
+    { en: 'Saudi Airlines Catering', ar: 'الخطوط السعودية للتموين', cr: '4030087654', vat: '300087654000003', cp: 'Waleed Al-Anazi', cpAr: 'وليد العنزي', pos: 'Fleet Manager' },
+  ]
+  const PERSON_NAMES: [string, string][] = [
+    ['Mohammed Al-Harbi', 'محمد الحربي'], ['Abdullah Al-Otaibi', 'عبدالله العتيبي'],
+    ['Fahad Al-Dosari', 'فهد الدوسري'], ['Saad Al-Qahtani', 'سعد القحطاني'],
+    ['Khalid Al-Shehri', 'خالد الشهري'], ['Ahmed Al-Ghamdi', 'أحمد الغامدي'],
+    ['Nasser Al-Mutairi', 'ناصر المطيري'], ['Sultan Al-Zahrani', 'سلطان الزهراني'],
+    ['Omar Al-Anazi', 'عمر العنزي'], ['Bandar Al-Harthy', 'بندر الحارثي'],
+    ['Turki Al-Subaie', 'تركي السبيعي'], ['Faisal Al-Rashidi', 'فيصل الرشيدي'],
+    ['Majed Al-Tamimi', 'ماجد التميمي'], ['Nawaf Al-Shamrani', 'نواف الشمراني'],
+    ['Rashed Al-Bishi', 'راشد البيشي'], ['Youssef Al-Malki', 'يوسف المالكي'],
+    ['Hamad Al-Juhani', 'حمد الجهني'], ['Ibrahim Al-Murri', 'إبراهيم المري'],
+    ['Saleh Al-Yami', 'صالح اليامي'], ['Waleed Al-Khaldi', 'وليد الخالدي'],
+  ]
+
   const customers: CustomerDetail[] = Array.from({ length: 500 }).map((_, i) => {
     const isB2B = i % 5 === 0
     const status = i % 11 === 0 ? 'Suspended' : i % 17 === 0 ? 'Closed' : 'Active'
+    const co = isB2B ? SAUDI_COS[Math.floor(i / 5) % SAUDI_COS.length]! : null
+    const person = PERSON_NAMES[i % PERSON_NAMES.length]!
+    const branch = branches[i % branches.length]!
     return {
       id: mockId('customer', i + 1),
       tenantId: DEV_TENANT_ID,
       type: isB2B ? 'B2B' : 'B2C',
       status,
-      displayName: isB2B ? `Company ${i + 1}` : `Customer ${i + 1}`,
-      displayNameAr: isB2B ? `شركة ${i + 1}` : `عميل ${i + 1}`,
-      email: `customer${i + 1}@example.sa`,
+      displayName: isB2B ? co!.en : person[0],
+      displayNameAr: isB2B ? co!.ar : person[1],
+      email: isB2B ? `fleet@${co!.en.toLowerCase().replace(/[^a-z]/g, '')}.com.sa` : `${person[0].toLowerCase().replace(/ /g, '.')}@email.sa`,
       mobile: `+9665${(10000000 + i).toString().slice(-8)}`,
-      nationalAddress: `Address ${i + 1}`,
+      nationalAddress: `${branch.cityEn ?? 'Riyadh'}, Saudi Arabia`,
       preferredLanguage: i % 2 === 0 ? 'ar' : 'en',
-      legalName: isB2B ? `Company ${i + 1} LLC` : null,
-      legalNameAr: isB2B ? `شركة ${i + 1}` : null,
-      commercialRegistration: isB2B ? `10${(10000000 + i).toString().slice(-8)}` : null,
-      vatNumber: isB2B ? `30${(100000000000000 + i).toString().slice(-15)}` : null,
-      billingAddress: isB2B ? `Billing ${i + 1}` : null,
+      legalName: isB2B ? `${co!.en} Ltd.` : null,
+      legalNameAr: isB2B ? co!.ar : null,
+      commercialRegistration: isB2B ? co!.cr : null,
+      vatNumber: isB2B ? co!.vat : null,
+      billingAddress: isB2B ? `${branch.cityEn ?? 'Riyadh'}, Saudi Arabia` : null,
+      contactPersonNameEn: isB2B ? co!.cp : null,
+      contactPersonNameAr: isB2B ? co!.cpAr : null,
+      contactPersonMobile: isB2B ? `+9665${(50000000 + i).toString().slice(-8)}` : null,
+      contactPersonEmail: isB2B ? `${co!.cp.toLowerCase().replace(/ /g, '.')}@${co!.en.toLowerCase().replace(/[^a-z]/g, '')}.com.sa` : null,
+      contactPersonPosition: isB2B ? co!.pos : null,
       creditLimit: isB2B ? 100000 + i * 100 : null,
       creditCurrency: isB2B ? 'SAR' : null,
-      personNameEn: isB2B ? null : `Person ${i + 1}`,
-      personNameAr: isB2B ? null : `شخص ${i + 1}`,
+      personNameEn: isB2B ? null : person[0],
+      personNameAr: isB2B ? null : person[1],
       idTypeCode: isB2B ? null : i % 3 === 0 ? 2 : 1,
       personIdNumber: isB2B ? null : `${i % 3 === 0 ? '2' : '1'}${(100000000 + i).toString().slice(-9)}`,
       dateOfBirth: isB2B ? null : `19${80 + (i % 20)}-01-15`,
@@ -1337,8 +1406,8 @@ function buildMockState(): MockState {
     tenantId: DEV_TENANT_ID,
     status: pick(['Active', 'Suspended', 'Retired'], i),
     customerId: pick(customers, i).id,
-    personNameEn: `Driver ${i + 1}`,
-    personNameAr: `سائق ${i + 1}`,
+    personNameEn: PERSON_NAMES[i % PERSON_NAMES.length]![0],
+    personNameAr: PERSON_NAMES[i % PERSON_NAMES.length]![1],
     idTypeCode: i % 3 === 0 ? 2 : 1,
     personIdNumber: `${i % 3 === 0 ? '2' : '1'}${(200000000 + i).toString().slice(-9)}`,
     dateOfBirth: `19${75 + (i % 20)}-02-10`,
@@ -1706,12 +1775,18 @@ class MockBffClient {
   getExtendedCoverages() { return Promise.resolve([{ id: 'ec-1', code: 'CDW', nameEn: 'CDW', nameAr: 'تأمين', isActive: true }]) }
 
   getCustomers(page = 1, pageSize = 20, search?: string) {
-    const filtered = this.state.customers.filter((c) => !search || c.displayName.toLowerCase().includes(search.toLowerCase()) || (c.mobile ?? '').includes(search))
+    const filtered = this.state.customers.filter((c) => !search || c.displayName.toLowerCase().includes(search.toLowerCase()) || (c.mobile ?? '').includes(search) || (c.commercialRegistration ?? '').includes(search))
     const items: CustomerSummary[] = filtered.map((c) => ({
       id: c.id,
       displayName: c.displayName,
       type: c.type === 'B2B' ? 1 : 2,
       mobile: c.mobile ?? null,
+      email: c.email ?? null,
+      commercialRegistration: c.commercialRegistration ?? null,
+      vatNumber: c.vatNumber ?? null,
+      contactPerson: c.contactPersonNameEn ?? null,
+      contactPersonMobile: c.contactPersonMobile ?? null,
+      city: c.nationalAddress?.split(',')[0] ?? null,
       isActive: c.status === 'Active',
     }))
     return Promise.resolve(paginate(items, page, pageSize))
@@ -2340,6 +2415,23 @@ class MockBffClient {
       }
       reader.readAsText(file)
     })
+  }
+
+  // ─── Audit ──────────────────────────────────────────────────────────────────
+  getAuditEvents(entityType: string, entityId: string): Promise<AuditEvent[]> {
+    const now = new Date()
+    const events: AuditEvent[] = Array.from({ length: 5 + (entityId.charCodeAt(entityId.length - 1) % 8) }).map((_, i) => ({
+      id: mockId('audit', i + 1),
+      entityType,
+      entityId,
+      action: pick(['Created', 'Updated', 'StatusChanged', 'Viewed', 'Exported'], i),
+      performedBy: pick(['Admin User', 'System', 'Fleet Manager', 'Operations Lead', 'Sales Agent'], i),
+      performedAtUtc: new Date(now.getTime() - i * 86400000 * 3).toISOString(),
+      previousValue: i > 0 ? pick(['Draft', 'Active', 'Pending', null], i) : null,
+      newValue: pick(['Active', 'Updated', 'Approved', 'Closed', 'Suspended'], i),
+      comment: i % 3 === 0 ? pick(['Routine update', 'Approved by manager', 'Customer requested change', 'Scheduled maintenance action', 'Audit compliance check'], i) : null,
+    }))
+    return Promise.resolve(events)
   }
 }
 

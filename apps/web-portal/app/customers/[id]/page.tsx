@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useLocale } from '../../../lib/locale-provider'
-import { bff, type CustomerDetail, type LeaseSummary, type VehicleSummary, type DriverSummary } from '../../../lib/bff-client'
+import { bff, type CustomerDetail, type LeaseSummary, type VehicleSummary, type DriverSummary, type AuditEvent } from '../../../lib/bff-client'
 import { Badge, Card, ErrorBox, PageHeader, PrimaryButton, SecondaryButton, Spinner } from '../../../components/ui'
 
 function Field({ label, value }: { label: string; value: string | number | boolean | null | undefined }) {
@@ -33,8 +33,11 @@ const VEHICLE_TONES: Record<number, 'green' | 'amber' | 'blue' | 'slate' | 'red'
   1: 'green', 2: 'blue', 3: 'amber', 4: 'slate', 5: 'slate',
 }
 const DRIVER_TONES: Record<number, 'green' | 'amber' | 'slate'> = { 1: 'green', 2: 'amber', 3: 'slate' }
+const AUDIT_TONES: Record<string, 'green' | 'amber' | 'blue' | 'slate' | 'red'> = {
+  Created: 'green', Updated: 'blue', StatusChanged: 'amber', Deleted: 'red', Viewed: 'slate', Exported: 'slate',
+}
 
-type Tab = 'details' | 'leases' | 'vehicles' | 'drivers'
+type Tab = 'details' | 'leases' | 'vehicles' | 'drivers' | 'audit'
 
 export default function CustomerDetailPage() {
   const { t } = useLocale()
@@ -46,22 +49,25 @@ export default function CustomerDetailPage() {
   const [leases, setLeases] = useState<LeaseSummary[] | null>(null)
   const [vehicles, setVehicles] = useState<VehicleSummary[] | null>(null)
   const [drivers, setDrivers] = useState<DriverSummary[] | null>(null)
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionBusy, setActionBusy] = useState(false)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('details')
+  const [selectedLease, setSelectedLease] = useState<LeaseSummary | null>(null)
 
   async function load() {
     setLoading(true); setError(null)
     try {
-      const [cust, ls, vs, ds] = await Promise.all([
+      const [cust, ls, vs, ds, events] = await Promise.all([
         bff.getCustomerById(id),
         bff.getCustomerLeases(id),
         bff.getCustomerVehicles(id),
         bff.getCustomerDrivers(id),
+        bff.getAuditEvents('Customer', id).catch(() => [] as AuditEvent[]),
       ])
-      setData(cust); setLeases(ls); setVehicles(vs); setDrivers(ds)
+      setData(cust); setLeases(ls); setVehicles(vs); setDrivers(ds); setAuditEvents(events)
     } catch (e) { setError((e as Error).message) }
     finally { setLoading(false) }
   }
@@ -69,6 +75,9 @@ export default function CustomerDetailPage() {
   useEffect(() => { void load() }, [id])
 
   async function handleStatusAction(action: string) {
+    const comment = window.prompt(`Enter reason/comment for "${action}" action (required for audit):`)
+    if (comment === null) return
+    if (!comment.trim()) { setActionMsg('Comment is required for audit trail.'); return }
     setActionBusy(true); setActionMsg(null)
     try {
       const res = await bff.updateCustomerStatus(id, action, crypto.randomUUID())
@@ -91,6 +100,7 @@ export default function CustomerDetailPage() {
     { key: 'leases', label: t.common.leases, ...(leases != null ? { count: leases.length } : {}) },
     { key: 'vehicles', label: t.common.vehicles, ...(vehicles != null ? { count: vehicles.length } : {}) },
     { key: 'drivers', label: t.common.drivers, ...(drivers != null ? { count: drivers.length } : {}) },
+    { key: 'audit', label: 'Audit Log' },
   ]
 
   return (
@@ -100,19 +110,45 @@ export default function CustomerDetailPage() {
         subtitle={`${data.type} · ${data.id}`}
         action={
           <div className="flex gap-2">
-            <SecondaryButton onClick={() => router.push(`/customers/${data.id}/account`)} className="px-3 py-1.5 text-xs">💳 Account &amp; SOA</SecondaryButton>
+            <SecondaryButton onClick={() => router.push(`/customers/${data.id}/account`)} className="px-3 py-1.5 text-xs">Account &amp; SOA</SecondaryButton>
             <SecondaryButton onClick={() => router.back()}>{t.common.back}</SecondaryButton>
           </div>
         }
       />
 
-      <div className="flex items-center gap-3">
-        <Badge tone={statusTone}>{c.statuses[data.status as keyof typeof c.statuses] ?? data.status}</Badge>
-        <Badge tone={isB2B ? 'blue' : 'slate'}>{isB2B ? t.customers.type.b2b : t.customers.type.b2c}</Badge>
-        {data.kycVerified && <Badge tone="green">{c.kycBadge}</Badge>}
-        {data.email && <span className="text-xs text-slate-500">{data.email}</span>}
-        {data.mobile && <span className="text-xs text-slate-500">{data.mobile}</span>}
-      </div>
+      {/* Company header card */}
+      <Card className="p-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <Badge tone={statusTone}>{c.statuses[data.status as keyof typeof c.statuses] ?? data.status}</Badge>
+              <Badge tone={isB2B ? 'blue' : 'slate'}>{isB2B ? t.customers.type.b2b : t.customers.type.b2c}</Badge>
+              {data.kycVerified && <Badge tone="green">{c.kycBadge}</Badge>}
+            </div>
+            {isB2B && (
+              <div className="mt-3 grid grid-cols-2 gap-x-8 gap-y-1 text-sm md:grid-cols-4">
+                <div><span className="text-xs text-slate-500">CR No</span><p className="font-mono text-xs font-semibold text-slate-900">{data.commercialRegistration ?? '—'}</p></div>
+                <div><span className="text-xs text-slate-500">VAT No</span><p className="font-mono text-xs font-semibold text-slate-900">{data.vatNumber ?? '—'}</p></div>
+                <div><span className="text-xs text-slate-500">Credit Limit</span><p className="text-xs font-medium text-slate-900">{data.creditLimit ? `SAR ${data.creditLimit.toLocaleString()}` : '—'}</p></div>
+                <div><span className="text-xs text-slate-500">City</span><p className="text-xs font-medium text-slate-900">{data.nationalAddress?.split(',')[0] ?? '—'}</p></div>
+              </div>
+            )}
+          </div>
+          {isB2B && data.contactPersonNameEn && (
+            <div className="ms-6 shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-right">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Contact Person</p>
+              <p className="text-sm font-semibold text-slate-900">{data.contactPersonNameEn}</p>
+              <p className="text-xs text-slate-500">{data.contactPersonPosition ?? ''}</p>
+              {data.contactPersonMobile && <p className="mt-0.5 font-mono text-xs text-brand-700">{data.contactPersonMobile}</p>}
+              {data.contactPersonEmail && <p className="text-xs text-slate-500">{data.contactPersonEmail}</p>}
+            </div>
+          )}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
+          {data.email && <span>{data.email}</span>}
+          {data.mobile && <span>{data.mobile}</span>}
+        </div>
+      </Card>
 
       {/* Tab bar */}
       <div className="flex border-b border-slate-200">
@@ -152,6 +188,17 @@ export default function CustomerDetailPage() {
                 <Field label={c.fields.dateOfBirth} value={data.dateOfBirth} />
                 <Field label={c.fields.nationalityCode} value={data.nationalityCode} />
               </Section>
+            )}
+            {isB2B && data.contactPersonNameEn && (
+              <div className="pt-4">
+                <Section title="Contact Person">
+                  <Field label="Name (EN)" value={data.contactPersonNameEn} />
+                  <Field label="Name (AR)" value={data.contactPersonNameAr} />
+                  <Field label="Position" value={data.contactPersonPosition} />
+                  <Field label="Mobile" value={data.contactPersonMobile} />
+                  <Field label="Email" value={data.contactPersonEmail} />
+                </Section>
+              </div>
             )}
             <div className="pt-4">
               <Section title={c.sections.contact}>
@@ -199,30 +246,65 @@ export default function CustomerDetailPage() {
           {!leases || leases.length === 0 ? (
             <p className="p-6 text-sm text-slate-500">{t.common.noRecords}</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-left">
-                <tr>
-                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Lease #</th>
-                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Vehicle</th>
-                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Driver</th>
-                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Status</th>
-                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Period</th>
-                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase text-end">Rent (SAR)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leases.map((l) => (
-                  <tr key={l.id} className="cursor-pointer border-t border-slate-100 hover:bg-brand-50/40" onClick={() => router.push(`/leases/${l.id}`)}>
-                    <td className="px-3 py-2 font-mono text-xs font-semibold text-brand-700">{l.leaseNumber}</td>
-                    <td className="px-3 py-2 text-xs text-slate-700">{l.vehicleMakeModel}</td>
-                    <td className="px-3 py-2 text-xs text-slate-600">{l.primaryDriverName ?? '—'}</td>
-                    <td className="px-3 py-2"><Badge tone={LEASE_TONES[l.status] ?? 'slate'}>{(t.leases.statuses as Record<string, string>)[l.status] ?? l.status}</Badge></td>
-                    <td className="px-3 py-2 text-xs text-slate-600">{l.contractStartUtc.substring(0,10)} → {l.contractEndUtc.substring(0,10)}</td>
-                    <td className="px-3 py-2 text-end font-mono text-xs">{l.rentAmountSar.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+            <>
+              <table className="w-full text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50 text-left">
+                  <tr>
+                    <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Lease #</th>
+                    <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Vehicle</th>
+                    <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Plate</th>
+                    <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Driver</th>
+                    <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Status</th>
+                    <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Type</th>
+                    <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Period</th>
+                    <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase text-end">Rent (SAR)</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {leases.map((l) => (
+                    <tr key={l.id}
+                      className={`cursor-pointer border-t border-slate-100 transition ${selectedLease?.id === l.id ? 'bg-brand-50 ring-1 ring-inset ring-brand-300' : 'hover:bg-brand-50/40'}`}
+                      onClick={() => setSelectedLease(selectedLease?.id === l.id ? null : l)}
+                    >
+                      <td className="px-3 py-2 font-mono text-xs font-semibold text-brand-700">{l.leaseNumber}</td>
+                      <td className="px-3 py-2 text-xs text-slate-700">{l.vehicleMakeModel}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-slate-600">{l.vehiclePlate}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600">{l.primaryDriverName ?? '—'}</td>
+                      <td className="px-3 py-2"><Badge tone={LEASE_TONES[l.status] ?? 'slate'}>{(t.leases.statuses as Record<string, string>)[l.status] ?? l.status}</Badge></td>
+                      <td className="px-3 py-2 text-xs text-slate-600">{l.contractTypeCode}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600">{l.contractStartUtc.substring(0,10)} → {l.contractEndUtc.substring(0,10)}</td>
+                      <td className="px-3 py-2 text-end font-mono text-xs">{l.rentAmountSar.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {selectedLease && (
+                <div className="border-t border-slate-200 bg-slate-50/80 p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Selected Lease</p>
+                      <p className="mt-1 font-mono text-sm font-bold text-brand-700">{selectedLease.leaseNumber}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <SecondaryButton onClick={() => router.push(`/leases/${selectedLease.id}`)} className="px-2 py-1 text-xs">Open Full Details</SecondaryButton>
+                      <SecondaryButton onClick={() => setSelectedLease(null)} className="px-2 py-1 text-xs">Close</SecondaryButton>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm md:grid-cols-4">
+                    <div><span className="text-xs text-slate-500">Customer</span><p className="text-xs font-medium text-slate-900">{selectedLease.customerDisplayName}</p></div>
+                    <div><span className="text-xs text-slate-500">Vehicle</span><p className="text-xs font-medium text-slate-900">{selectedLease.vehicleMakeModel}</p></div>
+                    <div><span className="text-xs text-slate-500">Plate</span><p className="font-mono text-xs text-slate-900">{selectedLease.vehiclePlate}</p></div>
+                    <div><span className="text-xs text-slate-500">Driver</span><p className="text-xs font-medium text-slate-900">{selectedLease.primaryDriverName ?? '—'}</p></div>
+                    <div><span className="text-xs text-slate-500">Status</span><p className="text-xs"><Badge tone={LEASE_TONES[selectedLease.status] ?? 'slate'}>{selectedLease.status}</Badge></p></div>
+                    <div><span className="text-xs text-slate-500">Type</span><p className="text-xs text-slate-900">{selectedLease.contractTypeCode}</p></div>
+                    <div><span className="text-xs text-slate-500">Period</span><p className="text-xs text-slate-900">{selectedLease.contractStartUtc.substring(0,10)} → {selectedLease.contractEndUtc.substring(0,10)}</p></div>
+                    <div><span className="text-xs text-slate-500">Rent</span><p className="font-mono text-xs text-slate-900">SAR {selectedLease.rentAmountSar.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+                    <div><span className="text-xs text-slate-500">Branch</span><p className="text-xs text-slate-900">{selectedLease.workingBranchName}</p></div>
+                    {selectedLease.tajeerContractNumber && <div><span className="text-xs text-slate-500">Tajeer #</span><p className="font-mono text-xs text-slate-900">{selectedLease.tajeerContractNumber}</p></div>}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </Card>
       )}
@@ -290,6 +372,41 @@ export default function CustomerDetailPage() {
                 })}
               </tbody>
             </table>
+          )}
+        </Card>
+      )}
+
+      {/* Audit tab */}
+      {tab === 'audit' && (
+        <Card className="overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+            <h3 className="text-sm font-semibold text-slate-700">Audit Trail</h3>
+            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-600">{auditEvents.length}</span>
+          </div>
+          {auditEvents.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-slate-500">No audit events recorded.</p>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {auditEvents.map((ev) => (
+                <div key={ev.id} className="flex items-start gap-3 px-4 py-3">
+                  <div className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand-400" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={AUDIT_TONES[ev.action] ?? 'slate'}>{ev.action}</Badge>
+                      <span className="text-xs font-medium text-slate-700">{ev.performedBy}</span>
+                      <span className="text-xs text-slate-400">{new Date(ev.performedAtUtc).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    {(ev.previousValue || ev.newValue) && (
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {ev.previousValue && <span className="line-through me-2">{ev.previousValue}</span>}
+                        {ev.newValue && <span className="text-green-700">{ev.newValue}</span>}
+                      </p>
+                    )}
+                    {ev.comment && <p className="mt-0.5 text-xs italic text-slate-500">&ldquo;{ev.comment}&rdquo;</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </Card>
       )}
