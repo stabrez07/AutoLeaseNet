@@ -6,6 +6,7 @@ import {
   bff,
   type LeaseDetail, type DamageRecord, type TrafficViolation,
   type Invoice, type CreateDamageRecordRequest, type CreateTrafficViolationRequest,
+  type VehicleSummary, type SwitchVehicleRequest,
 } from '../../../lib/bff-client'
 import { Badge, Card, ErrorBox, PageHeader, PrimaryButton, SecondaryButton, Spinner } from '../../../components/ui'
 
@@ -404,6 +405,33 @@ export default function LeaseDetailPage() {
   const [tab, setTab] = useState<Tab>('overview')
   const [operating, setOperating] = useState(false)
 
+  // Vehicle switch state
+  const [showSwitch, setShowSwitch] = useState(false)
+  const [availableVehicles, setAvailableVehicles] = useState<VehicleSummary[]>([])
+  const [switchForm, setSwitchForm] = useState({ newVehicleId: '', reason: 'ServiceVehicle', odometer: 0, notes: '' })
+  const [switchBusy, setSwitchBusy] = useState(false)
+  const [switchError, setSwitchError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (showSwitch) {
+      bff.getVehicles(1, 50, undefined, 1).then((r) => setAvailableVehicles(r.items)).catch(() => {})
+    }
+  }, [showSwitch])
+
+  async function handleSwitchVehicle() {
+    if (!switchForm.newVehicleId || !switchForm.notes.trim()) { setSwitchError('Select a vehicle and provide notes for audit.'); return }
+    setSwitchBusy(true); setSwitchError(null)
+    try {
+      const res = await bff.switchLeaseVehicle(id, switchForm as SwitchVehicleRequest, crypto.randomUUID())
+      if (!res.success) throw new Error(res.errorMessage ?? 'Switch failed')
+      const updated = await bff.getLeaseById(id)
+      setLease(updated)
+      setShowSwitch(false)
+      setSwitchForm({ newVehicleId: '', reason: 'ServiceVehicle', odometer: 0, notes: '' })
+    } catch (e) { setSwitchError((e as Error).message) }
+    finally { setSwitchBusy(false) }
+  }
+
   useEffect(() => {
     if (!id) return
     bff.getLeaseById(id).then(setLease).catch((e: Error) => setError(e.message)).finally(() => setLoading(false))
@@ -514,11 +542,55 @@ export default function LeaseDetailPage() {
             </Card>
 
             <Card className="p-4">
-              <SectionHdr>Vehicle</SectionHdr>
+              <div className="flex items-center justify-between">
+                <SectionHdr>Vehicle</SectionHdr>
+                {(lease.status === 'Active' || lease.status === 'Extended') && (
+                  <SecondaryButton onClick={() => setShowSwitch((v) => !v)} className="px-2 py-1 text-xs">
+                    {showSwitch ? 'Cancel' : 'Switch Vehicle'}
+                  </SecondaryButton>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-x-6 gap-y-3">
                 <Field label="Plate" value={lease.vehiclePlate} mono />
                 <Field label="Make / Model" value={lease.vehicleMakeModel} />
               </div>
+              {showSwitch && (
+                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-amber-700">Switch to Temporary Vehicle</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-600">Replacement Vehicle</label>
+                      <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={switchForm.newVehicleId} onChange={(e) => setSwitchForm((f) => ({ ...f, newVehicleId: e.target.value }))}>
+                        <option value="">— Select vehicle —</option>
+                        {availableVehicles.map((v) => <option key={v.id} value={v.id}>{v.plateNumber} — {v.make} {v.model} ({v.modelYear})</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-600">Reason</label>
+                      <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={switchForm.reason} onChange={(e) => setSwitchForm((f) => ({ ...f, reason: e.target.value }))}>
+                        <option value="ServiceVehicle">Service Vehicle (repair/maintenance)</option>
+                        <option value="Replacement">Replacement (accident/damage)</option>
+                        <option value="PreLease">Pre-Lease (upgrade/downgrade)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-600">Current Odometer (km)</label>
+                      <input type="number" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={switchForm.odometer} onChange={(e) => setSwitchForm((f) => ({ ...f, odometer: Number(e.target.value) }))} />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-600">Notes / Comment</label>
+                      <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={switchForm.notes} onChange={(e) => setSwitchForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Reason details for audit..." />
+                    </div>
+                  </div>
+                  {switchError && <p className="mt-2 text-sm text-red-600">{switchError}</p>}
+                  <div className="mt-3 flex gap-2">
+                    <PrimaryButton onClick={handleSwitchVehicle} disabled={switchBusy || !switchForm.newVehicleId} className="px-4 py-2 text-sm">
+                      {switchBusy ? 'Switching...' : 'Confirm Switch'}
+                    </PrimaryButton>
+                    <SecondaryButton onClick={() => setShowSwitch(false)} className="px-3 py-2 text-sm">Cancel</SecondaryButton>
+                  </div>
+                </div>
+              )}
             </Card>
 
             <Card className="p-4">
@@ -540,7 +612,7 @@ export default function LeaseDetailPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50/80 border-b border-slate-200">
                     <tr>
-                      {['Type', 'Date', 'Odometer', 'Condition', 'Inspector', 'Notes'].map((h) => (
+                      {['Type', 'Date', 'Odometer', 'Condition', 'Veh. Type', 'Sub Type', 'Inspector', 'Notes'].map((h) => (
                         <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-slate-600">{h}</th>
                       ))}
                     </tr>
@@ -552,6 +624,8 @@ export default function LeaseDetailPage() {
                         <td className="px-3 py-2 text-slate-600">{safeDate(ins.inspectedAtUtc)}</td>
                         <td className="px-3 py-2 font-mono text-xs">{ins.odometer.toLocaleString()} km</td>
                         <td className="px-3 py-2"><Badge tone={ins.conditionCode === 'Good' ? 'green' : ins.conditionCode === 'Damaged' ? 'red' : 'amber'}>{ins.conditionCode}</Badge></td>
+                        <td className="px-3 py-2"><Badge tone={ins.vehicleAssignmentType === 'Temporary' ? 'amber' : 'green'}>{ins.vehicleAssignmentType}</Badge></td>
+                        <td className="px-3 py-2 text-xs text-slate-600">{ins.vehicleSubType ?? '—'}</td>
                         <td className="px-3 py-2 text-slate-600">{ins.inspector}</td>
                         <td className="px-3 py-2 text-slate-500 text-xs">{ins.notes ?? '—'}</td>
                       </tr>

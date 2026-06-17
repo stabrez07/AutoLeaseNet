@@ -757,6 +757,13 @@ class BffClient {
   getVehicleLeases(vehicleId: string) {
     return this.getJson<LeaseSummary[]>(`/api/v1/vehicles/${vehicleId}/leases`)
   }
+
+  // ─── Vehicle Switch ─────────────────────────────────────────────────────────
+  switchLeaseVehicle(leaseId: string, body: SwitchVehicleRequest, idempotencyKey: string) {
+    return this.postJson<SwitchVehicleResult, SwitchVehicleRequest>(
+      `/api/v1/leases/${leaseId}/switch-vehicle`, body, { 'Idempotency-Key': idempotencyKey },
+    )
+  }
   getDriverCurrentLease(driverId: string) {
     return this.getJson<LeaseSummary | null>(`/api/v1/drivers/${driverId}/current-lease`)
   }
@@ -1111,6 +1118,21 @@ export interface AuditEvent {
   previousValue: string | null
   newValue: string | null
   comment: string | null
+}
+
+export interface SwitchVehicleRequest {
+  newVehicleId: string
+  reason: string // ServiceVehicle | PreLease | Replacement
+  odometer: number
+  notes: string
+}
+
+export interface SwitchVehicleResult {
+  success: boolean
+  inspectionId: string | null
+  previousVehicleId: string
+  newVehicleId: string
+  errorMessage: string | null
 }
 
 export interface DeleteResult {
@@ -2024,6 +2046,54 @@ class MockBffClient {
       .filter((l) => l.vehicleId === vehicleId)
       .map(({ inspections, incidents, rentPolicyId, paidAmountSar, vatAmountSar, totalAmountSar, remainingAmountSar, allowedKmPerDay, paymentMethodCode, issuedAtUtc, suspendedAtUtc, resumedAtUtc, closedAtUtc, cancelledAtUtc, tajeerStatus, tajeerIssuanceUrl, zatcaSubmissionStatus, zatcaInvoiceNumber, ...s }) => s)
     return Promise.resolve(result)
+  }
+
+  switchLeaseVehicle(leaseId: string, body: SwitchVehicleRequest, _idempotencyKey: string): Promise<SwitchVehicleResult> {
+    const lease = this.state.leases.find((l) => l.id === leaseId)
+    if (!lease) throw new Error('Lease not found')
+    const newVehicle = this.state.vehicles.find((v) => v.id === body.newVehicleId)
+    if (!newVehicle) throw new Error('Vehicle not found')
+    const previousVehicleId = lease.vehicleId
+    const previousVehicle = this.state.vehicles.find((v) => v.id === previousVehicleId)
+    // Record checkout of old vehicle
+    lease.inspections.push({
+      id: mockId('insp', Date.now()),
+      type: 'CheckIn',
+      inspectedAtUtc: new Date().toISOString(),
+      odometer: body.odometer,
+      conditionCode: 'Good',
+      notes: `Vehicle switched out: ${body.notes}`,
+      branch: lease.workingBranchName,
+      inspector: 'Current User',
+      vehicleAssignmentType: 'Permanent',
+      vehicleSubType: null,
+      switchedFromVehicleId: null,
+      switchedToVehicleId: body.newVehicleId,
+      images: [],
+    })
+    // Record checkout of new vehicle
+    lease.inspections.push({
+      id: mockId('insp', Date.now() + 1),
+      type: 'CheckOut',
+      inspectedAtUtc: new Date().toISOString(),
+      odometer: newVehicle.currentKm,
+      conditionCode: 'Good',
+      notes: `Temporary vehicle assigned: ${body.reason}. ${body.notes}`,
+      branch: lease.workingBranchName,
+      inspector: 'Current User',
+      vehicleAssignmentType: 'Temporary',
+      vehicleSubType: body.reason,
+      switchedFromVehicleId: previousVehicleId,
+      switchedToVehicleId: null,
+      images: [],
+    })
+    // Update lease vehicle
+    if (previousVehicle) previousVehicle.status = 'InService'
+    newVehicle.status = 'OnRent'
+    lease.vehicleId = body.newVehicleId
+    lease.vehiclePlate = `${newVehicle.plateLetters} ${newVehicle.plateNumber}`
+    lease.vehicleMakeModel = `${newVehicle.make} ${newVehicle.model} (${newVehicle.modelYear})`
+    return Promise.resolve({ success: true, inspectionId: mockId('insp', Date.now() + 1), previousVehicleId, newVehicleId: body.newVehicleId, errorMessage: null })
   }
 
   // ─── Delete operations ─────────────────────────────────────────────────────
