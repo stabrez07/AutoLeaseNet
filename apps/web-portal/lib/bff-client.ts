@@ -1042,6 +1042,11 @@ export interface LeaseInspection {
   notes: string | null
   branch: string
   inspector: string
+  vehicleAssignmentType: string // Permanent | Temporary
+  vehicleSubType: string | null // ServiceVehicle | PreLease | Replacement
+  switchedFromVehicleId: string | null
+  switchedToVehicleId: string | null
+  images: string[]
 }
 
 export interface LeaseIncident {
@@ -1534,6 +1539,8 @@ function buildMockState(): MockState {
           inspectedAtUtc: contractStart.toISOString(),
           odometer: vehicle.currentKm - 5000, conditionCode: 'Good',
           notes: 'Vehicle checked out — no damage.', branch: pick(branches, i).nameEn, inspector: `Staff ${i + 1}`,
+          vehicleAssignmentType: 'Permanent', vehicleSubType: null, switchedFromVehicleId: null, switchedToVehicleId: null,
+          images: [`https://cdn.imagin.studio/getimage?customer=img&make=${vehicle.make.toLowerCase()}&modelFamily=${vehicle.model.toLowerCase().replace(/ /g, '-')}&angle=29&width=400`],
         },
         ...(isClosed ? [{
           id: mockId('insp', i * 2 + 2), type: 'CheckIn',
@@ -1541,6 +1548,8 @@ function buildMockState(): MockState {
           odometer: vehicle.currentKm, conditionCode: pick(CONDITIONS, i),
           notes: pick(CONDITIONS, i) === 'Damaged' ? 'Minor scratches on rear bumper.' : 'Returned in good condition.',
           branch: pick(branches, i).nameEn, inspector: `Staff ${i + 2}`,
+          vehicleAssignmentType: 'Permanent', vehicleSubType: null, switchedFromVehicleId: null, switchedToVehicleId: null,
+          images: [`https://cdn.imagin.studio/getimage?customer=img&make=${vehicle.make.toLowerCase()}&modelFamily=${vehicle.model.toLowerCase().replace(/ /g, '-')}&angle=13&width=400`],
         }] : []),
       ] : [],
       incidents: hasIncident ? [{
