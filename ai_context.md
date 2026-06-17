@@ -475,6 +475,55 @@ Per CLAUDE.md + the user's superpowers workflow adoption (see `MEMORY.md`):
 
 ## Last updated
 
+2026-06-18 — **Mock UI comprehensive build** on branch `feat/mock-ui-seed-mode`.
+All frontend work uses `USE_MOCK_BFF=true` (no .NET backend required). Key deliverables:
+
+**Navigation**: Sidebar layout with 4 grouped sections (Lease Operations, Fleet,
+Finance & Accounting, Administration) + SVG icons + mobile hamburger + "Auto Lead
+Company" top bar. Replaced flat nav bar entirely.
+
+**Vehicles**: DataTable with Status/BodyType/FuelType filters, Imagin Studio CDN
+thumbnails. Vehicle detail page has hero photo + Contracts tab (lease history) +
+service records + images. Vehicle switch from permanent to temporary on active leases
+(creates CheckIn/CheckOut inspections with vehicle assignment tracking).
+
+**Invoices (KSA compliance)**: A4 print layout with company logo (AL block), ZATCA QR
+placeholder, 9-column line items (Line #, Plate EN, Plate AR, Description, Qty, Unit
+Price, VAT%, VAT Amt, Total). Damage charges and traffic violation charges included
+as invoice line items per billing period. Monthly deduplication guard prevents
+duplicate invoices. Invoice list has outstanding totals bar, 6 filter controls
+(search, status, date range, customer, vehicle/plate), quick detail panel.
+Supplier fields: "Auto Lead Company", CR 1010012345, VAT 300123456789003.
+
+**Customers**: Compact 10-column DataTable with Excel-style column filters (Type,
+City, Status). Inline detail panel on row selection. Realistic Saudi company names
+(Aramco, SABIC, STC, Al Rajhi, Almarai, etc.) with contact persons. Company header
+card (CR, VAT, credit limit, contact person). Audit trail tab. Action confirmation
+with required audit comment.
+
+**Customer Portal** (port 3001): My Invoices module (list + KSA print detail, no
+generate button). SecondaryButton/SearchInput components added.
+
+**Mock data**: 20 Saudi companies, 20 realistic Arab person names, "Quick Lead"
+service center branches across 15 KSA cities, 350 leases, 600 vehicles, 800
+drivers, 500 customers, invoices with damage/violation line items.
+
+**Interfaces added**: AuditEvent, SwitchVehicleRequest/Result, InvoiceLine extended
+(lineNumber, plateNumberEn, plateNumberAr), Invoice extended (vehiclePlateAr,
+supplierName, supplierCrNo, supplierVatNo, quotationNumber, poNumber),
+CustomerSummary extended (email, CR, VAT, contactPerson, city), CustomerDetail
+extended (5 contact person fields), LeaseInspection extended (vehicleAssignmentType,
+vehicleSubType, switchedFromVehicleId, switchedToVehicleId, images).
+
+**Pending from user requirements (items 4,5,9-14)**:
+- Payments page with full payment records
+- Invoice generation with warnings/checks and customer-level grouping
+- Bulk generation by customer/contract/city/region
+- Vehicle service import for remote/emergency situations
+- Admin invoicing rules/setup page
+- Apply sidebar navigation to customer portal
+- Invoice generation as a complete process with pending-item checks
+
 2026-06-07 — **Quotation persistence: EF config + migration + RLS** (follows the
 aggregate-foundation PR #31). `QuotationConfiguration.cs` maps all four entities
 (`Quotation` root with backing-field navigations to `QuotationLine` /
