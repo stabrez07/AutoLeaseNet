@@ -290,7 +290,10 @@ export type InvoiceStatus = 'Draft' | 'Issued' | 'PartiallyPaid' | 'Paid' | 'Ove
 
 export interface InvoiceLine {
   id: string
+  lineNumber: number
   description: string
+  plateNumberEn: string | null
+  plateNumberAr: string | null
   quantity: number
   unitPriceSar: number
   vatPercent: number
@@ -306,7 +309,13 @@ export interface Invoice {
   customerId: string
   customerDisplayName: string
   vehiclePlate: string
+  vehiclePlateAr: string
   vehicleMakeModel: string
+  supplierName: string
+  supplierCrNo: string
+  supplierVatNo: string
+  quotationNumber: string | null
+  poNumber: string | null
   billingPeriodStart: string  // YYYY-MM-DD
   billingPeriodEnd: string    // YYYY-MM-DD
   issuedDate: string          // YYYY-MM-DD
@@ -738,6 +747,9 @@ class BffClient {
   }
   getVehicleCurrentLease(vehicleId: string) {
     return this.getJson<LeaseSummary | null>(`/api/v1/vehicles/${vehicleId}/current-lease`)
+  }
+  getVehicleLeases(vehicleId: string) {
+    return this.getJson<LeaseSummary[]>(`/api/v1/vehicles/${vehicleId}/leases`)
   }
   getDriverCurrentLease(driverId: string) {
     return this.getJson<LeaseSummary | null>(`/api/v1/drivers/${driverId}/current-lease`)
@@ -1538,18 +1550,74 @@ function buildMockState(): MockState {
   })
 
   // ─── Invoices ─────────────────────────────────────────────────────────────────
+  const SUPPLIER_NAME = 'Auto Lead Company'
+  const SUPPLIER_CR = '1010012345'
+  const SUPPLIER_VAT = '300123456789003'
+
   const invoices: Invoice[] = leases.flatMap((l, i) => {
     const isActive = l.status === 'Active' || l.status === 'Extended' || l.status === 'Closed'
     if (!isActive) return []
     const start = new Date(l.contractStartUtc)
     const end = new Date(l.contractEndUtc)
     const months = Math.min(Math.ceil((end.getTime() - start.getTime()) / (30 * 86400000)), 8)
+    const vehicle = vehicles.find((v) => v.id === l.vehicleId)
+    const plateAr = vehicle ? `${vehicle.plateLetters} ${vehicle.plateNumber}` : l.vehiclePlate
     return Array.from({ length: months }).map((_, m) => {
       const periodStart = new Date(start.getTime() + m * 30 * 86400000)
       const periodEnd = new Date(periodStart.getTime() + 29 * 86400000)
+      const pStartStr = periodStart.toISOString().substring(0, 10)
+      const pEndStr = periodEnd.toISOString().substring(0, 10)
       const rent = l.rentAmountSar
-      const vat = Math.round(rent * 0.15 * 100) / 100
-      const total = rent + vat
+      const rentVat = Math.round(rent * 0.15 * 100) / 100
+
+      // Damage charges in this period
+      const periodDamages = damages.filter((d) => d.leaseId === l.id && d.chargeToCustomer && d.chargedAmountSar && d.occurredAt >= pStartStr && d.occurredAt <= pEndStr)
+      // Violation charges in this period (company-responsible ones)
+      const periodViolations = violations.filter((v) => v.leaseId === l.id && v.responsibleParty === 'Customer' && v.occurredAt >= pStartStr && v.occurredAt <= pEndStr)
+
+      let lineNum = 1
+      const lines: InvoiceLine[] = [
+        {
+          id: mockId('invl', i * 8 + m + 1),
+          lineNumber: lineNum++,
+          description: `Monthly Rent — ${pStartStr.substring(0, 7)} (${l.vehicleMakeModel})`,
+          plateNumberEn: l.vehiclePlate,
+          plateNumberAr: plateAr,
+          quantity: 1, unitPriceSar: rent, vatPercent: 15,
+          lineTotalSar: rent, vatAmountSar: rentVat,
+        },
+        ...periodDamages.map((d) => {
+          const amt = d.chargedAmountSar!
+          const dVat = Math.round(amt * 0.15 * 100) / 100
+          return {
+            id: mockId('invl-dmg', i * 8 + m + 1),
+            lineNumber: lineNum++,
+            description: `Damage Charge — ${d.type} (${d.location}) ${d.occurredAt}`,
+            plateNumberEn: l.vehiclePlate,
+            plateNumberAr: plateAr,
+            quantity: 1, unitPriceSar: amt, vatPercent: 15,
+            lineTotalSar: amt, vatAmountSar: dVat,
+          }
+        }),
+        ...periodViolations.map((v) => {
+          const amt = v.fineAmountSar
+          const vVat = Math.round(amt * 0.15 * 100) / 100
+          return {
+            id: mockId('invl-viol', i * 8 + m + 1),
+            lineNumber: lineNum++,
+            description: `Traffic Violation — ${v.type} (${v.authority}) ${v.occurredAt}`,
+            plateNumberEn: l.vehiclePlate,
+            plateNumberAr: plateAr,
+            quantity: 1, unitPriceSar: amt, vatPercent: 15,
+            lineTotalSar: amt, vatAmountSar: vVat,
+          }
+        }),
+      ]
+
+      const subTotal = lines.reduce((s, ln) => s + ln.lineTotalSar, 0)
+      const vatTotal = lines.reduce((s, ln) => s + ln.vatAmountSar, 0)
+      const total = subTotal + vatTotal
+
       const invStatuses: InvoiceStatus[] = l.status === 'Closed' ? ['Paid'] :
         m < months - 1 ? ['Paid', 'Paid', 'Paid', 'PartiallyPaid'] : ['Issued', 'Issued', 'Overdue', 'Draft']
       const st = pick(invStatuses, i + m)
@@ -1562,20 +1630,21 @@ function buildMockState(): MockState {
         customerId: l.customerId,
         customerDisplayName: l.customerDisplayName,
         vehiclePlate: l.vehiclePlate,
+        vehiclePlateAr: plateAr,
         vehicleMakeModel: l.vehicleMakeModel,
-        billingPeriodStart: periodStart.toISOString().substring(0, 10),
-        billingPeriodEnd: periodEnd.toISOString().substring(0, 10),
-        issuedDate: periodStart.toISOString().substring(0, 10),
+        supplierName: SUPPLIER_NAME,
+        supplierCrNo: SUPPLIER_CR,
+        supplierVatNo: SUPPLIER_VAT,
+        quotationNumber: i % 5 === 0 ? `QT-${String(Math.floor(i / 5) + 1).padStart(6, '0')}` : null,
+        poNumber: i % 7 === 0 ? `PO-${String(i + 1000).padStart(6, '0')}` : null,
+        billingPeriodStart: pStartStr,
+        billingPeriodEnd: pEndStr,
+        issuedDate: pStartStr,
         dueDate: new Date(periodStart.getTime() + 10 * 86400000).toISOString().substring(0, 10),
         status: st,
-        lines: [{
-          id: mockId('invl', i * 8 + m + 1),
-          description: `Monthly Rent — ${periodStart.toISOString().substring(0, 7)} (${l.vehicleMakeModel})`,
-          quantity: 1, unitPriceSar: rent, vatPercent: 15,
-          lineTotalSar: rent, vatAmountSar: vat,
-        }],
-        subTotalSar: rent,
-        vatAmountSar: vat,
+        lines,
+        subTotalSar: subTotal,
+        vatAmountSar: vatTotal,
         totalSar: total,
         paidAmountSar: paid,
         balanceSar: Math.round((total - paid) * 100) / 100,
@@ -1866,6 +1935,12 @@ class MockBffClient {
     const { inspections, incidents, rentPolicyId, paidAmountSar, vatAmountSar, totalAmountSar, remainingAmountSar, allowedKmPerDay, paymentMethodCode, issuedAtUtc, suspendedAtUtc, resumedAtUtc, closedAtUtc, cancelledAtUtc, tajeerStatus, tajeerIssuanceUrl, zatcaSubmissionStatus, zatcaInvoiceNumber, ...s } = lease
     return Promise.resolve(s)
   }
+  getVehicleLeases(vehicleId: string): Promise<LeaseSummary[]> {
+    const result = this.state.leases
+      .filter((l) => l.vehicleId === vehicleId)
+      .map(({ inspections, incidents, rentPolicyId, paidAmountSar, vatAmountSar, totalAmountSar, remainingAmountSar, allowedKmPerDay, paymentMethodCode, issuedAtUtc, suspendedAtUtc, resumedAtUtc, closedAtUtc, cancelledAtUtc, tajeerStatus, tajeerIssuanceUrl, zatcaSubmissionStatus, zatcaInvoiceNumber, ...s }) => s)
+    return Promise.resolve(result)
+  }
 
   // ─── Delete operations ─────────────────────────────────────────────────────
 
@@ -2066,21 +2141,40 @@ class MockBffClient {
   generateInvoice(body: GenerateInvoiceRequest, _idempotencyKey: string): Promise<Invoice> {
     const lease = this.state.leases.find((l) => l.id === body.leaseId)
     if (!lease) throw new Error('Lease not found')
+    // Deduplication: reject if invoice already exists for this lease+period
+    const exists = this.state.invoices.find((inv) => inv.leaseId === body.leaseId && inv.billingPeriodStart === body.billingPeriodStart)
+    if (exists) throw new Error(`Invoice already exists for lease ${lease.leaseNumber} billing period ${body.billingPeriodStart} (${exists.invoiceNumber})`)
+    const vehicle = this.state.vehicles.find((v) => v.id === lease.vehicleId)
+    const plateAr = vehicle ? `${vehicle.plateLetters} ${vehicle.plateNumber}` : lease.vehiclePlate
     const rent = lease.rentAmountSar
-    const vat = Math.round(rent * 0.15 * 100) / 100
-    const total = rent + vat
+    const rentVat = Math.round(rent * 0.15 * 100) / 100
+
+    // Damage and violation charges in period
+    const periodDamages = this.state.damages.filter((d) => d.leaseId === lease.id && d.chargeToCustomer && d.chargedAmountSar && d.occurredAt >= body.billingPeriodStart && d.occurredAt <= body.billingPeriodEnd)
+    const periodViolations = this.state.violations.filter((v) => v.leaseId === lease.id && v.responsibleParty === 'Customer' && v.occurredAt >= body.billingPeriodStart && v.occurredAt <= body.billingPeriodEnd)
+
+    let lineNum = 1
+    const lines: InvoiceLine[] = [
+      { id: mockId('invl', this.state.invoices.length + 1), lineNumber: lineNum++, description: `Monthly Rent — ${body.billingPeriodStart.substring(0, 7)} (${lease.vehicleMakeModel})`, plateNumberEn: lease.vehiclePlate, plateNumberAr: plateAr, quantity: 1, unitPriceSar: rent, vatPercent: 15, lineTotalSar: rent, vatAmountSar: rentVat },
+      ...periodDamages.map((d, di) => { const amt = d.chargedAmountSar!; const dv = Math.round(amt * 0.15 * 100) / 100; return { id: mockId('invl-dmg', this.state.invoices.length * 10 + di), lineNumber: lineNum++, description: `Damage — ${d.type} ${d.occurredAt}`, plateNumberEn: lease.vehiclePlate, plateNumberAr: plateAr, quantity: 1, unitPriceSar: amt, vatPercent: 15, lineTotalSar: amt, vatAmountSar: dv } }),
+      ...periodViolations.map((v, vi) => { const amt = v.fineAmountSar; const vv = Math.round(amt * 0.15 * 100) / 100; return { id: mockId('invl-viol', this.state.invoices.length * 10 + vi), lineNumber: lineNum++, description: `Violation — ${v.type} ${v.occurredAt}`, plateNumberEn: lease.vehiclePlate, plateNumberAr: plateAr, quantity: 1, unitPriceSar: amt, vatPercent: 15, lineTotalSar: amt, vatAmountSar: vv } }),
+    ]
+    const subTotal = lines.reduce((s, l) => s + l.lineTotalSar, 0)
+    const vatTotal = lines.reduce((s, l) => s + l.vatAmountSar, 0)
+    const total = subTotal + vatTotal
     const inv: Invoice = {
       id: mockId('inv', this.state.invoices.length + 1),
       invoiceNumber: `INV-${String(this.state.invoices.length + 1).padStart(7, '0')}`,
       leaseId: lease.id, leaseNumber: lease.leaseNumber,
       customerId: lease.customerId, customerDisplayName: lease.customerDisplayName,
-      vehiclePlate: lease.vehiclePlate, vehicleMakeModel: lease.vehicleMakeModel,
+      vehiclePlate: lease.vehiclePlate, vehiclePlateAr: plateAr, vehicleMakeModel: lease.vehicleMakeModel,
+      supplierName: 'Auto Lead Company', supplierCrNo: '1010012345', supplierVatNo: '300123456789003',
+      quotationNumber: null, poNumber: null,
       billingPeriodStart: body.billingPeriodStart, billingPeriodEnd: body.billingPeriodEnd,
       issuedDate: new Date().toISOString().substring(0, 10),
       dueDate: new Date(Date.now() + 10 * 86400000).toISOString().substring(0, 10),
-      status: 'Issued',
-      lines: [{ id: mockId('invl', this.state.invoices.length + 1), description: `Monthly Rent — ${body.billingPeriodStart.substring(0, 7)}`, quantity: 1, unitPriceSar: rent, vatPercent: 15, lineTotalSar: rent, vatAmountSar: vat }],
-      subTotalSar: rent, vatAmountSar: vat, totalSar: total, paidAmountSar: 0, balanceSar: total,
+      status: 'Issued', lines,
+      subTotalSar: subTotal, vatAmountSar: vatTotal, totalSar: total, paidAmountSar: 0, balanceSar: total,
       zatcaInvoiceNumber: null, notes: body.notes ?? null, createdAtUtc: new Date().toISOString(),
     }
     this.state.invoices.unshift(inv)
@@ -2089,27 +2183,41 @@ class MockBffClient {
   bulkGenerateInvoices(billingPeriodStart: string, billingPeriodEnd: string, _idempotencyKey: string): Promise<BulkGenerateResult> {
     const activeLeases = this.state.leases.filter((l) => l.status === 'Active' || l.status === 'Extended')
     const ids: string[] = []
+    let skipped = 0
     activeLeases.forEach((l) => {
       const exists = this.state.invoices.some((inv) => inv.leaseId === l.id && inv.billingPeriodStart === billingPeriodStart)
-      if (!exists) {
-        const rent = l.rentAmountSar; const vat = Math.round(rent * 0.15 * 100) / 100; const total = rent + vat
-        const inv: Invoice = {
-          id: mockId('inv', this.state.invoices.length + ids.length + 1),
-          invoiceNumber: `INV-${String(this.state.invoices.length + ids.length + 1).padStart(7, '0')}`,
-          leaseId: l.id, leaseNumber: l.leaseNumber, customerId: l.customerId, customerDisplayName: l.customerDisplayName,
-          vehiclePlate: l.vehiclePlate, vehicleMakeModel: l.vehicleMakeModel,
-          billingPeriodStart, billingPeriodEnd,
-          issuedDate: new Date().toISOString().substring(0, 10),
-          dueDate: new Date(Date.now() + 10 * 86400000).toISOString().substring(0, 10),
-          status: 'Issued',
-          lines: [{ id: mockId('invl', ids.length + 1), description: `Monthly Rent — ${billingPeriodStart.substring(0, 7)}`, quantity: 1, unitPriceSar: rent, vatPercent: 15, lineTotalSar: rent, vatAmountSar: vat }],
-          subTotalSar: rent, vatAmountSar: vat, totalSar: total, paidAmountSar: 0, balanceSar: total,
-          zatcaInvoiceNumber: null, notes: null, createdAtUtc: new Date().toISOString(),
-        }
-        this.state.invoices.unshift(inv); ids.push(inv.id)
+      if (exists) { skipped++; return }
+      const vehicle = this.state.vehicles.find((v) => v.id === l.vehicleId)
+      const plateAr = vehicle ? `${vehicle.plateLetters} ${vehicle.plateNumber}` : l.vehiclePlate
+      const rent = l.rentAmountSar; const rentVat = Math.round(rent * 0.15 * 100) / 100
+      const periodDamages = this.state.damages.filter((d) => d.leaseId === l.id && d.chargeToCustomer && d.chargedAmountSar && d.occurredAt >= billingPeriodStart && d.occurredAt <= billingPeriodEnd)
+      const periodViolations = this.state.violations.filter((v) => v.leaseId === l.id && v.responsibleParty === 'Customer' && v.occurredAt >= billingPeriodStart && v.occurredAt <= billingPeriodEnd)
+      let lineNum = 1
+      const lines: InvoiceLine[] = [
+        { id: mockId('invl', this.state.invoices.length + ids.length + 1), lineNumber: lineNum++, description: `Monthly Rent — ${billingPeriodStart.substring(0, 7)}`, plateNumberEn: l.vehiclePlate, plateNumberAr: plateAr, quantity: 1, unitPriceSar: rent, vatPercent: 15, lineTotalSar: rent, vatAmountSar: rentVat },
+        ...periodDamages.map((d, di) => { const amt = d.chargedAmountSar!; const dv = Math.round(amt * 0.15 * 100) / 100; return { id: mockId('invl-dmg', ids.length * 10 + di), lineNumber: lineNum++, description: `Damage — ${d.type}`, plateNumberEn: l.vehiclePlate, plateNumberAr: plateAr, quantity: 1, unitPriceSar: amt, vatPercent: 15, lineTotalSar: amt, vatAmountSar: dv } }),
+        ...periodViolations.map((v, vi) => { const amt = v.fineAmountSar; const vv = Math.round(amt * 0.15 * 100) / 100; return { id: mockId('invl-viol', ids.length * 10 + vi), lineNumber: lineNum++, description: `Violation — ${v.type}`, plateNumberEn: l.vehiclePlate, plateNumberAr: plateAr, quantity: 1, unitPriceSar: amt, vatPercent: 15, lineTotalSar: amt, vatAmountSar: vv } }),
+      ]
+      const subTotal = lines.reduce((s, ln) => s + ln.lineTotalSar, 0)
+      const vatTotal = lines.reduce((s, ln) => s + ln.vatAmountSar, 0)
+      const total = subTotal + vatTotal
+      const inv: Invoice = {
+        id: mockId('inv', this.state.invoices.length + ids.length + 1),
+        invoiceNumber: `INV-${String(this.state.invoices.length + ids.length + 1).padStart(7, '0')}`,
+        leaseId: l.id, leaseNumber: l.leaseNumber, customerId: l.customerId, customerDisplayName: l.customerDisplayName,
+        vehiclePlate: l.vehiclePlate, vehiclePlateAr: plateAr, vehicleMakeModel: l.vehicleMakeModel,
+        supplierName: 'Auto Lead Company', supplierCrNo: '1010012345', supplierVatNo: '300123456789003',
+        quotationNumber: null, poNumber: null,
+        billingPeriodStart, billingPeriodEnd,
+        issuedDate: new Date().toISOString().substring(0, 10),
+        dueDate: new Date(Date.now() + 10 * 86400000).toISOString().substring(0, 10),
+        status: 'Issued', lines,
+        subTotalSar: subTotal, vatAmountSar: vatTotal, totalSar: total, paidAmountSar: 0, balanceSar: total,
+        zatcaInvoiceNumber: null, notes: null, createdAtUtc: new Date().toISOString(),
       }
+      this.state.invoices.unshift(inv); ids.push(inv.id)
     })
-    return Promise.resolve({ generated: ids.length, skipped: activeLeases.length - ids.length, errors: [], invoiceIds: ids })
+    return Promise.resolve({ generated: ids.length, skipped, errors: [], invoiceIds: ids })
   }
   markInvoicePaid(id: string, paidAmount: number, _idempotencyKey: string): Promise<Invoice> {
     const inv = this.state.invoices.find((x) => x.id === id)

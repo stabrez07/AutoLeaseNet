@@ -1,6 +1,6 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import type { ChangeEvent, ReactNode } from 'react'
 
 export function PageHeader({
   title,
@@ -93,6 +93,46 @@ export function Badge({
     >
       {children}
     </span>
+  )
+}
+
+export function SecondaryButton({
+  children,
+  onClick,
+  type = 'button',
+}: {
+  children: ReactNode
+  onClick?: () => void
+  type?: 'button' | 'submit' | 'reset'
+}) {
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      className="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
+    >
+      {children}
+    </button>
+  )
+}
+
+export function SearchInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+}) {
+  return (
+    <input
+      type="search"
+      value={value}
+      onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
+    />
   )
 }
 

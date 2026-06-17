@@ -15,6 +15,23 @@ import {
 import { Badge, Card, ErrorBox, PageHeader, PrimaryButton, SecondaryButton, Spinner } from '../../../components/ui'
 import { VehicleBodyIcon } from '../../../components/vehicle-body-icon'
 
+// ── HeroImage ─────────────────────────────────────────────────────────────────
+
+function HeroImage({ make, model, year, color }: { make: string; model: string; year: number; color?: string }) {
+  const [err, setErr] = useState(false)
+  const makeSlug = make.toLowerCase().replace(/ /g, '-')
+  const modelSlug = model.toLowerCase().replace(/ /g, '-')
+  const COLOR_MAP: Record<string, string> = { White: 'white', Silver: 'silver', Black: 'black', Grey: 'grey', Navy: 'navy', Red: 'red', Bronze: 'bronze' }
+  const paintId = COLOR_MAP[color ?? ''] ?? 'white'
+  const src = `https://cdn.imagin.studio/getimage?customer=img&make=${makeSlug}&modelFamily=${modelSlug}&modelYear=${year}&paintId=${paintId}&angle=23&width=800`
+  if (err) return (
+    <div className="flex h-full items-center justify-center">
+      <span className="text-8xl opacity-20">🚗</span>
+    </div>
+  )
+  return <img src={src} alt={`${make} ${model}`} className="h-full w-full object-cover" onError={() => setErr(true)} />
+}
+
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 
 function Field({ label, value }: { label: string; value: string | number | boolean | null | undefined }) {
@@ -48,7 +65,7 @@ const STATUS_TONES: Record<string, 'green' | 'amber' | 'blue' | 'slate' | 'red'>
 const INPUT = 'w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500'
 const LABEL = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500'
 
-type Tab = 'details' | 'history' | 'service' | 'images'
+type Tab = 'details' | 'history' | 'service' | 'images' | 'contracts'
 
 export default function VehicleDetailPage() {
   const { t } = useLocale()
@@ -62,6 +79,7 @@ export default function VehicleDetailPage() {
   const [tab, setTab] = useState<Tab>('details')
   const [data, setData] = useState<VehicleDetail | null>(null)
   const [activeLease, setActiveLease] = useState<LeaseSummary | null | undefined>(undefined)
+  const [vehicleLeases, setVehicleLeases] = useState<LeaseSummary[]>([])
   const [historyEvents, setHistoryEvents] = useState<VehicleHistoryEvent[]>([])
   const [images, setImages] = useState<VehicleImageDto[]>([])
   const [loading, setLoading] = useState(true)
@@ -93,12 +111,14 @@ export default function VehicleDetailPage() {
       bff.getVehicleCurrentLease(id).catch(() => null),
       bff.getVehicleHistory(id).catch(() => [] as VehicleHistoryEvent[]),
       bff.getVehicleImages(id).catch(() => [] as VehicleImageDto[]),
+      bff.getVehicleLeases(id).catch(() => [] as LeaseSummary[]),
     ])
-      .then(([v, lease, hist, imgs]) => {
+      .then(([v, lease, hist, imgs, leases]) => {
         setData(v)
         setActiveLease(lease)
         setHistoryEvents(hist)
         setImages(imgs)
+        setVehicleLeases(leases)
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
@@ -174,6 +194,7 @@ export default function VehicleDetailPage() {
     { key: 'history', label: t.crudVehicles.tabs.history },
     { key: 'service', label: `${t.crudVehicles.tabs.service} (${data.serviceHistory?.length ?? 0})` },
     { key: 'images', label: `${t.crudVehicles.tabs.images} (${images.length})` },
+    { key: 'contracts', label: `Contracts (${vehicleLeases.length})` },
   ]
 
   return (
@@ -197,6 +218,13 @@ export default function VehicleDetailPage() {
           </div>
         }
       />
+
+      {/* Hero photo */}
+      {data.make && data.model && (
+        <div className="relative h-56 w-full overflow-hidden rounded-xl bg-slate-100 md:h-72">
+          <HeroImage make={data.make} model={data.model} year={data.modelYear} {...(data.color != null ? { color: data.color } : {})} />
+        </div>
+      )}
 
       {/* Hero card */}
       <Card className="p-4">
@@ -537,6 +565,59 @@ export default function VehicleDetailPage() {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* ── CONTRACTS TAB ─────────────────────────────────────────────────────── */}
+      {tab === 'contracts' && (
+        <Card className="overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+            <h3 className="text-sm font-semibold text-slate-700">Lease History</h3>
+            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-600">{vehicleLeases.length}</span>
+          </div>
+          {vehicleLeases.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-slate-500">No lease history for this vehicle.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="border-b border-slate-200 bg-white text-left">
+                  <tr>
+                    <th className="px-3 py-2 font-medium uppercase tracking-wide text-slate-500">Lease #</th>
+                    <th className="px-3 py-2 font-medium uppercase tracking-wide text-slate-500">Customer</th>
+                    <th className="px-3 py-2 font-medium uppercase tracking-wide text-slate-500">Driver</th>
+                    <th className="px-3 py-2 font-medium uppercase tracking-wide text-slate-500">Status</th>
+                    <th className="px-3 py-2 font-medium uppercase tracking-wide text-slate-500">Type</th>
+                    <th className="px-3 py-2 font-medium uppercase tracking-wide text-slate-500">Start</th>
+                    <th className="px-3 py-2 font-medium uppercase tracking-wide text-slate-500">End</th>
+                    <th className="px-3 py-2 text-right font-medium uppercase tracking-wide text-slate-500">Rent (SAR)</th>
+                    <th className="px-3 py-2 font-medium uppercase tracking-wide text-slate-500">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vehicleLeases.map((l) => {
+                    const LEASE_TONES: Record<string, 'green' | 'amber' | 'blue' | 'slate' | 'red'> = {
+                      Active: 'green', Extended: 'blue', PendingIssuance: 'amber', Suspended: 'amber', Draft: 'slate', Closed: 'slate', Cancelled: 'red',
+                    }
+                    return (
+                      <tr key={l.id} className="border-t border-slate-100 hover:bg-slate-50">
+                        <td className="px-3 py-2 font-mono font-semibold text-slate-900">{l.leaseNumber}</td>
+                        <td className="px-3 py-2 max-w-[140px] truncate text-slate-700">{l.customerDisplayName}</td>
+                        <td className="px-3 py-2 text-slate-600">{l.primaryDriverName ?? '—'}</td>
+                        <td className="px-3 py-2"><Badge tone={LEASE_TONES[l.status] ?? 'slate'}>{l.status}</Badge></td>
+                        <td className="px-3 py-2 text-slate-600">{l.contractTypeCode}</td>
+                        <td className="px-3 py-2 text-slate-600">{l.contractStartUtc.substring(0, 10)}</td>
+                        <td className="px-3 py-2 text-slate-600">{l.contractEndUtc.substring(0, 10)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-slate-600">{l.rentAmountSar.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-2">
+                          <SecondaryButton onClick={() => router.push(`/leases/${l.id}`)} className="px-2 py-1 text-xs">View</SecondaryButton>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </Card>

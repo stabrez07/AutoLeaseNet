@@ -11,6 +11,7 @@ const navItems = [
   { href: '/', key: 'dashboard' as const },
   { href: '/leases', key: 'myLeases' as const },
   { href: '/vehicles', key: 'myVehicles' as const },
+  { href: '/invoices', key: 'myInvoices' as const },
 ]
 
 export function AppShell({ children }: { children: ReactNode }) {

@@ -13,8 +13,8 @@ export const USE_MOCK_BFF =
 export interface MyLease {
   id: string
   tajeerContractNumber: number | null
-  // LeaseStatus: 0=Draft 1=SaveFailed 2=PendingIssuance 3=Active 4=Extended
-  //              5=Suspended 6=Closed 7=Cancelled 8=ExpiredDraft
+  // LeaseStatus enum: 0=Draft 1=SaveFailed 2=PendingIssuance 3=Active 4=Extended
+  //                    5=Suspended 6=Closed 7=Cancelled 8=ExpiredDraft
   status: number
   contractStartUtc: string
   contractEndUtc: string
@@ -122,6 +122,49 @@ export interface ProblemDetails {
   title?: string
   detail?: string
   status?: number
+}
+
+export type InvoiceStatus = 'Draft' | 'Issued' | 'PartiallyPaid' | 'Paid' | 'Overdue' | 'Cancelled'
+
+export interface MyInvoiceLine {
+  id: string
+  lineNumber: number
+  description: string
+  plateNumberEn: string | null
+  plateNumberAr: string | null
+  quantity: number
+  unitPriceSar: number
+  vatPercent: number
+  lineTotalSar: number
+  vatAmountSar: number
+}
+
+export interface MyInvoice {
+  id: string
+  invoiceNumber: string
+  leaseId: string
+  leaseNumber: string
+  vehiclePlate: string
+  vehiclePlateAr: string
+  vehicleMakeModel: string
+  billingPeriodStart: string
+  billingPeriodEnd: string
+  issuedDate: string
+  dueDate: string
+  status: InvoiceStatus
+  supplierName: string
+  supplierCrNo: string
+  supplierVatNo: string
+  quotationNumber: string | null
+  poNumber: string | null
+  lines: MyInvoiceLine[]
+  subTotalSar: number
+  vatAmountSar: number
+  totalSar: number
+  paidAmountSar: number
+  balanceSar: number
+  zatcaInvoiceNumber: string | null
+  notes: string | null
 }
 
 // ─── Mock state ──────────────────────────────────────────────────────────────
@@ -273,13 +316,72 @@ function buildCustomerMockState() {
     insuranceExpiryDate: v.insuranceExpiryDate,
   }))
 
-  return { leases, leaseSummaries, vehicles, vehicleSummaries }
+  const invoices: MyInvoice[] = leases.flatMap((l, i) => {
+    const isActive = l.status === 3 || l.status === 4 || l.status === 6
+    if (!isActive) return []
+    const start = new Date(l.contractStartUtc)
+    const months = Math.min(Math.ceil((new Date(l.contractEndUtc).getTime() - start.getTime()) / (30 * 86400000)), 6)
+    const vehicle = vehicles.find((v) => v.id === (l.vehicle?.id ?? ''))
+    const plateAr = vehicle ? `${vehicle.plateLetters} ${vehicle.plateNumber}` : (l.vehicle ? `${l.vehicle.plateLetters} ${l.vehicle.plateNumber}` : '')
+    const plateEn = vehicle ? `${vehicle.plateLetters} ${vehicle.plateNumber}` : ''
+    return Array.from({ length: months }).map((_, m) => {
+      const periodStart = new Date(start.getTime() + m * 30 * 86400000)
+      const pStartStr = periodStart.toISOString().substring(0, 10)
+      const pEndStr = new Date(periodStart.getTime() + 29 * 86400000).toISOString().substring(0, 10)
+      const rent = l.rentAmount
+      const vat = Math.round(rent * 0.15 * 100) / 100
+      const total = rent + vat
+      const statuses: InvoiceStatus[] = l.status === 6 ? ['Paid'] : m < months - 1 ? ['Paid', 'Paid', 'PartiallyPaid'] : ['Issued', 'Overdue']
+      const st = statuses[i % statuses.length] ?? 'Issued'
+      const paid = st === 'Paid' ? total : st === 'PartiallyPaid' ? Math.round(total * 0.5 * 100) / 100 : 0
+      return {
+        id: `my-inv-${i * 6 + m + 1}`,
+        invoiceNumber: `INV-${String(i * 6 + m + 1).padStart(7, '0')}`,
+        leaseId: l.id,
+        leaseNumber: l.tajeerContractNumber ? `LC-${l.tajeerContractNumber}` : l.id,
+        vehiclePlate: plateEn,
+        vehiclePlateAr: plateAr,
+        vehicleMakeModel: l.vehicle ? `${l.vehicle.make} ${l.vehicle.model} (${l.vehicle.modelYear})` : '',
+        billingPeriodStart: pStartStr,
+        billingPeriodEnd: pEndStr,
+        issuedDate: pStartStr,
+        dueDate: new Date(periodStart.getTime() + 10 * 86400000).toISOString().substring(0, 10),
+        status: st,
+        supplierName: 'Auto Lead Company',
+        supplierCrNo: '1010012345',
+        supplierVatNo: '300123456789003',
+        quotationNumber: null,
+        poNumber: null,
+        lines: [{
+          id: `my-invl-${i * 6 + m + 1}`,
+          lineNumber: 1,
+          description: `Monthly Rent — ${pStartStr.substring(0, 7)} (${l.vehicle ? `${l.vehicle.make} ${l.vehicle.model}` : ''})`,
+          plateNumberEn: plateEn,
+          plateNumberAr: plateAr,
+          quantity: 1,
+          unitPriceSar: rent,
+          vatPercent: 15,
+          lineTotalSar: rent,
+          vatAmountSar: vat,
+        }],
+        subTotalSar: rent,
+        vatAmountSar: vat,
+        totalSar: total,
+        paidAmountSar: paid,
+        balanceSar: Math.round((total - paid) * 100) / 100,
+        zatcaInvoiceNumber: st === 'Paid' ? `ZATCA-${String(i * 6 + m + 1).padStart(7, '0')}` : null,
+        notes: null,
+      }
+    })
+  })
+
+  return { leases, leaseSummaries, vehicles, vehicleSummaries, invoices }
 }
 
 // ─── Mock client ─────────────────────────────────────────────────────────────
 
 class MockCustomerBffClient {
-  private state = buildCustomerMockState()
+  private state: ReturnType<typeof buildCustomerMockState> = buildCustomerMockState()
 
   getMyLeases(): Promise<MyLease[]> {
     return Promise.resolve(this.state.leaseSummaries)
@@ -299,6 +401,16 @@ class MockCustomerBffClient {
     const vehicle = this.state.vehicles.find((v) => v.id === vehicleId)
     if (!vehicle) return Promise.reject(new Error('Vehicle not found'))
     return Promise.resolve(vehicle)
+  }
+
+  getMyInvoices(): Promise<MyInvoice[]> {
+    return Promise.resolve(this.state.invoices)
+  }
+
+  getMyInvoiceById(invoiceId: string): Promise<MyInvoice> {
+    const inv = this.state.invoices.find((i) => i.id === invoiceId)
+    if (!inv) return Promise.reject(new Error('Invoice not found'))
+    return Promise.resolve(inv)
   }
 }
 
@@ -352,6 +464,14 @@ class CustomerBffClient {
 
   getMyVehicleDetail(vehicleId: string) {
     return this.getJson<MyVehicleDetail>(`/api/v1/me/vehicles/${encodeURIComponent(vehicleId)}`)
+  }
+
+  getMyInvoices() {
+    return this.getJson<MyInvoice[]>('/api/v1/me/invoices')
+  }
+
+  getMyInvoiceById(invoiceId: string) {
+    return this.getJson<MyInvoice>(`/api/v1/me/invoices/${encodeURIComponent(invoiceId)}`)
   }
 }
 
