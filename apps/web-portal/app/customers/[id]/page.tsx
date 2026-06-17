@@ -98,7 +98,12 @@ export default function CustomerDetailPage() {
       <PageHeader
         title={data.displayName}
         subtitle={`${data.type} · ${data.id}`}
-        action={<SecondaryButton onClick={() => router.back()}>{t.common.back}</SecondaryButton>}
+        action={
+          <div className="flex gap-2">
+            <SecondaryButton onClick={() => router.push(`/customers/${data.id}/account`)} className="px-3 py-1.5 text-xs">💳 Account &amp; SOA</SecondaryButton>
+            <SecondaryButton onClick={() => router.back()}>{t.common.back}</SecondaryButton>
+          </div>
+        }
       />
 
       <div className="flex items-center gap-3">

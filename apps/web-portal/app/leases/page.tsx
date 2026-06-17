@@ -61,12 +61,26 @@ export default function LeasesPage() {
 
   const totalPages = useMemo(() => data?.totalPages ?? 1, [data])
 
+  function downloadCsv() {
+    if (!data) return
+    const rows = [['Lease #', 'Customer', 'Vehicle', 'Plate', 'Driver', 'Status', 'Type', 'Start', 'End', 'Rent (SAR)', 'Branch']]
+    data.items.forEach((l) => rows.push([l.leaseNumber, l.customerDisplayName, l.vehicleMakeModel, l.vehiclePlate, l.primaryDriverName ?? '', l.status, l.contractTypeCode, l.contractStartUtc.substring(0, 10), l.contractEndUtc.substring(0, 10), String(l.rentAmountSar), l.workingBranchName]))
+    const csv = rows.map((r) => r.join(',')).join('\n')
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+    a.download = `leases-${new Date().toISOString().substring(0, 10)}.csv`; a.click()
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader
         title={tl.title}
         subtitle={tl.subtitle}
-        action={<PrimaryButton onClick={() => router.push('/leases/new')}>+ {t.newLease.title.split('—')[0]?.trim()}</PrimaryButton>}
+        action={
+          <div className="flex gap-2">
+            <SecondaryButton onClick={downloadCsv}>⬇ Export CSV</SecondaryButton>
+            <PrimaryButton onClick={() => router.push('/leases/new')}>+ {t.newLease.title.split('—')[0]?.trim()}</PrimaryButton>
+          </div>
+        }
       />
       <Toolbar>
         <ToolbarGroup>

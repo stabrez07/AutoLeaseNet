@@ -14,6 +14,7 @@ const navItems = [
   { href: '/branches', key: 'branches' as const },
   { href: '/leases', key: 'leases' as const },
   { href: '/quotations', key: 'quotations' as const },
+  { href: '/invoices', key: 'invoices' as const },
   { href: '/leases/new', key: 'newLease' as const },
 ]
 

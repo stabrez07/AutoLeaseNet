@@ -33,6 +33,12 @@ export interface VehicleSummary {
   make: string
   model: string
   modelYear?: number
+  color?: string | null
+  bodyType?: string | null
+  fuelType?: string | null
+  transmissionType?: string | null
+  seats?: number | null
+  thumbnailUrl?: string | null
   status: number // 1=Available 2=Reserved 3=OnLease 4=InService 5=Retired
   currentKm: number
 }
@@ -191,6 +197,207 @@ export interface AcceptQuotationResult {
   errorMessage?: string | null
 }
 
+// ─── Damage Recording ─────────────────────────────────────────────────────────
+
+export type DamageType = 'Accident' | 'ScratchDent' | 'Glass' | 'TyreWheel' | 'Mechanical' | 'Flood' | 'TheftVandalism' | 'Fire' | 'Other'
+export type DamageLocation = 'Front' | 'Rear' | 'LeftSide' | 'RightSide' | 'Roof' | 'Underbody' | 'Interior' | 'Multiple'
+export type DamageSeverity = 'Minor' | 'Moderate' | 'Major' | 'TotalLoss'
+export type DamageFault = 'Customer' | 'ThirdParty' | 'Unknown' | 'ActOfGod'
+export type RepairStatus = 'Pending' | 'InProgress' | 'Completed' | 'Waived'
+
+export interface DamageRecord {
+  id: string
+  leaseId: string
+  vehicleId: string
+  type: DamageType
+  location: DamageLocation
+  severity: DamageSeverity
+  fault: DamageFault
+  description: string
+  occurredAt: string        // YYYY-MM-DD
+  estimatedCostSar: number | null
+  actualCostSar: number | null
+  repairStatus: RepairStatus
+  insuranceClaimNumber: string | null
+  chargeToCustomer: boolean
+  chargedAmountSar: number | null
+  notes: string | null
+  reportedBy: string
+  createdAtUtc: string
+}
+
+export interface CreateDamageRecordRequest {
+  leaseId: string
+  vehicleId: string
+  type: DamageType
+  location: DamageLocation
+  severity: DamageSeverity
+  fault: DamageFault
+  description: string
+  occurredAt: string
+  estimatedCostSar?: number
+  chargeToCustomer?: boolean
+  chargedAmountSar?: number
+  insuranceClaimNumber?: string
+  notes?: string
+}
+
+// ─── Traffic Violations ───────────────────────────────────────────────────────
+
+export type ViolationType = 'Speeding' | 'Parking' | 'RedLight' | 'WrongWay' | 'MobilePhone' | 'ExpiredRegistration' | 'Seatbelt' | 'RecklessDriving' | 'Other'
+export type ViolationAuthority = 'Muroor' | 'Municipality' | 'MOT' | 'Other'
+export type ViolationResponsible = 'Customer' | 'Company'
+export type ViolationPaymentStatus = 'Unpaid' | 'PaidByCustomer' | 'PaidByCompany' | 'Waived' | 'Contested'
+
+export interface TrafficViolation {
+  id: string
+  leaseId: string
+  vehicleId: string
+  driverId: string | null
+  driverName: string | null
+  violationNumber: string
+  type: ViolationType
+  authority: ViolationAuthority
+  occurredAt: string        // YYYY-MM-DD
+  location: string | null
+  fineAmountSar: number
+  responsibleParty: ViolationResponsible
+  paymentStatus: ViolationPaymentStatus
+  paidAt: string | null     // YYYY-MM-DD
+  absherRefNumber: string | null
+  notes: string | null
+  createdAtUtc: string
+}
+
+export interface CreateTrafficViolationRequest {
+  leaseId: string
+  vehicleId: string
+  driverId?: string
+  violationNumber: string
+  type: ViolationType
+  authority: ViolationAuthority
+  occurredAt: string
+  location?: string
+  fineAmountSar: number
+  responsibleParty: ViolationResponsible
+  absherRefNumber?: string
+  notes?: string
+}
+
+// ─── Invoices ─────────────────────────────────────────────────────────────────
+
+export type InvoiceStatus = 'Draft' | 'Issued' | 'PartiallyPaid' | 'Paid' | 'Overdue' | 'Cancelled'
+
+export interface InvoiceLine {
+  id: string
+  description: string
+  quantity: number
+  unitPriceSar: number
+  vatPercent: number
+  lineTotalSar: number
+  vatAmountSar: number
+}
+
+export interface Invoice {
+  id: string
+  invoiceNumber: string
+  leaseId: string
+  leaseNumber: string
+  customerId: string
+  customerDisplayName: string
+  vehiclePlate: string
+  vehicleMakeModel: string
+  billingPeriodStart: string  // YYYY-MM-DD
+  billingPeriodEnd: string    // YYYY-MM-DD
+  issuedDate: string          // YYYY-MM-DD
+  dueDate: string             // YYYY-MM-DD
+  status: InvoiceStatus
+  lines: InvoiceLine[]
+  subTotalSar: number
+  vatAmountSar: number
+  totalSar: number
+  paidAmountSar: number
+  balanceSar: number
+  zatcaInvoiceNumber: string | null
+  notes: string | null
+  createdAtUtc: string
+}
+
+export interface GenerateInvoiceRequest {
+  leaseId: string
+  billingPeriodStart: string
+  billingPeriodEnd: string
+  notes?: string
+}
+
+export interface BulkGenerateResult {
+  generated: number
+  skipped: number
+  errors: { leaseId: string; leaseNumber: string; error: string }[]
+  invoiceIds: string[]
+}
+
+// ─── Advance Payments & FIFO ──────────────────────────────────────────────────
+
+export type PaymentMethod = 'Cash' | 'CreditCard' | 'BankTransfer' | 'Cheque' | 'OnlineTransfer'
+
+export interface PaymentAllocation {
+  id: string
+  invoiceId: string
+  invoiceNumber: string
+  allocatedAmountSar: number
+  allocatedAtUtc: string
+}
+
+export interface AdvancePayment {
+  id: string
+  customerId: string
+  customerDisplayName: string
+  amount: number
+  paymentMethod: PaymentMethod
+  receivedDate: string        // YYYY-MM-DD
+  referenceNumber: string | null
+  notes: string | null
+  remainingBalance: number
+  allocations: PaymentAllocation[]
+  createdAtUtc: string
+}
+
+export interface RecordAdvancePaymentRequest {
+  customerId: string
+  amount: number
+  paymentMethod: PaymentMethod
+  receivedDate: string
+  referenceNumber?: string
+  notes?: string
+  autoApplyFifo?: boolean
+}
+
+// ─── Statement of Account ─────────────────────────────────────────────────────
+
+export interface SoaTransaction {
+  date: string
+  type: 'Invoice' | 'Payment' | 'Allocation' | 'CreditNote'
+  reference: string
+  description: string
+  debitSar: number
+  creditSar: number
+  balanceSar: number
+}
+
+export interface StatementOfAccount {
+  customerId: string
+  customerDisplayName: string
+  periodFrom: string
+  periodTo: string
+  openingBalance: number
+  transactions: SoaTransaction[]
+  closingBalance: number
+  totalInvoiced: number
+  totalPaid: number
+  generatedAtUtc: string
+}
+
 class BffClient {
   private headers(extra: Record<string, string> = {}): HeadersInit {
     return {
@@ -252,6 +459,17 @@ class BffClient {
     if (!res.ok) {
       const problem = await this.tryReadProblem(res)
       throw Object.assign(new Error(problem.title ?? `BFF PUT ${path} failed (${res.status})`), { status: res.status, problem })
+    }
+    return (await res.json()) as TResponse
+  }
+
+  async postForm<TResponse>(path: string, form: FormData, extraHeaders: Record<string, string> = {}): Promise<TResponse> {
+    const res = await fetch(`${BFF_BASE_URL}${path}`, {
+      method: 'POST', body: form, headers: this.headers(extraHeaders),
+    })
+    if (!res.ok) {
+      const problem = await this.tryReadProblem(res)
+      throw Object.assign(new Error(problem.title ?? `BFF POST ${path} failed (${res.status})`), { status: res.status, problem })
     }
     return (await res.json()) as TResponse
   }
@@ -538,6 +756,63 @@ class BffClient {
   }
   deleteCustomer(id: string, idempotencyKey: string) {
     return this.postJson<DeleteResult, Record<string, never>>(`/api/v1/customers/${id}/delete`, {}, { 'Idempotency-Key': idempotencyKey })
+  }
+
+  // ─── Damage Records ─────────────────────────────────────────────────────────
+  getDamageRecords(leaseId: string) {
+    return this.getJson<DamageRecord[]>(`/api/v1/leases/${leaseId}/damages`)
+  }
+  createDamageRecord(body: CreateDamageRecordRequest, idempotencyKey: string) {
+    return this.postJson<DamageRecord, CreateDamageRecordRequest>(`/api/v1/leases/${body.leaseId}/damages`, body, { 'Idempotency-Key': idempotencyKey })
+  }
+
+  // ─── Traffic Violations ──────────────────────────────────────────────────────
+  getTrafficViolations(leaseId: string) {
+    return this.getJson<TrafficViolation[]>(`/api/v1/leases/${leaseId}/violations`)
+  }
+  createTrafficViolation(body: CreateTrafficViolationRequest, idempotencyKey: string) {
+    return this.postJson<TrafficViolation, CreateTrafficViolationRequest>(`/api/v1/leases/${body.leaseId}/violations`, body, { 'Idempotency-Key': idempotencyKey })
+  }
+  bulkImportViolations(file: File, idempotencyKey: string): Promise<BulkImportResult> {
+    const form = new FormData(); form.append('file', file)
+    return this.postForm<BulkImportResult>('/api/v1/violations/bulk-import', form, { 'Idempotency-Key': idempotencyKey })
+  }
+
+  // ─── Invoices ────────────────────────────────────────────────────────────────
+  getInvoices(page = 1, pageSize = 20, leaseId?: string, customerId?: string, status?: InvoiceStatus) {
+    const q = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+    if (leaseId) q.set('leaseId', leaseId)
+    if (customerId) q.set('customerId', customerId)
+    if (status) q.set('status', status)
+    return this.getJson<PagedResult<Invoice>>(`/api/v1/invoices?${q}`)
+  }
+  getInvoiceById(id: string) {
+    return this.getJson<Invoice>(`/api/v1/invoices/${id}`)
+  }
+  generateInvoice(body: GenerateInvoiceRequest, idempotencyKey: string) {
+    return this.postJson<Invoice, GenerateInvoiceRequest>('/api/v1/invoices/generate', body, { 'Idempotency-Key': idempotencyKey })
+  }
+  bulkGenerateInvoices(billingPeriodStart: string, billingPeriodEnd: string, idempotencyKey: string) {
+    return this.postJson<BulkGenerateResult, { billingPeriodStart: string; billingPeriodEnd: string }>('/api/v1/invoices/bulk-generate', { billingPeriodStart, billingPeriodEnd }, { 'Idempotency-Key': idempotencyKey })
+  }
+  markInvoicePaid(id: string, paidAmount: number, idempotencyKey: string) {
+    return this.postJson<Invoice, { paidAmount: number }>(`/api/v1/invoices/${id}/mark-paid`, { paidAmount }, { 'Idempotency-Key': idempotencyKey })
+  }
+
+  // ─── Advance Payments ────────────────────────────────────────────────────────
+  getCustomerAdvancePayments(customerId: string, page = 1, pageSize = 20) {
+    return this.getJson<PagedResult<AdvancePayment>>(`/api/v1/customers/${customerId}/advance-payments?page=${page}&pageSize=${pageSize}`)
+  }
+  recordAdvancePayment(body: RecordAdvancePaymentRequest, idempotencyKey: string) {
+    return this.postJson<AdvancePayment, RecordAdvancePaymentRequest>(`/api/v1/customers/${body.customerId}/advance-payments`, body, { 'Idempotency-Key': idempotencyKey })
+  }
+  applyFifoPayments(customerId: string, idempotencyKey: string) {
+    return this.postJson<{ allocations: number; totalAllocatedSar: number }, Record<string, never>>(`/api/v1/customers/${customerId}/advance-payments/apply-fifo`, {}, { 'Idempotency-Key': idempotencyKey })
+  }
+
+  // ─── Statement of Account ────────────────────────────────────────────────────
+  getStatementOfAccount(customerId: string, from: string, to: string) {
+    return this.getJson<StatementOfAccount>(`/api/v1/customers/${customerId}/statement?from=${from}&to=${to}`)
   }
 }
 
@@ -829,6 +1104,10 @@ type MockState = {
   branches: BranchDetail[]
   quotations: QuotationDetail[]
   leases: LeaseDetail[]
+  damages: DamageRecord[]
+  violations: TrafficViolation[]
+  invoices: Invoice[]
+  advancePayments: AdvancePayment[]
 }
 
 function mockId(prefix: string, n: number) {
@@ -1194,7 +1473,156 @@ function buildMockState(): MockState {
     }
   })
 
-  return { customers, vehicles, drivers, branches, quotations, leases }
+  // ─── Damage Records ──────────────────────────────────────────────────────────
+  const DAMAGE_TYPES: DamageType[] = ['Accident', 'ScratchDent', 'Glass', 'TyreWheel', 'Mechanical', 'Flood', 'TheftVandalism', 'Fire', 'Other']
+  const DAMAGE_LOCS: DamageLocation[] = ['Front', 'Rear', 'LeftSide', 'RightSide', 'Roof', 'Underbody', 'Interior', 'Multiple']
+  const DAMAGE_SEVS: DamageSeverity[] = ['Minor', 'Moderate', 'Major', 'TotalLoss']
+  const DAMAGE_FAULTS: DamageFault[] = ['Customer', 'ThirdParty', 'Unknown', 'ActOfGod']
+  const REPAIR_STATUSES: RepairStatus[] = ['Pending', 'InProgress', 'Completed', 'Waived']
+
+  const damages: DamageRecord[] = leases.flatMap((l, i) => {
+    if (i % 5 !== 0) return []
+    const count = 1 + (i % 3)
+    return Array.from({ length: count }).map((_, j) => ({
+      id: mockId('dmg', i * 3 + j + 1),
+      leaseId: l.id,
+      vehicleId: l.vehicleId,
+      type: pick(DAMAGE_TYPES, i + j),
+      location: pick(DAMAGE_LOCS, i + j + 1),
+      severity: pick(DAMAGE_SEVS, i + j),
+      fault: pick(DAMAGE_FAULTS, i + j),
+      description: `Damage reported on ${pick(['front bumper', 'rear door', 'left panel', 'windscreen', 'rear tyre'], i + j)}.`,
+      occurredAt: new Date(now.getTime() - (30 + i + j) * 86400000).toISOString().substring(0, 10),
+      estimatedCostSar: (500 + (i + j) * 300) % 15000 || null,
+      actualCostSar: j % 2 === 0 ? (400 + (i + j) * 250) % 12000 : null,
+      repairStatus: pick(REPAIR_STATUSES, i + j),
+      insuranceClaimNumber: i % 7 === 0 ? `CLM-${100000 + i + j}` : null,
+      chargeToCustomer: pick(DAMAGE_FAULTS, i + j) === 'Customer',
+      chargedAmountSar: pick(DAMAGE_FAULTS, i + j) === 'Customer' ? (300 + (i + j) * 150) % 8000 : null,
+      notes: j % 3 === 0 ? 'Customer acknowledged damage at check-out inspection.' : null,
+      reportedBy: `Staff ${(i % 10) + 1}`,
+      createdAtUtc: new Date(now.getTime() - (28 + i + j) * 86400000).toISOString(),
+    }))
+  })
+
+  // ─── Traffic Violations ───────────────────────────────────────────────────────
+  const VIOL_TYPES: ViolationType[] = ['Speeding', 'Parking', 'RedLight', 'WrongWay', 'MobilePhone', 'ExpiredRegistration', 'Seatbelt', 'RecklessDriving', 'Other']
+  const VIOL_AUTHS: ViolationAuthority[] = ['Muroor', 'Municipality', 'MOT', 'Other']
+  const VIOL_PAY: ViolationPaymentStatus[] = ['Unpaid', 'PaidByCustomer', 'PaidByCompany', 'Waived', 'Contested']
+
+  const violations: TrafficViolation[] = leases.flatMap((l, i) => {
+    if (i % 4 !== 0) return []
+    const count = 1 + (i % 3)
+    return Array.from({ length: count }).map((_, j) => {
+      const payStatus = pick(VIOL_PAY, i + j)
+      return {
+        id: mockId('viol', i * 3 + j + 1),
+        leaseId: l.id,
+        vehicleId: l.vehicleId,
+        driverId: l.primaryDriverId,
+        driverName: l.primaryDriverName,
+        violationNumber: `MRR-${(2024000000 + i * 3 + j).toString()}`,
+        type: pick(VIOL_TYPES, i + j),
+        authority: pick(VIOL_AUTHS, i + j),
+        occurredAt: new Date(now.getTime() - (20 + i + j) * 86400000).toISOString().substring(0, 10),
+        location: pick(['King Fahd Road, Riyadh', 'King Abdullah Road, Jeddah', 'Prince Sultan Road, Dammam', 'Olaya St, Riyadh', 'Tahlia St, Jeddah'], i + j),
+        fineAmountSar: pick([150, 300, 500, 600, 900, 1500, 3000], i + j),
+        responsibleParty: (pick(VIOL_TYPES, i + j) === 'ExpiredRegistration' ? 'Company' : 'Customer') as ViolationResponsible,
+        paymentStatus: payStatus,
+        paidAt: (payStatus === 'PaidByCustomer' || payStatus === 'PaidByCompany') ? new Date(now.getTime() - (10 + i) * 86400000).toISOString().substring(0, 10) : null,
+        absherRefNumber: i % 5 === 0 ? `ABS-${700000 + i + j}` : null,
+        notes: null,
+        createdAtUtc: new Date(now.getTime() - (18 + i + j) * 86400000).toISOString(),
+      }
+    })
+  })
+
+  // ─── Invoices ─────────────────────────────────────────────────────────────────
+  const invoices: Invoice[] = leases.flatMap((l, i) => {
+    const isActive = l.status === 'Active' || l.status === 'Extended' || l.status === 'Closed'
+    if (!isActive) return []
+    const start = new Date(l.contractStartUtc)
+    const end = new Date(l.contractEndUtc)
+    const months = Math.min(Math.ceil((end.getTime() - start.getTime()) / (30 * 86400000)), 8)
+    return Array.from({ length: months }).map((_, m) => {
+      const periodStart = new Date(start.getTime() + m * 30 * 86400000)
+      const periodEnd = new Date(periodStart.getTime() + 29 * 86400000)
+      const rent = l.rentAmountSar
+      const vat = Math.round(rent * 0.15 * 100) / 100
+      const total = rent + vat
+      const invStatuses: InvoiceStatus[] = l.status === 'Closed' ? ['Paid'] :
+        m < months - 1 ? ['Paid', 'Paid', 'Paid', 'PartiallyPaid'] : ['Issued', 'Issued', 'Overdue', 'Draft']
+      const st = pick(invStatuses, i + m)
+      const paid = st === 'Paid' ? total : st === 'PartiallyPaid' ? Math.round(total * 0.5 * 100) / 100 : 0
+      return {
+        id: mockId('inv', i * 8 + m + 1),
+        invoiceNumber: `INV-${String(i * 8 + m + 1).padStart(7, '0')}`,
+        leaseId: l.id,
+        leaseNumber: l.leaseNumber,
+        customerId: l.customerId,
+        customerDisplayName: l.customerDisplayName,
+        vehiclePlate: l.vehiclePlate,
+        vehicleMakeModel: l.vehicleMakeModel,
+        billingPeriodStart: periodStart.toISOString().substring(0, 10),
+        billingPeriodEnd: periodEnd.toISOString().substring(0, 10),
+        issuedDate: periodStart.toISOString().substring(0, 10),
+        dueDate: new Date(periodStart.getTime() + 10 * 86400000).toISOString().substring(0, 10),
+        status: st,
+        lines: [{
+          id: mockId('invl', i * 8 + m + 1),
+          description: `Monthly Rent — ${periodStart.toISOString().substring(0, 7)} (${l.vehicleMakeModel})`,
+          quantity: 1, unitPriceSar: rent, vatPercent: 15,
+          lineTotalSar: rent, vatAmountSar: vat,
+        }],
+        subTotalSar: rent,
+        vatAmountSar: vat,
+        totalSar: total,
+        paidAmountSar: paid,
+        balanceSar: Math.round((total - paid) * 100) / 100,
+        zatcaInvoiceNumber: st === 'Paid' ? `ZATCA-${String(i * 8 + m + 1).padStart(7, '0')}` : null,
+        notes: null,
+        createdAtUtc: periodStart.toISOString(),
+      }
+    })
+  })
+
+  // ─── Advance Payments ─────────────────────────────────────────────────────────
+  const PAY_METHODS: PaymentMethod[] = ['Cash', 'CreditCard', 'BankTransfer', 'Cheque', 'OnlineTransfer']
+  const advancePayments: AdvancePayment[] = customers.flatMap((c, i) => {
+    if (i % 3 !== 0) return []
+    const count = 1 + (i % 3)
+    return Array.from({ length: count }).map((_, j) => {
+      const amount = (5000 + i * 1000 + j * 2500) % 100000 + 5000
+      const cInvoices = invoices.filter((inv) => inv.customerId === c.id && inv.balanceSar > 0).slice(0, 3)
+      let remaining = amount
+      const allocs: PaymentAllocation[] = cInvoices.map((inv) => {
+        const allocAmt = Math.min(remaining, inv.balanceSar)
+        remaining = Math.max(0, remaining - allocAmt)
+        return {
+          id: mockId('alloc', i * 3 + j + 1),
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          allocatedAmountSar: allocAmt,
+          allocatedAtUtc: new Date(now.getTime() - (i + j) * 86400000).toISOString(),
+        }
+      }).filter((a) => a.allocatedAmountSar > 0)
+      return {
+        id: mockId('pmt', i * 3 + j + 1),
+        customerId: c.id,
+        customerDisplayName: c.displayName,
+        amount,
+        paymentMethod: pick(PAY_METHODS, i + j),
+        receivedDate: new Date(now.getTime() - (i * 2 + j * 5 + 10) * 86400000).toISOString().substring(0, 10),
+        referenceNumber: i % 2 === 0 ? `REF-${200000 + i + j}` : null,
+        notes: j % 2 === 0 ? 'Advance payment for upcoming lease period.' : null,
+        remainingBalance: remaining,
+        allocations: allocs,
+        createdAtUtc: new Date(now.getTime() - (i * 2 + j * 5 + 10) * 86400000).toISOString(),
+      }
+    })
+  })
+
+  return { customers, vehicles, drivers, branches, quotations, leases, damages, violations, invoices, advancePayments }
 }
 
 class MockBffClient {
@@ -1220,10 +1648,20 @@ class MockBffClient {
     return Promise.resolve(paginate(items, page, pageSize))
   }
   getVehicles(page = 1, pageSize = 20, search?: string, status?: number) {
-    const mapped = this.state.vehicles.map((v) => ({
-      id: v.id, plateNumber: v.plateNumber, make: v.make, model: v.model, modelYear: v.modelYear, currentKm: v.currentKm,
-      status: v.status === 'Available' ? 1 : v.status === 'Reserved' ? 2 : v.status === 'OnRent' ? 3 : v.status === 'InService' ? 4 : 5,
-    }))
+    const COLOR_MAP: Record<string, string> = { White: 'white', Silver: 'silver', Black: 'black', Grey: 'grey', Navy: 'navy', Red: 'red', Bronze: 'bronze' }
+    const mapped = this.state.vehicles.map((v) => {
+      const makeSlug = v.make.toLowerCase().replace(/ /g, '-')
+      const modelSlug = v.model.toLowerCase().replace(/ /g, '-')
+      const paintId = COLOR_MAP[v.color ?? ''] ?? 'white'
+      const year = v.modelYear ?? 2022
+      return {
+        id: v.id, plateNumber: v.plateNumber, make: v.make, model: v.model, modelYear: v.modelYear,
+        color: v.color, bodyType: v.bodyType, fuelType: v.fuelType, transmissionType: v.transmissionType, seats: v.seats,
+        thumbnailUrl: `https://cdn.imagin.studio/getimage?customer=img&make=${makeSlug}&modelFamily=${modelSlug}&modelYear=${year}&paintId=${paintId}&angle=23&width=400`,
+        status: v.status === 'Available' ? 1 : v.status === 'Reserved' ? 2 : v.status === 'OnRent' ? 3 : v.status === 'InService' ? 4 : 5,
+        currentKm: v.currentKm,
+      }
+    })
     const filtered = mapped.filter((v) =>
       (!search || `${v.plateNumber} ${v.make} ${v.model}`.toLowerCase().includes(search.toLowerCase())) &&
       (!status || v.status === status))
@@ -1561,6 +1999,205 @@ class MockBffClient {
       sortOrder: v.images.length,
     })
     return Promise.resolve({ success: true, vehicleId: imageId })
+  }
+
+  // ─── Damage Records ─────────────────────────────────────────────────────────
+  getDamageRecords(leaseId: string): Promise<DamageRecord[]> {
+    return Promise.resolve(this.state.damages.filter((d) => d.leaseId === leaseId))
+  }
+  createDamageRecord(body: CreateDamageRecordRequest, _idempotencyKey: string): Promise<DamageRecord> {
+    const record: DamageRecord = {
+      id: mockId('dmg', this.state.damages.length + 1),
+      leaseId: body.leaseId, vehicleId: body.vehicleId,
+      type: body.type, location: body.location, severity: body.severity, fault: body.fault,
+      description: body.description, occurredAt: body.occurredAt,
+      estimatedCostSar: body.estimatedCostSar ?? null, actualCostSar: null,
+      repairStatus: 'Pending',
+      insuranceClaimNumber: body.insuranceClaimNumber ?? null,
+      chargeToCustomer: body.chargeToCustomer ?? false,
+      chargedAmountSar: body.chargedAmountSar ?? null,
+      notes: body.notes ?? null, reportedBy: 'Current User',
+      createdAtUtc: new Date().toISOString(),
+    }
+    this.state.damages.unshift(record)
+    return Promise.resolve(record)
+  }
+
+  // ─── Traffic Violations ──────────────────────────────────────────────────────
+  getTrafficViolations(leaseId: string): Promise<TrafficViolation[]> {
+    return Promise.resolve(this.state.violations.filter((v) => v.leaseId === leaseId))
+  }
+  createTrafficViolation(body: CreateTrafficViolationRequest, _idempotencyKey: string): Promise<TrafficViolation> {
+    const record: TrafficViolation = {
+      id: mockId('viol', this.state.violations.length + 1),
+      leaseId: body.leaseId, vehicleId: body.vehicleId,
+      driverId: body.driverId ?? null,
+      driverName: body.driverId ? (this.state.drivers.find((d) => d.id === body.driverId)?.personNameEn ?? null) : null,
+      violationNumber: body.violationNumber, type: body.type, authority: body.authority,
+      occurredAt: body.occurredAt,
+      location: body.location ?? null,
+      fineAmountSar: body.fineAmountSar, responsibleParty: body.responsibleParty,
+      paymentStatus: 'Unpaid', paidAt: null,
+      absherRefNumber: body.absherRefNumber ?? null,
+      notes: body.notes ?? null,
+      createdAtUtc: new Date().toISOString(),
+    }
+    this.state.violations.unshift(record)
+    return Promise.resolve(record)
+  }
+  bulkImportViolations(_file: File, _idempotencyKey: string): Promise<BulkImportResult> {
+    return Promise.resolve({ success: true, createdCount: 5, skippedCount: 0, errors: [] })
+  }
+
+  // ─── Invoices ────────────────────────────────────────────────────────────────
+  getInvoices(page = 1, pageSize = 20, leaseId?: string, customerId?: string, status?: InvoiceStatus): Promise<PagedResult<Invoice>> {
+    const filtered = this.state.invoices.filter((inv) =>
+      (!leaseId || inv.leaseId === leaseId) &&
+      (!customerId || inv.customerId === customerId) &&
+      (!status || inv.status === status)
+    )
+    return Promise.resolve(paginate(filtered, page, pageSize))
+  }
+  getInvoiceById(id: string): Promise<Invoice> {
+    const x = this.state.invoices.find((inv) => inv.id === id)
+    if (!x) throw new Error('Invoice not found')
+    return Promise.resolve(x)
+  }
+  generateInvoice(body: GenerateInvoiceRequest, _idempotencyKey: string): Promise<Invoice> {
+    const lease = this.state.leases.find((l) => l.id === body.leaseId)
+    if (!lease) throw new Error('Lease not found')
+    const rent = lease.rentAmountSar
+    const vat = Math.round(rent * 0.15 * 100) / 100
+    const total = rent + vat
+    const inv: Invoice = {
+      id: mockId('inv', this.state.invoices.length + 1),
+      invoiceNumber: `INV-${String(this.state.invoices.length + 1).padStart(7, '0')}`,
+      leaseId: lease.id, leaseNumber: lease.leaseNumber,
+      customerId: lease.customerId, customerDisplayName: lease.customerDisplayName,
+      vehiclePlate: lease.vehiclePlate, vehicleMakeModel: lease.vehicleMakeModel,
+      billingPeriodStart: body.billingPeriodStart, billingPeriodEnd: body.billingPeriodEnd,
+      issuedDate: new Date().toISOString().substring(0, 10),
+      dueDate: new Date(Date.now() + 10 * 86400000).toISOString().substring(0, 10),
+      status: 'Issued',
+      lines: [{ id: mockId('invl', this.state.invoices.length + 1), description: `Monthly Rent — ${body.billingPeriodStart.substring(0, 7)}`, quantity: 1, unitPriceSar: rent, vatPercent: 15, lineTotalSar: rent, vatAmountSar: vat }],
+      subTotalSar: rent, vatAmountSar: vat, totalSar: total, paidAmountSar: 0, balanceSar: total,
+      zatcaInvoiceNumber: null, notes: body.notes ?? null, createdAtUtc: new Date().toISOString(),
+    }
+    this.state.invoices.unshift(inv)
+    return Promise.resolve(inv)
+  }
+  bulkGenerateInvoices(billingPeriodStart: string, billingPeriodEnd: string, _idempotencyKey: string): Promise<BulkGenerateResult> {
+    const activeLeases = this.state.leases.filter((l) => l.status === 'Active' || l.status === 'Extended')
+    const ids: string[] = []
+    activeLeases.forEach((l) => {
+      const exists = this.state.invoices.some((inv) => inv.leaseId === l.id && inv.billingPeriodStart === billingPeriodStart)
+      if (!exists) {
+        const rent = l.rentAmountSar; const vat = Math.round(rent * 0.15 * 100) / 100; const total = rent + vat
+        const inv: Invoice = {
+          id: mockId('inv', this.state.invoices.length + ids.length + 1),
+          invoiceNumber: `INV-${String(this.state.invoices.length + ids.length + 1).padStart(7, '0')}`,
+          leaseId: l.id, leaseNumber: l.leaseNumber, customerId: l.customerId, customerDisplayName: l.customerDisplayName,
+          vehiclePlate: l.vehiclePlate, vehicleMakeModel: l.vehicleMakeModel,
+          billingPeriodStart, billingPeriodEnd,
+          issuedDate: new Date().toISOString().substring(0, 10),
+          dueDate: new Date(Date.now() + 10 * 86400000).toISOString().substring(0, 10),
+          status: 'Issued',
+          lines: [{ id: mockId('invl', ids.length + 1), description: `Monthly Rent — ${billingPeriodStart.substring(0, 7)}`, quantity: 1, unitPriceSar: rent, vatPercent: 15, lineTotalSar: rent, vatAmountSar: vat }],
+          subTotalSar: rent, vatAmountSar: vat, totalSar: total, paidAmountSar: 0, balanceSar: total,
+          zatcaInvoiceNumber: null, notes: null, createdAtUtc: new Date().toISOString(),
+        }
+        this.state.invoices.unshift(inv); ids.push(inv.id)
+      }
+    })
+    return Promise.resolve({ generated: ids.length, skipped: activeLeases.length - ids.length, errors: [], invoiceIds: ids })
+  }
+  markInvoicePaid(id: string, paidAmount: number, _idempotencyKey: string): Promise<Invoice> {
+    const inv = this.state.invoices.find((x) => x.id === id)
+    if (!inv) throw new Error('Invoice not found')
+    inv.paidAmountSar = Math.min(paidAmount, inv.totalSar)
+    inv.balanceSar = Math.max(0, inv.totalSar - inv.paidAmountSar)
+    inv.status = inv.balanceSar === 0 ? 'Paid' : 'PartiallyPaid'
+    return Promise.resolve(inv)
+  }
+
+  // ─── Advance Payments ────────────────────────────────────────────────────────
+  getCustomerAdvancePayments(customerId: string, page = 1, pageSize = 20): Promise<PagedResult<AdvancePayment>> {
+    const filtered = this.state.advancePayments.filter((p) => p.customerId === customerId)
+    return Promise.resolve(paginate(filtered, page, pageSize))
+  }
+  recordAdvancePayment(body: RecordAdvancePaymentRequest, _idempotencyKey: string): Promise<AdvancePayment> {
+    const customer = this.state.customers.find((c) => c.id === body.customerId)
+    const outstandingInvoices = this.state.invoices
+      .filter((inv) => inv.customerId === body.customerId && inv.balanceSar > 0)
+      .sort((a, b) => a.issuedDate.localeCompare(b.issuedDate))
+    let remaining = body.amount
+    const allocs: PaymentAllocation[] = []
+    if (body.autoApplyFifo !== false) {
+      for (const inv of outstandingInvoices) {
+        if (remaining <= 0) break
+        const allocAmt = Math.min(remaining, inv.balanceSar)
+        remaining = Math.round((remaining - allocAmt) * 100) / 100
+        inv.paidAmountSar += allocAmt
+        inv.balanceSar = Math.round((inv.balanceSar - allocAmt) * 100) / 100
+        inv.status = inv.balanceSar === 0 ? 'Paid' : 'PartiallyPaid'
+        allocs.push({ id: mockId('alloc', allocs.length + 1), invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, allocatedAmountSar: allocAmt, allocatedAtUtc: new Date().toISOString() })
+      }
+    }
+    const pmt: AdvancePayment = {
+      id: mockId('pmt', this.state.advancePayments.length + 1),
+      customerId: body.customerId, customerDisplayName: customer?.displayName ?? '',
+      amount: body.amount, paymentMethod: body.paymentMethod, receivedDate: body.receivedDate,
+      referenceNumber: body.referenceNumber ?? null, notes: body.notes ?? null,
+      remainingBalance: remaining, allocations: allocs, createdAtUtc: new Date().toISOString(),
+    }
+    this.state.advancePayments.unshift(pmt)
+    return Promise.resolve(pmt)
+  }
+  applyFifoPayments(customerId: string, _idempotencyKey: string): Promise<{ allocations: number; totalAllocatedSar: number }> {
+    const payments = this.state.advancePayments.filter((p) => p.customerId === customerId && p.remainingBalance > 0)
+    const invoices = this.state.invoices.filter((inv) => inv.customerId === customerId && inv.balanceSar > 0).sort((a, b) => a.issuedDate.localeCompare(b.issuedDate))
+    let totalAllocated = 0; let allocCount = 0
+    for (const pmt of payments) {
+      for (const inv of invoices) {
+        if (pmt.remainingBalance <= 0 || inv.balanceSar <= 0) continue
+        const allocAmt = Math.min(pmt.remainingBalance, inv.balanceSar)
+        pmt.remainingBalance -= allocAmt; inv.balanceSar -= allocAmt
+        inv.paidAmountSar += allocAmt; inv.status = inv.balanceSar === 0 ? 'Paid' : 'PartiallyPaid'
+        pmt.allocations.push({ id: mockId('alloc', allocCount + 1), invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, allocatedAmountSar: allocAmt, allocatedAtUtc: new Date().toISOString() })
+        totalAllocated += allocAmt; allocCount++
+      }
+    }
+    return Promise.resolve({ allocations: allocCount, totalAllocatedSar: Math.round(totalAllocated * 100) / 100 })
+  }
+
+  // ─── Statement of Account ────────────────────────────────────────────────────
+  getStatementOfAccount(customerId: string, from: string, to: string): Promise<StatementOfAccount> {
+    const customer = this.state.customers.find((c) => c.id === customerId)
+    const invs = this.state.invoices.filter((inv) => inv.customerId === customerId && inv.issuedDate >= from && inv.issuedDate <= to).sort((a, b) => a.issuedDate.localeCompare(b.issuedDate))
+    const pmts = this.state.advancePayments.filter((p) => p.customerId === customerId && p.receivedDate >= from && p.receivedDate <= to).sort((a, b) => a.receivedDate.localeCompare(b.receivedDate))
+    let balance = 0
+    const transactions: SoaTransaction[] = []
+    for (const inv of invs) {
+      balance += inv.totalSar
+      transactions.push({ date: inv.issuedDate, type: 'Invoice', reference: inv.invoiceNumber, description: `Monthly Rent ${inv.billingPeriodStart} – ${inv.billingPeriodEnd} (${inv.vehicleMakeModel})`, debitSar: inv.totalSar, creditSar: 0, balanceSar: balance })
+    }
+    for (const pmt of pmts) {
+      const applied = pmt.amount - pmt.remainingBalance
+      balance -= applied
+      transactions.push({ date: pmt.receivedDate, type: 'Payment', reference: pmt.referenceNumber ?? pmt.id, description: `Payment received — ${pmt.paymentMethod}`, debitSar: 0, creditSar: applied, balanceSar: balance })
+    }
+    transactions.sort((a, b) => a.date.localeCompare(b.date))
+    let running = 0
+    transactions.forEach((t) => { running += t.debitSar - t.creditSar; t.balanceSar = Math.round(running * 100) / 100 })
+    return Promise.resolve({
+      customerId, customerDisplayName: customer?.displayName ?? '',
+      periodFrom: from, periodTo: to, openingBalance: 0,
+      transactions,
+      closingBalance: Math.round(running * 100) / 100,
+      totalInvoiced: invs.reduce((s, i) => s + i.totalSar, 0),
+      totalPaid: pmts.reduce((s, p) => s + (p.amount - p.remainingBalance), 0),
+      generatedAtUtc: new Date().toISOString(),
+    })
   }
 
   bulkImportVehicles(file: File, _idempotencyKey: string): Promise<BulkImportResult> {

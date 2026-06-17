@@ -30,6 +30,7 @@ export const messagesEn = {
     leases: 'Leases',
     newLease: 'New Lease',
     quotations: 'Quotations',
+    invoices: 'Invoices',
   },
   dashboard: {
     title: 'Dashboard',
@@ -546,6 +547,7 @@ export const messagesAr: Messages = {
     leases: 'العقود',
     newLease: 'عقد جديد',
     quotations: 'العروض',
+    invoices: 'الفواتير',
   },
   dashboard: {
     title: 'لوحة المعلومات',
