@@ -5,6 +5,70 @@ inside the repo so any future Copilot / Claude session can continue cleanly with
 relying on chat memory. **This file is the source of truth between sessions.** Read
 it first; update it after every meaningful change.
 
+## Session update (2026-06-21) — Pricing setup + quotation flow
+
+### What was completed
+
+1. Tenant-shared quotation pricing setup API was added in BFF.
+
+- New endpoint group: `/api/v1/admin/quotation-pricing-setup`
+- `GET /` returns tenant catalog JSON (or empty shape)
+- `PUT /` upserts tenant catalog JSON (requires `Idempotency-Key`)
+- Storage backend: `IObjectStorage` (container `quotation-pricing-setup`, key `{tenantId}/catalog.v1.json`)
+- File: `services/bff/Endpoints/QuotationPricingSetupEndpoints.cs`
+
+2. BFF composition root was updated to support the new endpoint.
+
+- Added in-memory storage registration: `AddInMemoryStorage()`
+- Mapped endpoint: `v1.MapQuotationPricingSetupEndpoints()`
+- File: `services/bff/Program.cs`
+
+3. Web portal setup screens were moved from local-only to backend-first loading/saving.
+
+- Added API helper with local fallback and remote seed behavior.
+- File: `apps/web-portal/lib/quotation-pricing-setup-api.ts`
+- Setup page now uses backend-first load/save/seed/reload.
+- File: `apps/web-portal/app/setup/page.tsx`
+
+4. Quotation create flow aligned with latest backend enum contract.
+
+- Backend expects numeric enum values for `CreateQuotationRequest.ContractType`
+  and `AddQuotationLineRequest.ItemType`.
+- Frontend now sends numeric codes:
+  - Contract type: `1=Daily`, `2=Hourly`, `3=LongTermLease`
+  - Line item type for current flow: `1` (`VehicleRental`)
+- Files:
+  - `apps/web-portal/lib/bff-client.ts`
+  - `apps/web-portal/app/quotations/new/page.tsx`
+
+5. Quotation line UX remained aligned with setup-driven pricing simplification.
+
+- Line-level item-type selector removed from UI.
+- Line-level discount input removed.
+- Quote discount display is setup-driven (read-only in form).
+
+### Validation status
+
+- `build-bff` succeeds after endpoint wiring and enum fixes.
+- Type/diagnostics checks on changed frontend/backend files report no errors.
+
+### Known issues observed during manual runs
+
+1. `Invoke-RestMethod` to `http://localhost:5000/api/v1/admin/quotation-pricing-setup` can fail with connection error when BFF is not currently running (environment/process state issue).
+2. Separate, pre-existing RLS-related failure still appears in logs during some customer write paths:
+
+- SQL block predicate conflict on `dbo.Customers`.
+- Not caused by quotation pricing setup endpoint changes.
+
+### Immediate next steps
+
+1. Run end-to-end manual verification with BFF running:
+
+- GET + PUT on `/api/v1/admin/quotation-pricing-setup`
+- Create quotation + add line from web portal UI
+
+2. Investigate and fix the RLS `dbo.Customers` block predicate write failure (tenant/session context in that path).
+
 ## Working rules (user-set, 2026-05-24)
 
 1. Always read the latest repo state before doing anything.
@@ -104,27 +168,27 @@ it first; update it after every meaningful change.
 13. **ZATCA adapter skeleton (Week-4 prep, 2026-05-29).** Three packages on disk —
     `Adapters.Zatca` (Pattern B), `Adapters.Zatca.InMemory`, `Adapters.Zatca.Tests` —
     plus `Domain.Zatca.ZatcaChainState`, port `IZatcaChainStateRepository`, EF repo
-    + configuration + migration `Add_ZatcaChainState`. `IZatcaClient.SubmitInvoiceAsync`
-    is the only method this PR; DTOs are `SubmitInvoiceRequest` / `SubmitInvoiceResponse`
-    / `ZatcaResultStatus { Cleared | Reported | WarningCleared | Rejected }`. The Real
-    HTTP client (fully wired with auth handler + Polly resilience) is a **clear-error
-    stub** that returns `IntegrationResult.Failure("zatca.not_yet_implemented",
-    isTransient:false)` — Week-4 lights up UBL 2.1 + ECDSA P-256 + TLV QR. `Zatca:Mode`
-    switch (`Real` | `InMemory`) mirrors Tajeer; default `InMemory` in dev. **Chain
-    invariant location**: `ZatcaChainState.AdvanceTo(hash, when)` accepts any hash —
-    the saga (Week-4) is responsible for only calling it on `Cleared` / `Reported` /
-    `WarningCleared` results. This matches the existing `Lease.MarkIssued` pattern
-    (entity stays passive; cross-aggregate policy lives in the saga). `ZatcaHealthCheck`
-    reports `Healthy` when Mode=InMemory and `Degraded("not yet implemented")` when
-    Mode=Real, so the readiness probe stays green for the rest of the BFF while making
-    the unfinished state visible.
+    - configuration + migration `Add_ZatcaChainState`. `IZatcaClient.SubmitInvoiceAsync`
+      is the only method this PR; DTOs are `SubmitInvoiceRequest` / `SubmitInvoiceResponse`
+      / `ZatcaResultStatus { Cleared | Reported | WarningCleared | Rejected }`. The Real
+      HTTP client (fully wired with auth handler + Polly resilience) is a **clear-error
+      stub** that returns `IntegrationResult.Failure("zatca.not_yet_implemented",
+isTransient:false)` — Week-4 lights up UBL 2.1 + ECDSA P-256 + TLV QR. `Zatca:Mode`
+      switch (`Real` | `InMemory`) mirrors Tajeer; default `InMemory` in dev. **Chain
+      invariant location**: `ZatcaChainState.AdvanceTo(hash, when)` accepts any hash —
+      the saga (Week-4) is responsible for only calling it on `Cleared` / `Reported` /
+      `WarningCleared` results. This matches the existing `Lease.MarkIssued` pattern
+      (entity stays passive; cross-aggregate policy lives in the saga). `ZatcaHealthCheck`
+      reports `Healthy` when Mode=InMemory and `Degraded("not yet implemented")` when
+      Mode=Real, so the readiness probe stays green for the rest of the BFF while making
+      the unfinished state visible.
 14. **Phase-2 Vehicles RLS extension (2026-05-30).** Migration `Add_Vehicles_RLS_PhaseTwo`
     introduces `dbo.fn_VehiclesTenancyPredicate(@TenantId, @Id)` and rewires
     `dbo.TenancyPolicy` via `ALTER FILTER/BLOCK PREDICATE` to point Vehicles at it
     (in-place swap, not DROP+ADD — SQL Server's planner rejects the latter as a
     duplicate-predicate violation even when both halves cancel out). New predicate
     authorises an external customer iff `EXISTS (SELECT 1 FROM dbo.Leases WHERE
-    VehicleId = @Id AND TenantId = @TenantId AND CustomerId = SESSION_CONTEXT('CustomerId'))`
+VehicleId = @Id AND TenantId = @TenantId AND CustomerId = SESSION_CONTEXT('CustomerId'))`
     — **no lease-status filter in RLS**; "currently holding" stays the handler's
     business rule so the lease-detail view can show vehicle info for historical
     (Closed) leases without re-bypassing RLS. Three handlers
@@ -155,36 +219,36 @@ it first; update it after every meaningful change.
 
 ## API contracts (current)
 
-| Verb   | Path                                 | Auth                                    | Body                                   | Returns                                                                         |
-| ------ | ------------------------------------ | --------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `GET`  | `/health/liveness`                   | none                                    | —                                      | 200 always                                                                      |
-| `GET`  | `/health/readiness`                  | none                                    | —                                      | 200 if SQL reachable, 503 otherwise                                             |
-| `GET`  | `/api/v1/dev/whoami`                 | dev JWT stub                            | —                                      | claims echo + resolved `ITenantContext`                                         |
-| `POST` | `/api/v1/dev/save-contract`          | dev JWT stub + `Idempotency-Key` header | domain-shaped `SaveContractDevRequest` | 202 `{leaseId, tajeerContractNumber, issuanceUrl}` ; 400 / 422 / 503 on failure |
-| `POST` | `/api/v1/webhooks/tajeer`            | `secret-key` header                     | Tajeer V9.7 payload                    | 200 `{status: "received"                                                        | "duplicate-ignored"}` ; 401 on bad sig (unless LogOnly) ; 400 on malformed body |
-| `GET`  | `/api/v1/lookups/branches`           | dev JWT stub                            | —                                      | `BranchDto[]`                                                                   |
-| `GET`  | `/api/v1/lookups/rent-policies`      | dev JWT stub                            | —                                      | `RentPolicyDto[]`                                                               |
-| `GET`  | `/api/v1/lookups/extended-coverages` | dev JWT stub                            | —                                      | `ExtendedCoverageDto[]`                                                         |
-| `GET`  | `/api/v1/lookups/customers`          | dev JWT stub                            | `?page=1&pageSize=50&search=`          | `PagedResult<CustomerSummaryDto>`                                               |
-| `GET`  | `/api/v1/lookups/vehicles`           | dev JWT stub                            | `?page=1&pageSize=50&search=&status=1` | `PagedResult<VehicleSummaryDto>`                                                |
-| `GET`  | `/api/v1/lookups/drivers`            | dev JWT stub                            | `?page=1&pageSize=50&search=`          | `PagedResult<DriverSummaryDto>`                                                 |
-| `POST` | `/api/v1/inspections`                | dev JWT stub + `Idempotency-Key` header | `StartInspectionRequest`               | 201 `{id, status}` ; 400 / 404 / 409 / 422 on failure                           |
-| `POST` | `/api/v1/inspections/{id}/photos`    | dev JWT stub + `Idempotency-Key` header | `AddPhotoRequest`                      | 200 `{id, status}` ; 404 / 409 / 422 on failure                                 |
-| `POST` | `/api/v1/inspections/{id}/damage-markers` | dev JWT stub + `Idempotency-Key` header | `AddDamageMarkerRequest`           | 200 `{id, status}` ; 404 / 409 / 422 on failure                                 |
-| `POST` | `/api/v1/inspections/{id}/complete`  | dev JWT stub + `Idempotency-Key` header | empty                                  | 200 `{id, status: Completed}` ; 404 / 409 on failure                            |
-| `POST` | `/api/v1/inspections/{id}/abandon`   | dev JWT stub + `Idempotency-Key` header | `AbandonInspectionRequest`             | 200 `{id, status: Abandoned}` ; 404 / 409 / 422 on failure                      |
-| `GET`  | `/api/v1/inspections/{id}`           | dev JWT stub                            | —                                      | `InspectionDetailDto` (with photos + damage markers) ; 404 if unknown           |
-| `GET`  | `/api/v1/lookups/inspections`        | dev JWT stub                            | `?page=1&pageSize=50&vehicleId=&leaseId=&type=&status=` | `PagedResult<InspectionSummaryDto>`                |
-| `POST` | `/api/v1/leases/{id}/check-in`       | dev JWT stub + `Idempotency-Key` header | `CheckInLeaseRequest`                  | 200 `{leaseId, inspectionId, status: Closed, payment: {rentAmount, paidAmount, lateHoursFee, extraKmFee, damagesFee, discountAmount, totalDue, vatAmount, grandTotal, finalPaidAmount}}` ; 404 unknown ; 422 invalid state / odometer regression / Tajeer non-transient ; 503 Tajeer transient |
-| `POST` | `/api/v1/leases/{id}/extend`         | dev JWT stub + `Idempotency-Key` header | `ExtendLeaseRequest` (`newContractEndUtc`, optional charges + reason)  | 200 `{leaseId, status: Extended, newContractEndUtc, extensionCount, charges?: {totalDue, vatAmount, grandTotal}}` ; 404 unknown ; 422 invalid state / `lease.extensions_exhausted` / `lease.invalid_new_end_date` / Tajeer non-transient ; 503 Tajeer transient |
-| `POST` | `/api/v1/leases/{id}/suspend`        | dev JWT stub + `Idempotency-Key` header | `SuspendLeaseRequest` (`suspensionReasonCode`, optional notes)         | 200 `{leaseId, status: Suspended, suspensionReasonCode, suspendedAtUtc}` ; 404 unknown ; 422 invalid state / Tajeer non-transient ; 503 Tajeer transient |
-| `POST` | `/api/v1/incidents`                  | dev JWT stub + `Idempotency-Key` header | `ReportIncidentRequest`                | 201 `{id, status: Open}` ; 422 invalid input |
-| `POST` | `/api/v1/incidents/{id}/investigate` | dev JWT stub + `Idempotency-Key` header | empty                                  | 200 `{id, status: UnderInvestigation}` ; 404 / 409 |
-| `POST` | `/api/v1/incidents/{id}/resolve`     | dev JWT stub + `Idempotency-Key` header | `ResolveIncidentRequest` (notes)       | 200 `{id, status: Resolved}` ; 404 / 409 |
-| `POST` | `/api/v1/incidents/{id}/close`       | dev JWT stub + `Idempotency-Key` header | empty                                  | 200 `{id, status: Closed}` ; 404 |
-| `PATCH`| `/api/v1/incidents/{id}/claim`       | dev JWT stub + `Idempotency-Key` header | `UpdateIncidentClaimRequest`           | 200 `{id, status}` ; 404 / 409 (immutable when Closed) |
-| `GET`  | `/api/v1/incidents/{id}`             | dev JWT stub                            | —                                      | `IncidentDetailDto` ; 404 if unknown |
-| `GET`  | `/api/v1/lookups/incidents`          | dev JWT stub                            | `?page=&pageSize=&leaseId=&vehicleId=&status=&severity=` | `PagedResult<IncidentSummaryDto>` |
+| Verb    | Path                                      | Auth                                    | Body                                                                  | Returns                                                                                                                                                                                                                                                                                        |
+| ------- | ----------------------------------------- | --------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `GET`   | `/health/liveness`                        | none                                    | —                                                                     | 200 always                                                                                                                                                                                                                                                                                     |
+| `GET`   | `/health/readiness`                       | none                                    | —                                                                     | 200 if SQL reachable, 503 otherwise                                                                                                                                                                                                                                                            |
+| `GET`   | `/api/v1/dev/whoami`                      | dev JWT stub                            | —                                                                     | claims echo + resolved `ITenantContext`                                                                                                                                                                                                                                                        |
+| `POST`  | `/api/v1/dev/save-contract`               | dev JWT stub + `Idempotency-Key` header | domain-shaped `SaveContractDevRequest`                                | 202 `{leaseId, tajeerContractNumber, issuanceUrl}` ; 400 / 422 / 503 on failure                                                                                                                                                                                                                |
+| `POST`  | `/api/v1/webhooks/tajeer`                 | `secret-key` header                     | Tajeer V9.7 payload                                                   | 200 `{status: "received"                                                                                                                                                                                                                                                                       | "duplicate-ignored"}` ; 401 on bad sig (unless LogOnly) ; 400 on malformed body |
+| `GET`   | `/api/v1/lookups/branches`                | dev JWT stub                            | —                                                                     | `BranchDto[]`                                                                                                                                                                                                                                                                                  |
+| `GET`   | `/api/v1/lookups/rent-policies`           | dev JWT stub                            | —                                                                     | `RentPolicyDto[]`                                                                                                                                                                                                                                                                              |
+| `GET`   | `/api/v1/lookups/extended-coverages`      | dev JWT stub                            | —                                                                     | `ExtendedCoverageDto[]`                                                                                                                                                                                                                                                                        |
+| `GET`   | `/api/v1/lookups/customers`               | dev JWT stub                            | `?page=1&pageSize=50&search=`                                         | `PagedResult<CustomerSummaryDto>`                                                                                                                                                                                                                                                              |
+| `GET`   | `/api/v1/lookups/vehicles`                | dev JWT stub                            | `?page=1&pageSize=50&search=&status=1`                                | `PagedResult<VehicleSummaryDto>`                                                                                                                                                                                                                                                               |
+| `GET`   | `/api/v1/lookups/drivers`                 | dev JWT stub                            | `?page=1&pageSize=50&search=`                                         | `PagedResult<DriverSummaryDto>`                                                                                                                                                                                                                                                                |
+| `POST`  | `/api/v1/inspections`                     | dev JWT stub + `Idempotency-Key` header | `StartInspectionRequest`                                              | 201 `{id, status}` ; 400 / 404 / 409 / 422 on failure                                                                                                                                                                                                                                          |
+| `POST`  | `/api/v1/inspections/{id}/photos`         | dev JWT stub + `Idempotency-Key` header | `AddPhotoRequest`                                                     | 200 `{id, status}` ; 404 / 409 / 422 on failure                                                                                                                                                                                                                                                |
+| `POST`  | `/api/v1/inspections/{id}/damage-markers` | dev JWT stub + `Idempotency-Key` header | `AddDamageMarkerRequest`                                              | 200 `{id, status}` ; 404 / 409 / 422 on failure                                                                                                                                                                                                                                                |
+| `POST`  | `/api/v1/inspections/{id}/complete`       | dev JWT stub + `Idempotency-Key` header | empty                                                                 | 200 `{id, status: Completed}` ; 404 / 409 on failure                                                                                                                                                                                                                                           |
+| `POST`  | `/api/v1/inspections/{id}/abandon`        | dev JWT stub + `Idempotency-Key` header | `AbandonInspectionRequest`                                            | 200 `{id, status: Abandoned}` ; 404 / 409 / 422 on failure                                                                                                                                                                                                                                     |
+| `GET`   | `/api/v1/inspections/{id}`                | dev JWT stub                            | —                                                                     | `InspectionDetailDto` (with photos + damage markers) ; 404 if unknown                                                                                                                                                                                                                          |
+| `GET`   | `/api/v1/lookups/inspections`             | dev JWT stub                            | `?page=1&pageSize=50&vehicleId=&leaseId=&type=&status=`               | `PagedResult<InspectionSummaryDto>`                                                                                                                                                                                                                                                            |
+| `POST`  | `/api/v1/leases/{id}/check-in`            | dev JWT stub + `Idempotency-Key` header | `CheckInLeaseRequest`                                                 | 200 `{leaseId, inspectionId, status: Closed, payment: {rentAmount, paidAmount, lateHoursFee, extraKmFee, damagesFee, discountAmount, totalDue, vatAmount, grandTotal, finalPaidAmount}}` ; 404 unknown ; 422 invalid state / odometer regression / Tajeer non-transient ; 503 Tajeer transient |
+| `POST`  | `/api/v1/leases/{id}/extend`              | dev JWT stub + `Idempotency-Key` header | `ExtendLeaseRequest` (`newContractEndUtc`, optional charges + reason) | 200 `{leaseId, status: Extended, newContractEndUtc, extensionCount, charges?: {totalDue, vatAmount, grandTotal}}` ; 404 unknown ; 422 invalid state / `lease.extensions_exhausted` / `lease.invalid_new_end_date` / Tajeer non-transient ; 503 Tajeer transient                                |
+| `POST`  | `/api/v1/leases/{id}/suspend`             | dev JWT stub + `Idempotency-Key` header | `SuspendLeaseRequest` (`suspensionReasonCode`, optional notes)        | 200 `{leaseId, status: Suspended, suspensionReasonCode, suspendedAtUtc}` ; 404 unknown ; 422 invalid state / Tajeer non-transient ; 503 Tajeer transient                                                                                                                                       |
+| `POST`  | `/api/v1/incidents`                       | dev JWT stub + `Idempotency-Key` header | `ReportIncidentRequest`                                               | 201 `{id, status: Open}` ; 422 invalid input                                                                                                                                                                                                                                                   |
+| `POST`  | `/api/v1/incidents/{id}/investigate`      | dev JWT stub + `Idempotency-Key` header | empty                                                                 | 200 `{id, status: UnderInvestigation}` ; 404 / 409                                                                                                                                                                                                                                             |
+| `POST`  | `/api/v1/incidents/{id}/resolve`          | dev JWT stub + `Idempotency-Key` header | `ResolveIncidentRequest` (notes)                                      | 200 `{id, status: Resolved}` ; 404 / 409                                                                                                                                                                                                                                                       |
+| `POST`  | `/api/v1/incidents/{id}/close`            | dev JWT stub + `Idempotency-Key` header | empty                                                                 | 200 `{id, status: Closed}` ; 404                                                                                                                                                                                                                                                               |
+| `PATCH` | `/api/v1/incidents/{id}/claim`            | dev JWT stub + `Idempotency-Key` header | `UpdateIncidentClaimRequest`                                          | 200 `{id, status}` ; 404 / 409 (immutable when Closed)                                                                                                                                                                                                                                         |
+| `GET`   | `/api/v1/incidents/{id}`                  | dev JWT stub                            | —                                                                     | `IncidentDetailDto` ; 404 if unknown                                                                                                                                                                                                                                                           |
+| `GET`   | `/api/v1/lookups/incidents`               | dev JWT stub                            | `?page=&pageSize=&leaseId=&vehicleId=&status=&severity=`              | `PagedResult<IncidentSummaryDto>`                                                                                                                                                                                                                                                              |
 
 ## Current repo state
 
@@ -516,6 +580,7 @@ extended (5 contact person fields), LeaseInspection extended (vehicleAssignmentT
 vehicleSubType, switchedFromVehicleId, switchedToVehicleId, images).
 
 **Pending from user requirements (items 4,5,9-14)**:
+
 - Payments page with full payment records
 - Invoice generation with warnings/checks and customer-level grouping
 - Bulk generation by customer/contract/city/region
@@ -621,14 +686,15 @@ i18n for `leaseDetail.*`. **Adjacent fix**: PR #22's customer-portal
 `LeaseStatus` code map was off-by-one against
 `Domain/Leases/LeaseStatus.cs` (i18n said `2: Active`, actual enum has
 `Active=3`); dashboard "Active" filter actually counted "PendingIssuance
-+ Active"; `statusTone` had the same shift. Fixed across `i18n.ts`,
-`app/page.tsx`, `components/ui.tsx` with anchoring comments citing the
-enum file. **Tests**: 344 total green (+7: 3 endpoint, 4 handler).
-customer-portal build: 5 routes (added dynamic `/leases/[id]`).
-Carry-forward: `BffTestSeedWaiter` extract (third retro now flagging it),
-Vehicle detail page, ZATCA adapter (Week-4 critical), close-saga refactor
-→ TajeerStatusMapper, Vehicle Replacement Saga, Phase-2 Vehicles RLS
-extension, Always Encrypted on PII.
+
+- Active"; `statusTone` had the same shift. Fixed across `i18n.ts`,
+  `app/page.tsx`, `components/ui.tsx` with anchoring comments citing the
+  enum file. **Tests**: 344 total green (+7: 3 endpoint, 4 handler).
+  customer-portal build: 5 routes (added dynamic `/leases/[id]`).
+  Carry-forward: `BffTestSeedWaiter` extract (third retro now flagging it),
+  Vehicle detail page, ZATCA adapter (Week-4 critical), close-saga refactor
+  → TajeerStatusMapper, Vehicle Replacement Saga, Phase-2 Vehicles RLS
+  extension, Always Encrypted on PII.
 
 2026-05-29 — Tech-debt sweep: `BffTestHostDefaults` extracted + CI strict
 mode enabled. Closes the FIVE-retros-in-a-row complaint that every new BFF
@@ -637,7 +703,7 @@ endpoint workstream copies the same ~30-line `ConfigureWebHost` block.
 `Defaults()` (the 13 always-shared keys, Seed:Mode=Empty), `DemoSeedDefaults
 (tenantId, randomSeed)` (Defaults + Seed:Mode=Demo + the three seeder keys),
 and `ReplaceDbContextWithInMemory(services, dbName)` (the standard EF
-InMemory swap ceremony). Per-factory overrides are now `var settings = …; 
+InMemory swap ceremony). Per-factory overrides are now `var settings = …;
 settings["X"] = "y";`. **13 factories retrofitted** across 11 files:
 MeFactory, MyVehiclesFactory, IncidentFactory, InspectionFactory,
 CheckInFactory, ExtendSuspendFactory, SaveContractEndpointFactory,
@@ -699,22 +765,23 @@ the failure-mapping spine; 404 maps to `tajeer.vendor.contract.not_found`
 the most recent Save/Close/Suspend/Extend call back as a synthetic response;
 new `getFactory` ctor override + public `SeedProjection(...)` helper for
 drift-test wiring. **Status mapping centralised**: `TajeerStatusMapper.FromTajeer`
-+ `ApplyLocalRefinements` in `Infrastructure/Tajeer/` per Spec 03 §7.2 / §1
-principle #10 (mapper lives in Infrastructure, not the adapter, because
-adapters here are kept Domain-free; the vendor codes live in the adapter DTOs,
-the translation to `LeaseStatus` lives one layer up). `InvalidTajeerStatusException`
-fires on unknown triples — caught by the reconciliation loop. **Reconciliation
-upgrade**: `TajeerStatusMirrorCheck` now takes `ITajeerContractClient`, walks
-Active+Extended leases with `TajeerContractNumber != null`, compares via the
-mapper, classifies each row as match / drift / vendor-failure-drift /
-transient-blip / unrecognised-state (warn on every drift, debug on match, debug
-on transient). Phase 1 is detect-only by design — auto-correcting risks masking
-missed webhooks (Phase 2 lands an action policy). **320 tests green** (was 279;
-+12 mapper, +6 real GET, +9 InMemory GET, +5 mirror, plus subtractions in
-mirror retrofit). Carry-forward next: ZATCA adapter (Week-4 critical path),
-Customer Portal — My Vehicles via lease join, Vehicle Replacement Saga,
-`BffTestHostDefaults` shared helper (4 retros now), drop `continue-on-error`
-from JS CI.
+
+- `ApplyLocalRefinements` in `Infrastructure/Tajeer/` per Spec 03 §7.2 / §1
+  principle #10 (mapper lives in Infrastructure, not the adapter, because
+  adapters here are kept Domain-free; the vendor codes live in the adapter DTOs,
+  the translation to `LeaseStatus` lives one layer up). `InvalidTajeerStatusException`
+  fires on unknown triples — caught by the reconciliation loop. **Reconciliation
+  upgrade**: `TajeerStatusMirrorCheck` now takes `ITajeerContractClient`, walks
+  Active+Extended leases with `TajeerContractNumber != null`, compares via the
+  mapper, classifies each row as match / drift / vendor-failure-drift /
+  transient-blip / unrecognised-state (warn on every drift, debug on match, debug
+  on transient). Phase 1 is detect-only by design — auto-correcting risks masking
+  missed webhooks (Phase 2 lands an action policy). **320 tests green** (was 279;
+  +12 mapper, +6 real GET, +9 InMemory GET, +5 mirror, plus subtractions in
+  mirror retrofit). Carry-forward next: ZATCA adapter (Week-4 critical path),
+  Customer Portal — My Vehicles via lease join, Vehicle Replacement Saga,
+  `BffTestHostDefaults` shared helper (4 retros now), drop `continue-on-error`
+  from JS CI.
 
 2026-05-29 — Customer Portal scaffold shipped. First demo-unblocking slice
 after the Phase-1 hardening sprint. **Backend**: new `Application.Me`
@@ -776,21 +843,22 @@ guard. **269 tests green** (was 264; +8 outbox unit/integration, -3 retired).
 
 2026-05-29 — Day-9 RLS tenant-isolation workstream shipped. **Tenant isolation
 now enforced at the DB layer** for the first time. New port `ITenancyAccessor`
-+ `Tenancy(TenantId, CustomerId?, UserType)` record + `SystemTenancyScope`
-(AsyncLocal) in `Application.Ports.Tenancy`. New interceptor
-`TenancyConnectionInterceptor` writes `SESSION_CONTEXT('TenantId' | 'CustomerId'
+
+- `Tenancy(TenantId, CustomerId?, UserType)` record + `SystemTenancyScope`
+  (AsyncLocal) in `Application.Ports.Tenancy`. New interceptor
+  `TenancyConnectionInterceptor` writes `SESSION_CONTEXT('TenantId' | 'CustomerId'
 | 'UserType')` on every `SqlConnection` open; registered alongside
-`DomainEventDispatchInterceptor` via `AddAutoLeaseNetDbContext` so prod + tests
-agree. EF migration `20260529012701_Add_RLS_TenancyPolicy` creates
-`dbo.fn_TenancyPredicate` + `dbo.TenancyPolicy` covering 9 aggregate-root
-tables. Phase-1 webhook bypass via `WEBHOOK_BOOTSTRAP` UserType override
-(retires in Phase 2 with per-tenant webhook URLs). End-to-end smoke proven:
-unknown-tenant header against `/api/v1/lookups/customers` returns
-`totalCount:0` even without any app-side filter. **264 tests green** (+6
-SystemTenancyScope + 2 TenancyConnectionInterceptor unit tests); +5
-`Category=Integration` RLS isolation tests proving cross-tenant read filter,
-cross-tenant write block, and the WEBHOOK_BOOTSTRAP override. Always Encrypted
-split to a follow-up workstream pending Azure Key Vault provisioning.
+  `DomainEventDispatchInterceptor` via `AddAutoLeaseNetDbContext` so prod + tests
+  agree. EF migration `20260529012701_Add_RLS_TenancyPolicy` creates
+  `dbo.fn_TenancyPredicate` + `dbo.TenancyPolicy` covering 9 aggregate-root
+  tables. Phase-1 webhook bypass via `WEBHOOK_BOOTSTRAP` UserType override
+  (retires in Phase 2 with per-tenant webhook URLs). End-to-end smoke proven:
+  unknown-tenant header against `/api/v1/lookups/customers` returns
+  `totalCount:0` even without any app-side filter. **264 tests green** (+6
+  SystemTenancyScope + 2 TenancyConnectionInterceptor unit tests); +5
+  `Category=Integration` RLS isolation tests proving cross-tenant read filter,
+  cross-tenant write block, and the WEBHOOK_BOOTSTRAP override. Always Encrypted
+  split to a follow-up workstream pending Azure Key Vault provisioning.
 
 2026-05-29 — Day-21 Incident aggregate shipped. Mirrors PR #12's Inspection
 aggregate structurally — `Incident` aggregate root with full Spec 01 §5.6
@@ -844,16 +912,17 @@ Suspended/Closed leases reflect realistic Vehicle state. **197 tests green**
 
 2026-05-25 — Day-18 check-out saga (slim slice) shipped. New domain method
 `Inspection.LinkToLease(leaseId, nowUtc)` enforces COMPLETED + CheckOut/PreDelivery
-+ no-existing-link invariants; new `LeaseLinkedAtUtc` audit timestamp.
-`SaveContractCommand` gained optional `CheckOutInspectionId` — handler validates
-4 negative paths (not-found / vehicle-mismatch / not-completed / wrong-type /
-already-linked → `lease.checkout_inspection.{code}`) and auto-looks-up the most
-recent un-linked CHECK_OUT for the vehicle when the id is omitted. Phase 1.x
-keeps the link **optional** (existing seed + test callers unaffected); flips to
-required in Phase 1.y once the web portal drives the full saga. Seed adapter
-now drives the link via `Inspection.LinkToLease` for parity with production flow.
-**187 tests green** (+12: 7 domain + 5 SaveContract integration). Previous:
-PR #12 Inspection aggregate.
+
+- no-existing-link invariants; new `LeaseLinkedAtUtc` audit timestamp.
+  `SaveContractCommand` gained optional `CheckOutInspectionId` — handler validates
+  4 negative paths (not-found / vehicle-mismatch / not-completed / wrong-type /
+  already-linked → `lease.checkout_inspection.{code}`) and auto-looks-up the most
+  recent un-linked CHECK_OUT for the vehicle when the id is omitted. Phase 1.x
+  keeps the link **optional** (existing seed + test callers unaffected); flips to
+  required in Phase 1.y once the web portal drives the full saga. Seed adapter
+  now drives the link via `Inspection.LinkToLease` for parity with production flow.
+  **187 tests green** (+12: 7 domain + 5 SaveContract integration). Previous:
+  PR #12 Inspection aggregate.
 
 2026-05-25 — Inspection aggregate workstream closed. First Week-3 slice:
 `Inspection` aggregate + `InspectionPhoto` + `InspectionDamageMarker` with the

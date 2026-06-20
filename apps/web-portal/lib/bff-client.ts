@@ -5,7 +5,7 @@
 
 export const BFF_BASE_URL = process.env.NEXT_PUBLIC_BFF_BASE_URL ?? 'http://localhost:5000'
 export const USE_MOCK_BFF =
-  process.env.NODE_ENV !== 'production' && (process.env.NEXT_PUBLIC_USE_MOCK ?? 'true') !== 'false'
+  process.env.NODE_ENV !== 'production' && (process.env.NEXT_PUBLIC_USE_MOCK ?? 'false') !== 'false'
 
 // Dev tenant id matches the seed tenant + Phase 1 fallback in TajeerWebhookEndpoints.cs.
 export const DEV_TENANT_ID =
@@ -163,24 +163,57 @@ export interface QuotationDetail extends QuotationSummary {
   acceptedByCustomerSignature?: string | null
 }
 
+export type QuotationContractTypeCode = 1 | 2 | 3
+export type QuotationItemTypeCode = 1 | 2 | 3 | 4 | 5
+
 export interface CreateQuotationRequest {
   customerId: string
   accountManagerId: string
-  quoteDate: string         // YYYY-MM-DD
-  validUntilDate: string    // YYYY-MM-DD
-  contractType: string
+  quoteDate: string // YYYY-MM-DD
+  validUntilDate: string // YYYY-MM-DD
+  contractType: QuotationContractTypeCode
   estimatedDurationMonths: number
   discountPercent: number
   termsAndConditionsMd?: string | undefined
 }
 
 export interface AddQuotationLineRequest {
-  itemType: string
+  itemType: QuotationItemTypeCode
   description: string
   vehicleSpecRef?: string | undefined
   quantity: number
   unitPriceSar: number
   discountPercent: number
+}
+
+function contractTypeCodeToName(code: QuotationContractTypeCode): string {
+  switch (code) {
+    case 1:
+      return 'Daily'
+    case 2:
+      return 'Hourly'
+    case 3:
+      return 'LongTermLease'
+    default:
+      return 'LongTermLease'
+  }
+}
+
+function itemTypeCodeToName(code: QuotationItemTypeCode): string {
+  switch (code) {
+    case 1:
+      return 'VehicleRental'
+    case 2:
+      return 'Insurance'
+    case 3:
+      return 'AdditionalDriver'
+    case 4:
+      return 'Gps'
+    case 5:
+      return 'Other'
+    default:
+      return 'VehicleRental'
+  }
 }
 
 export interface QuotationCommandResult {
@@ -205,8 +238,25 @@ export interface AcceptQuotationResult {
 
 // ─── Damage Recording ─────────────────────────────────────────────────────────
 
-export type DamageType = 'Accident' | 'ScratchDent' | 'Glass' | 'TyreWheel' | 'Mechanical' | 'Flood' | 'TheftVandalism' | 'Fire' | 'Other'
-export type DamageLocation = 'Front' | 'Rear' | 'LeftSide' | 'RightSide' | 'Roof' | 'Underbody' | 'Interior' | 'Multiple'
+export type DamageType =
+  | 'Accident'
+  | 'ScratchDent'
+  | 'Glass'
+  | 'TyreWheel'
+  | 'Mechanical'
+  | 'Flood'
+  | 'TheftVandalism'
+  | 'Fire'
+  | 'Other'
+export type DamageLocation =
+  | 'Front'
+  | 'Rear'
+  | 'LeftSide'
+  | 'RightSide'
+  | 'Roof'
+  | 'Underbody'
+  | 'Interior'
+  | 'Multiple'
 export type DamageSeverity = 'Minor' | 'Moderate' | 'Major' | 'TotalLoss'
 export type DamageFault = 'Customer' | 'ThirdParty' | 'Unknown' | 'ActOfGod'
 export type RepairStatus = 'Pending' | 'InProgress' | 'Completed' | 'Waived'
@@ -220,7 +270,7 @@ export interface DamageRecord {
   severity: DamageSeverity
   fault: DamageFault
   description: string
-  occurredAt: string        // YYYY-MM-DD
+  occurredAt: string // YYYY-MM-DD
   estimatedCostSar: number | null
   actualCostSar: number | null
   repairStatus: RepairStatus
@@ -250,10 +300,24 @@ export interface CreateDamageRecordRequest {
 
 // ─── Traffic Violations ───────────────────────────────────────────────────────
 
-export type ViolationType = 'Speeding' | 'Parking' | 'RedLight' | 'WrongWay' | 'MobilePhone' | 'ExpiredRegistration' | 'Seatbelt' | 'RecklessDriving' | 'Other'
+export type ViolationType =
+  | 'Speeding'
+  | 'Parking'
+  | 'RedLight'
+  | 'WrongWay'
+  | 'MobilePhone'
+  | 'ExpiredRegistration'
+  | 'Seatbelt'
+  | 'RecklessDriving'
+  | 'Other'
 export type ViolationAuthority = 'Muroor' | 'Municipality' | 'MOT' | 'Other'
 export type ViolationResponsible = 'Customer' | 'Company'
-export type ViolationPaymentStatus = 'Unpaid' | 'PaidByCustomer' | 'PaidByCompany' | 'Waived' | 'Contested'
+export type ViolationPaymentStatus =
+  | 'Unpaid'
+  | 'PaidByCustomer'
+  | 'PaidByCompany'
+  | 'Waived'
+  | 'Contested'
 
 export interface TrafficViolation {
   id: string
@@ -264,12 +328,12 @@ export interface TrafficViolation {
   violationNumber: string
   type: ViolationType
   authority: ViolationAuthority
-  occurredAt: string        // YYYY-MM-DD
+  occurredAt: string // YYYY-MM-DD
   location: string | null
   fineAmountSar: number
   responsibleParty: ViolationResponsible
   paymentStatus: ViolationPaymentStatus
-  paidAt: string | null     // YYYY-MM-DD
+  paidAt: string | null // YYYY-MM-DD
   absherRefNumber: string | null
   notes: string | null
   createdAtUtc: string
@@ -322,10 +386,10 @@ export interface Invoice {
   supplierVatNo: string
   quotationNumber: string | null
   poNumber: string | null
-  billingPeriodStart: string  // YYYY-MM-DD
-  billingPeriodEnd: string    // YYYY-MM-DD
-  issuedDate: string          // YYYY-MM-DD
-  dueDate: string             // YYYY-MM-DD
+  billingPeriodStart: string // YYYY-MM-DD
+  billingPeriodEnd: string // YYYY-MM-DD
+  issuedDate: string // YYYY-MM-DD
+  dueDate: string // YYYY-MM-DD
   status: InvoiceStatus
   lines: InvoiceLine[]
   subTotalSar: number
@@ -370,7 +434,7 @@ export interface AdvancePayment {
   customerDisplayName: string
   amount: number
   paymentMethod: PaymentMethod
-  receivedDate: string        // YYYY-MM-DD
+  receivedDate: string // YYYY-MM-DD
   referenceNumber: string | null
   notes: string | null
   remainingBalance: number
@@ -473,18 +537,30 @@ class BffClient {
     })
     if (!res.ok) {
       const problem = await this.tryReadProblem(res)
-      throw Object.assign(new Error(problem.title ?? `BFF PUT ${path} failed (${res.status})`), { status: res.status, problem })
+      throw Object.assign(new Error(problem.title ?? `BFF PUT ${path} failed (${res.status})`), {
+        status: res.status,
+        problem,
+      })
     }
     return (await res.json()) as TResponse
   }
 
-  async postForm<TResponse>(path: string, form: FormData, extraHeaders: Record<string, string> = {}): Promise<TResponse> {
+  async postForm<TResponse>(
+    path: string,
+    form: FormData,
+    extraHeaders: Record<string, string> = {},
+  ): Promise<TResponse> {
     const res = await fetch(`${BFF_BASE_URL}${path}`, {
-      method: 'POST', body: form, headers: this.headers(extraHeaders),
+      method: 'POST',
+      body: form,
+      headers: this.headers(extraHeaders),
     })
     if (!res.ok) {
       const problem = await this.tryReadProblem(res)
-      throw Object.assign(new Error(problem.title ?? `BFF POST ${path} failed (${res.status})`), { status: res.status, problem })
+      throw Object.assign(new Error(problem.title ?? `BFF POST ${path} failed (${res.status})`), {
+        status: res.status,
+        problem,
+      })
     }
     return (await res.json()) as TResponse
   }
@@ -496,7 +572,10 @@ class BffClient {
     })
     if (!res.ok) {
       const problem = await this.tryReadProblem(res)
-      throw Object.assign(new Error(problem.title ?? `BFF DELETE ${path} failed (${res.status})`), { status: res.status, problem })
+      throw Object.assign(new Error(problem.title ?? `BFF DELETE ${path} failed (${res.status})`), {
+        status: res.status,
+        problem,
+      })
     }
   }
 
@@ -557,11 +636,9 @@ class BffClient {
   }
 
   createQuotation(body: CreateQuotationRequest, idempotencyKey: string) {
-    return this.postJson<QuotationDetail, CreateQuotationRequest>(
-      '/api/v1/quotations',
-      body,
-      { 'Idempotency-Key': idempotencyKey },
-    )
+    return this.postJson<QuotationDetail, CreateQuotationRequest>('/api/v1/quotations', body, {
+      'Idempotency-Key': idempotencyKey,
+    })
   }
 
   addQuotationLine(quotationId: string, body: AddQuotationLineRequest, idempotencyKey: string) {
@@ -587,14 +664,21 @@ class BffClient {
     comment: string | undefined,
     idempotencyKey: string,
   ) {
-    return this.postJson<QuotationCommandResult, { approved: boolean; comment?: string | undefined }>(
+    return this.postJson<
+      QuotationCommandResult,
+      { approved: boolean; comment?: string | undefined }
+    >(
       `/api/v1/quotations/${quotationId}/approvals/${tierLevel}/decision`,
       { approved, comment },
       { 'Idempotency-Key': idempotencyKey },
     )
   }
 
-  acceptQuotation(quotationId: string, customerSignature: string | undefined, idempotencyKey: string) {
+  acceptQuotation(
+    quotationId: string,
+    customerSignature: string | undefined,
+    idempotencyKey: string,
+  ) {
     return this.postJson<AcceptQuotationResult, { customerSignature?: string | undefined }>(
       `/api/v1/quotations/${quotationId}/accept`,
       { customerSignature },
@@ -639,11 +723,9 @@ class BffClient {
   }
 
   createVehicle(body: CreateVehicleRequest, idempotencyKey: string) {
-    return this.postJson<VehicleCommandResult, CreateVehicleRequest>(
-      '/api/v1/vehicles',
-      body,
-      { 'Idempotency-Key': idempotencyKey },
-    )
+    return this.postJson<VehicleCommandResult, CreateVehicleRequest>('/api/v1/vehicles', body, {
+      'Idempotency-Key': idempotencyKey,
+    })
   }
 
   updateVehicle(id: string, body: UpdateVehicleRequest, idempotencyKey: string) {
@@ -702,11 +784,9 @@ class BffClient {
   }
 
   createDriver(body: CreateDriverRequest, idempotencyKey: string) {
-    return this.postJson<DriverCommandResult, CreateDriverRequest>(
-      '/api/v1/drivers',
-      body,
-      { 'Idempotency-Key': idempotencyKey },
-    )
+    return this.postJson<DriverCommandResult, CreateDriverRequest>('/api/v1/drivers', body, {
+      'Idempotency-Key': idempotencyKey,
+    })
   }
 
   // ─── Branches CRUD ──────────────────────────────────────────────────────────
@@ -716,11 +796,9 @@ class BffClient {
   }
 
   createBranch(body: CreateBranchRequest, idempotencyKey: string) {
-    return this.postJson<BranchCommandResult, CreateBranchRequest>(
-      '/api/v1/branches',
-      body,
-      { 'Idempotency-Key': idempotencyKey },
-    )
+    return this.postJson<BranchCommandResult, CreateBranchRequest>('/api/v1/branches', body, {
+      'Idempotency-Key': idempotencyKey,
+    })
   }
 
   updateBranchStatus(id: string, activate: boolean, idempotencyKey: string) {
@@ -761,7 +839,9 @@ class BffClient {
   // ─── Vehicle Switch ─────────────────────────────────────────────────────────
   switchLeaseVehicle(leaseId: string, body: SwitchVehicleRequest, idempotencyKey: string) {
     return this.postJson<SwitchVehicleResult, SwitchVehicleRequest>(
-      `/api/v1/leases/${leaseId}/switch-vehicle`, body, { 'Idempotency-Key': idempotencyKey },
+      `/api/v1/leases/${leaseId}/switch-vehicle`,
+      body,
+      { 'Idempotency-Key': idempotencyKey },
     )
   }
   getDriverCurrentLease(driverId: string) {
@@ -774,13 +854,25 @@ class BffClient {
     return this.deleteReq(`/api/v1/vehicles/${id}`, { 'Idempotency-Key': idempotencyKey })
   }
   deleteDriver(id: string, idempotencyKey: string) {
-    return this.postJson<DeleteResult, Record<string, never>>(`/api/v1/drivers/${id}/delete`, {}, { 'Idempotency-Key': idempotencyKey })
+    return this.postJson<DeleteResult, Record<string, never>>(
+      `/api/v1/drivers/${id}/delete`,
+      {},
+      { 'Idempotency-Key': idempotencyKey },
+    )
   }
   deleteBranch(id: string, idempotencyKey: string) {
-    return this.postJson<DeleteResult, Record<string, never>>(`/api/v1/branches/${id}/delete`, {}, { 'Idempotency-Key': idempotencyKey })
+    return this.postJson<DeleteResult, Record<string, never>>(
+      `/api/v1/branches/${id}/delete`,
+      {},
+      { 'Idempotency-Key': idempotencyKey },
+    )
   }
   deleteCustomer(id: string, idempotencyKey: string) {
-    return this.postJson<DeleteResult, Record<string, never>>(`/api/v1/customers/${id}/delete`, {}, { 'Idempotency-Key': idempotencyKey })
+    return this.postJson<DeleteResult, Record<string, never>>(
+      `/api/v1/customers/${id}/delete`,
+      {},
+      { 'Idempotency-Key': idempotencyKey },
+    )
   }
 
   // ─── Damage Records ─────────────────────────────────────────────────────────
@@ -788,7 +880,11 @@ class BffClient {
     return this.getJson<DamageRecord[]>(`/api/v1/leases/${leaseId}/damages`)
   }
   createDamageRecord(body: CreateDamageRecordRequest, idempotencyKey: string) {
-    return this.postJson<DamageRecord, CreateDamageRecordRequest>(`/api/v1/leases/${body.leaseId}/damages`, body, { 'Idempotency-Key': idempotencyKey })
+    return this.postJson<DamageRecord, CreateDamageRecordRequest>(
+      `/api/v1/leases/${body.leaseId}/damages`,
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
   }
 
   // ─── Traffic Violations ──────────────────────────────────────────────────────
@@ -796,15 +892,28 @@ class BffClient {
     return this.getJson<TrafficViolation[]>(`/api/v1/leases/${leaseId}/violations`)
   }
   createTrafficViolation(body: CreateTrafficViolationRequest, idempotencyKey: string) {
-    return this.postJson<TrafficViolation, CreateTrafficViolationRequest>(`/api/v1/leases/${body.leaseId}/violations`, body, { 'Idempotency-Key': idempotencyKey })
+    return this.postJson<TrafficViolation, CreateTrafficViolationRequest>(
+      `/api/v1/leases/${body.leaseId}/violations`,
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
   }
   bulkImportViolations(file: File, idempotencyKey: string): Promise<BulkImportResult> {
-    const form = new FormData(); form.append('file', file)
-    return this.postForm<BulkImportResult>('/api/v1/violations/bulk-import', form, { 'Idempotency-Key': idempotencyKey })
+    const form = new FormData()
+    form.append('file', file)
+    return this.postForm<BulkImportResult>('/api/v1/violations/bulk-import', form, {
+      'Idempotency-Key': idempotencyKey,
+    })
   }
 
   // ─── Invoices ────────────────────────────────────────────────────────────────
-  getInvoices(page = 1, pageSize = 20, leaseId?: string, customerId?: string, status?: InvoiceStatus) {
+  getInvoices(
+    page = 1,
+    pageSize = 20,
+    leaseId?: string,
+    customerId?: string,
+    status?: InvoiceStatus,
+  ) {
     const q = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
     if (leaseId) q.set('leaseId', leaseId)
     if (customerId) q.set('customerId', customerId)
@@ -815,34 +924,65 @@ class BffClient {
     return this.getJson<Invoice>(`/api/v1/invoices/${id}`)
   }
   generateInvoice(body: GenerateInvoiceRequest, idempotencyKey: string) {
-    return this.postJson<Invoice, GenerateInvoiceRequest>('/api/v1/invoices/generate', body, { 'Idempotency-Key': idempotencyKey })
+    return this.postJson<Invoice, GenerateInvoiceRequest>('/api/v1/invoices/generate', body, {
+      'Idempotency-Key': idempotencyKey,
+    })
   }
-  bulkGenerateInvoices(billingPeriodStart: string, billingPeriodEnd: string, idempotencyKey: string) {
-    return this.postJson<BulkGenerateResult, { billingPeriodStart: string; billingPeriodEnd: string }>('/api/v1/invoices/bulk-generate', { billingPeriodStart, billingPeriodEnd }, { 'Idempotency-Key': idempotencyKey })
+  bulkGenerateInvoices(
+    billingPeriodStart: string,
+    billingPeriodEnd: string,
+    idempotencyKey: string,
+  ) {
+    return this.postJson<
+      BulkGenerateResult,
+      { billingPeriodStart: string; billingPeriodEnd: string }
+    >(
+      '/api/v1/invoices/bulk-generate',
+      { billingPeriodStart, billingPeriodEnd },
+      { 'Idempotency-Key': idempotencyKey },
+    )
   }
   markInvoicePaid(id: string, paidAmount: number, idempotencyKey: string) {
-    return this.postJson<Invoice, { paidAmount: number }>(`/api/v1/invoices/${id}/mark-paid`, { paidAmount }, { 'Idempotency-Key': idempotencyKey })
+    return this.postJson<Invoice, { paidAmount: number }>(
+      `/api/v1/invoices/${id}/mark-paid`,
+      { paidAmount },
+      { 'Idempotency-Key': idempotencyKey },
+    )
   }
 
   // ─── Advance Payments ────────────────────────────────────────────────────────
   getCustomerAdvancePayments(customerId: string, page = 1, pageSize = 20) {
-    return this.getJson<PagedResult<AdvancePayment>>(`/api/v1/customers/${customerId}/advance-payments?page=${page}&pageSize=${pageSize}`)
+    return this.getJson<PagedResult<AdvancePayment>>(
+      `/api/v1/customers/${customerId}/advance-payments?page=${page}&pageSize=${pageSize}`,
+    )
   }
   recordAdvancePayment(body: RecordAdvancePaymentRequest, idempotencyKey: string) {
-    return this.postJson<AdvancePayment, RecordAdvancePaymentRequest>(`/api/v1/customers/${body.customerId}/advance-payments`, body, { 'Idempotency-Key': idempotencyKey })
+    return this.postJson<AdvancePayment, RecordAdvancePaymentRequest>(
+      `/api/v1/customers/${body.customerId}/advance-payments`,
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
   }
   applyFifoPayments(customerId: string, idempotencyKey: string) {
-    return this.postJson<{ allocations: number; totalAllocatedSar: number }, Record<string, never>>(`/api/v1/customers/${customerId}/advance-payments/apply-fifo`, {}, { 'Idempotency-Key': idempotencyKey })
+    return this.postJson<{ allocations: number; totalAllocatedSar: number }, Record<string, never>>(
+      `/api/v1/customers/${customerId}/advance-payments/apply-fifo`,
+      {},
+      { 'Idempotency-Key': idempotencyKey },
+    )
   }
 
   // ─── Statement of Account ────────────────────────────────────────────────────
   getStatementOfAccount(customerId: string, from: string, to: string) {
-    return this.getJson<StatementOfAccount>(`/api/v1/customers/${customerId}/statement?from=${from}&to=${to}`)
+    return this.getJson<StatementOfAccount>(
+      `/api/v1/customers/${customerId}/statement?from=${from}&to=${to}`,
+    )
   }
 
   // ─── All Payments ────────────────────────────────────────────────────────────
   getAllPayments(page = 1, pageSize = 30) {
-    return this.getJson<PagedResult<AdvancePayment>>(`/api/v1/payments?page=${page}&pageSize=${pageSize}`)
+    return this.getJson<PagedResult<AdvancePayment>>(
+      `/api/v1/payments?page=${page}&pageSize=${pageSize}`,
+    )
   }
 
   // ─── Audit ──────────────────────────────────────────────────────────────────
@@ -854,57 +994,104 @@ class BffClient {
 // ─── CRUD types ─────────────────────────────────────────────────────────────
 
 export interface CustomerDetail {
-  id: string; tenantId: string
-  type: string; status: string
-  displayName: string; displayNameAr?: string | null
-  email?: string | null; mobile?: string | null
-  nationalAddress?: string | null; preferredLanguage: string
-  legalName?: string | null; legalNameAr?: string | null
-  commercialRegistration?: string | null; vatNumber?: string | null
+  id: string
+  tenantId: string
+  type: string
+  status: string
+  displayName: string
+  displayNameAr?: string | null
+  email?: string | null
+  mobile?: string | null
+  nationalAddress?: string | null
+  preferredLanguage: string
+  legalName?: string | null
+  legalNameAr?: string | null
+  commercialRegistration?: string | null
+  vatNumber?: string | null
   billingAddress?: string | null
-  contactPersonNameEn?: string | null; contactPersonNameAr?: string | null
-  contactPersonMobile?: string | null; contactPersonEmail?: string | null
+  contactPersonNameEn?: string | null
+  contactPersonNameAr?: string | null
+  contactPersonMobile?: string | null
+  contactPersonEmail?: string | null
   contactPersonPosition?: string | null
-  creditLimit?: number | null; creditCurrency?: string | null
-  personNameEn?: string | null; personNameAr?: string | null
-  idTypeCode?: number | null; personIdNumber?: string | null
-  dateOfBirth?: string | null; nationalityCode?: string | null
-  kycVerified: boolean; kycVerifiedAtUtc?: string | null; kycVerifiedBy?: string | null
-  createdAtUtc: string; updatedAtUtc: string
+  creditLimit?: number | null
+  creditCurrency?: string | null
+  personNameEn?: string | null
+  personNameAr?: string | null
+  idTypeCode?: number | null
+  personIdNumber?: string | null
+  dateOfBirth?: string | null
+  nationalityCode?: string | null
+  kycVerified: boolean
+  kycVerifiedAtUtc?: string | null
+  kycVerifiedBy?: string | null
+  createdAtUtc: string
+  updatedAtUtc: string
 }
 
 export interface CustomerCommandResult {
-  success: boolean; customerId?: string | null; status?: string | null
-  errorCode?: string | null; errorMessage?: string | null
+  success: boolean
+  customerId?: string | null
+  status?: string | null
+  errorCode?: string | null
+  errorMessage?: string | null
 }
 
 export interface CreateCustomerB2BRequest {
-  legalName: string; legalNameAr?: string | undefined
-  commercialRegistration: string; vatNumber?: string | undefined
-  email?: string | undefined; mobile?: string | undefined
-  nationalAddress?: string | undefined; billingAddress?: string | undefined
-  creditLimit?: number | undefined; creditCurrency?: string | undefined
+  legalName: string
+  legalNameAr?: string | undefined
+  commercialRegistration: string
+  vatNumber?: string | undefined
+  email?: string | undefined
+  mobile?: string | undefined
+  nationalAddress?: string | undefined
+  billingAddress?: string | undefined
+  creditLimit?: number | undefined
+  creditCurrency?: string | undefined
 }
 
 export interface CreateCustomerB2CRequest {
-  personNameEn: string; personNameAr?: string | undefined
-  idTypeCode: number; personIdNumber: string
-  dateOfBirth?: string | undefined; nationalityCode?: string | undefined
-  email?: string | undefined; mobile?: string | undefined; nationalAddress?: string | undefined
+  personNameEn: string
+  personNameAr?: string | undefined
+  idTypeCode: number
+  personIdNumber: string
+  dateOfBirth?: string | undefined
+  nationalityCode?: string | undefined
+  email?: string | undefined
+  mobile?: string | undefined
+  nationalAddress?: string | undefined
 }
 
 export interface VehicleDetail {
-  id: string; tenantId: string; status: string
-  plateNumber: string; plateLetters: string; plateTypeCode: number
-  vin: string; engineNumber?: string | null
-  make: string; model: string; modelYear: number; color?: string | null
-  fuelType: string; transmissionType: string; bodyType: string; seats: number
-  licenseExpiryDate?: string | null; insuranceExpiryDate?: string | null; inspectionExpiryDate?: string | null
-  insuranceCompany?: string | null; insurancePolicyNumber?: string | null
-  ownerBranchId: string; currentBranchId: string
-  currentKm: number; purchasePrice?: number | null; purchaseDate?: string | null
+  id: string
+  tenantId: string
+  status: string
+  plateNumber: string
+  plateLetters: string
+  plateTypeCode: number
+  vin: string
+  engineNumber?: string | null
+  make: string
+  model: string
+  modelYear: number
+  color?: string | null
+  fuelType: string
+  transmissionType: string
+  bodyType: string
+  seats: number
+  licenseExpiryDate?: string | null
+  insuranceExpiryDate?: string | null
+  inspectionExpiryDate?: string | null
+  insuranceCompany?: string | null
+  insurancePolicyNumber?: string | null
+  ownerBranchId: string
+  currentBranchId: string
+  currentKm: number
+  purchasePrice?: number | null
+  purchaseDate?: string | null
   notes?: string | null
-  createdAtUtc: string; updatedAtUtc: string
+  createdAtUtc: string
+  updatedAtUtc: string
   serviceHistory: ServiceRecord[]
   images?: VehicleImageDto[]
 }
@@ -939,7 +1126,7 @@ export interface VehicleHistoryEvent {
 }
 
 export interface CreateServiceRecordRequest {
-  type: number  // 1=PMS, 2=CMS
+  type: number // 1=PMS, 2=CMS
   serviceCode: string
   description: string
   servicedAt: string
@@ -977,70 +1164,126 @@ export interface VehicleImageDto {
 }
 
 export interface VehicleCommandResult {
-  success: boolean; vehicleId?: string | null
-  errorCode?: string | null; errorMessage?: string | null
+  success: boolean
+  vehicleId?: string | null
+  errorCode?: string | null
+  errorMessage?: string | null
 }
 
 export interface CreateVehicleRequest {
-  plateNumber: string; plateLetters: string; plateTypeCode: number
-  vin: string; engineNumber?: string | undefined
-  make: string; model: string; modelYear: number; color?: string | undefined
-  fuelType: number; transmissionType: number; bodyType: number; seats: number
-  licenseExpiryDate?: string | undefined; insuranceExpiryDate?: string | undefined; inspectionExpiryDate?: string | undefined
-  insuranceCompany?: string | undefined; insurancePolicyNumber?: string | undefined
-  ownerBranchId: string; currentKm: number
-  purchasePrice?: number | undefined; purchaseDate?: string | undefined
+  plateNumber: string
+  plateLetters: string
+  plateTypeCode: number
+  vin: string
+  engineNumber?: string | undefined
+  make: string
+  model: string
+  modelYear: number
+  color?: string | undefined
+  fuelType: number
+  transmissionType: number
+  bodyType: number
+  seats: number
+  licenseExpiryDate?: string | undefined
+  insuranceExpiryDate?: string | undefined
+  inspectionExpiryDate?: string | undefined
+  insuranceCompany?: string | undefined
+  insurancePolicyNumber?: string | undefined
+  ownerBranchId: string
+  currentKm: number
+  purchasePrice?: number | undefined
+  purchaseDate?: string | undefined
 }
 
 export interface DriverDetail {
-  id: string; tenantId: string; status: string
+  id: string
+  tenantId: string
+  status: string
   customerId?: string | null
-  personNameEn: string; personNameAr?: string | null
-  idTypeCode: number; personIdNumber: string
-  dateOfBirth?: string | null; nationalityCode?: string | null
-  driverLicenseNumber: string; licenseClass: number; licenseExpiryDate: string
-  mobile?: string | null; email?: string | null; nationalAddress?: string | null
+  personNameEn: string
+  personNameAr?: string | null
+  idTypeCode: number
+  personIdNumber: string
+  dateOfBirth?: string | null
+  nationalityCode?: string | null
+  driverLicenseNumber: string
+  licenseClass: number
+  licenseExpiryDate: string
+  mobile?: string | null
+  email?: string | null
+  nationalAddress?: string | null
   tammAuthorizationStatus: string
-  createdAtUtc: string; updatedAtUtc: string
+  createdAtUtc: string
+  updatedAtUtc: string
 }
 
 export interface DriverCommandResult {
-  success: boolean; driverId?: string | null
-  errorCode?: string | null; errorMessage?: string | null
+  success: boolean
+  driverId?: string | null
+  errorCode?: string | null
+  errorMessage?: string | null
 }
 
 export interface CreateDriverRequest {
-  personNameEn: string; personNameAr?: string | undefined
-  idTypeCode: number; personIdNumber: string
-  dateOfBirth?: string | undefined; nationalityCode?: string | undefined
-  driverLicenseNumber: string; licenseClass: number; licenseExpiryDate: string
-  mobile?: string | undefined; email?: string | undefined; nationalAddress?: string | undefined
+  personNameEn: string
+  personNameAr?: string | undefined
+  idTypeCode: number
+  personIdNumber: string
+  dateOfBirth?: string | undefined
+  nationalityCode?: string | undefined
+  driverLicenseNumber: string
+  licenseClass: number
+  licenseExpiryDate: string
+  mobile?: string | undefined
+  email?: string | undefined
+  nationalAddress?: string | undefined
   customerId?: string | undefined
 }
 
 export interface BranchDetail {
-  id: string; tenantId: string
-  code: string; nameEn: string; nameAr: string
-  cityEn?: string | null; cityAr?: string | null
-  regionEn?: string | null; regionAr?: string | null
-  licenseNumber?: string | null; address?: string | null; phoneNumber?: string | null
-  latitude?: number | null; longitude?: number | null
-  tajeerBranchId: number; tajeerOperatorId: number
-  isActive: boolean; createdAtUtc: string; updatedAtUtc: string
+  id: string
+  tenantId: string
+  code: string
+  nameEn: string
+  nameAr: string
+  cityEn?: string | null
+  cityAr?: string | null
+  regionEn?: string | null
+  regionAr?: string | null
+  licenseNumber?: string | null
+  address?: string | null
+  phoneNumber?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  tajeerBranchId: number
+  tajeerOperatorId: number
+  isActive: boolean
+  createdAtUtc: string
+  updatedAtUtc: string
 }
 
 export interface BranchCommandResult {
-  success: boolean; branchId?: string | null
-  errorCode?: string | null; errorMessage?: string | null
+  success: boolean
+  branchId?: string | null
+  errorCode?: string | null
+  errorMessage?: string | null
 }
 
 export interface CreateBranchRequest {
-  code: string; nameEn: string; nameAr: string
-  cityEn?: string | undefined; cityAr?: string | undefined
-  regionEn?: string | undefined; regionAr?: string | undefined
-  address?: string | undefined; phoneNumber?: string | undefined; licenseNumber?: string | undefined
-  latitude?: number | undefined; longitude?: number | undefined
-  tajeerBranchId: number; tajeerOperatorId: number
+  code: string
+  nameEn: string
+  nameAr: string
+  cityEn?: string | undefined
+  cityAr?: string | undefined
+  regionEn?: string | undefined
+  regionAr?: string | undefined
+  address?: string | undefined
+  phoneNumber?: string | undefined
+  licenseNumber?: string | undefined
+  latitude?: number | undefined
+  longitude?: number | undefined
+  tajeerBranchId: number
+  tajeerOperatorId: number
 }
 
 // ─── Lease types ─────────────────────────────────────────────────────────────
@@ -1156,7 +1399,7 @@ export interface ServiceRecord {
   type: ServiceType
   serviceCode: string
   description: string
-  servicedAt: string        // YYYY-MM-DD
+  servicedAt: string // YYYY-MM-DD
   odometerAtService: number
   costSar: number
   branch: string
@@ -1207,28 +1450,79 @@ function buildMockState(): MockState {
   const now = new Date()
   // ─── Service record helpers ────────────────────────────────────────────────
   const PMS_SERVICES = [
-    { code: 'PMS-OIL', desc: 'Engine Oil & Filter Change', parts: ['Engine Oil 5L', 'Oil Filter'], cost: 380 },
+    {
+      code: 'PMS-OIL',
+      desc: 'Engine Oil & Filter Change',
+      parts: ['Engine Oil 5L', 'Oil Filter'],
+      cost: 380,
+    },
     { code: 'PMS-AIR', desc: 'Air Filter Replacement', parts: ['Air Filter'], cost: 120 },
     { code: 'PMS-CAB', desc: 'Cabin Air Filter Replacement', parts: ['Cabin Filter'], cost: 95 },
     { code: 'PMS-TIRE', desc: 'Tire Rotation & Balancing', parts: [], cost: 200 },
     { code: 'PMS-BRK', desc: 'Brake Inspection & Fluid Top-Up', parts: ['Brake Fluid'], cost: 180 },
-    { code: 'PMS-FULL', desc: 'Full Scheduled Service (60k)', parts: ['Engine Oil 5L', 'Oil Filter', 'Air Filter', 'Spark Plugs', 'Brake Fluid', 'Coolant'], cost: 1200 },
+    {
+      code: 'PMS-FULL',
+      desc: 'Full Scheduled Service (60k)',
+      parts: ['Engine Oil 5L', 'Oil Filter', 'Air Filter', 'Spark Plugs', 'Brake Fluid', 'Coolant'],
+      cost: 1200,
+    },
     { code: 'PMS-COOL', desc: 'Coolant Flush & Replacement', parts: ['Coolant 4L'], cost: 320 },
     { code: 'PMS-TRANS', desc: 'Transmission Fluid Service', parts: ['ATF Fluid 4L'], cost: 450 },
   ]
   const CMS_SERVICES = [
-    { code: 'CMS-BRK', desc: 'Brake Pad Replacement (Front)', parts: ['Front Brake Pads x2', 'Brake Cleaner'], cost: 680 },
-    { code: 'CMS-AC', desc: 'AC Compressor & Gas Recharge', parts: ['AC Refrigerant', 'Compressor Belt'], cost: 950 },
+    {
+      code: 'CMS-BRK',
+      desc: 'Brake Pad Replacement (Front)',
+      parts: ['Front Brake Pads x2', 'Brake Cleaner'],
+      cost: 680,
+    },
+    {
+      code: 'CMS-AC',
+      desc: 'AC Compressor & Gas Recharge',
+      parts: ['AC Refrigerant', 'Compressor Belt'],
+      cost: 950,
+    },
     { code: 'CMS-BAT', desc: 'Battery Replacement', parts: ['12V Battery 70Ah'], cost: 420 },
-    { code: 'CMS-TIRE', desc: 'Tyre Replacement (2 units)', parts: ['225/60R17 Tyre x2'], cost: 780 },
-    { code: 'CMS-SUSP', desc: 'Shock Absorber Replacement', parts: ['Front Shock Absorber x2'], cost: 1100 },
-    { code: 'CMS-BELT', desc: 'Serpentine Belt Replacement', parts: ['Serpentine Belt'], cost: 340 },
+    {
+      code: 'CMS-TIRE',
+      desc: 'Tyre Replacement (2 units)',
+      parts: ['225/60R17 Tyre x2'],
+      cost: 780,
+    },
+    {
+      code: 'CMS-SUSP',
+      desc: 'Shock Absorber Replacement',
+      parts: ['Front Shock Absorber x2'],
+      cost: 1100,
+    },
+    {
+      code: 'CMS-BELT',
+      desc: 'Serpentine Belt Replacement',
+      parts: ['Serpentine Belt'],
+      cost: 340,
+    },
     { code: 'CMS-ALT', desc: 'Alternator Replacement', parts: ['Alternator 90A'], cost: 1400 },
-    { code: 'CMS-BODY', desc: 'Body Panel Repair & Repaint', parts: ['Paint', 'Filler', 'Clear Coat'], cost: 2200 },
+    {
+      code: 'CMS-BODY',
+      desc: 'Body Panel Repair & Repaint',
+      parts: ['Paint', 'Filler', 'Clear Coat'],
+      cost: 2200,
+    },
   ]
-  const TECHNICIANS = ['Ahmed Al-Rashidi', 'Khalid Bin Saleh', 'Faisal Al-Zahrani', 'Omar Mansour', 'Nawaf Al-Otaibi']
+  const TECHNICIANS = [
+    'Ahmed Al-Rashidi',
+    'Khalid Bin Saleh',
+    'Faisal Al-Zahrani',
+    'Omar Mansour',
+    'Nawaf Al-Otaibi',
+  ]
 
-  function buildServiceHistory(vehicleId: string, branchName: string, baseKm: number, purchaseDateStr: string): ServiceRecord[] {
+  function buildServiceHistory(
+    vehicleId: string,
+    branchName: string,
+    baseKm: number,
+    purchaseDateStr: string,
+  ): ServiceRecord[] {
     const purchaseDate = new Date(purchaseDateStr || '2022-01-01')
     const records: ServiceRecord[] = []
     let km = Math.max(5000, baseKm - 80000)
@@ -1253,7 +1547,9 @@ function buildMockState(): MockState {
         technician: pick(TECHNICIANS, j + vehicleHash),
         partsReplaced: [...svc.parts],
         nextServiceOdometer: isPms ? km + 10000 : null,
-        nextServiceDate: isPms ? new Date(serviceDate.getTime() + 180 * 86400000).toISOString().substring(0, 10) : null,
+        nextServiceDate: isPms
+          ? new Date(serviceDate.getTime() + 180 * 86400000).toISOString().substring(0, 10)
+          : null,
         notes: j === 0 ? 'Initial service after delivery' : null,
       }
       records.push(rec)
@@ -1268,8 +1564,46 @@ function buildMockState(): MockState {
     id: mockId('branch', i + 1),
     tenantId: DEV_TENANT_ID,
     code: `QL-${(i + 1).toString().padStart(3, '0')}`,
-    nameEn: pick(['Quick Lead — Riyadh Olaya', 'Quick Lead — Riyadh Exit 15', 'Quick Lead — Jeddah Tahlia', 'Quick Lead — Jeddah Corniche', 'Quick Lead — Dammam Corniche', 'Quick Lead — Al Khobar', 'Quick Lead — Makkah Aziziyah', 'Quick Lead — Madinah Quba', 'Quick Lead — Tabuk', 'Quick Lead — Abha', 'Quick Lead — Hail', 'Quick Lead — Yanbu', 'Quick Lead — Jubail Industrial', 'Quick Lead — Jizan', 'Quick Lead — Najran'], i),
-    nameAr: pick(['كويك ليد — الرياض العليا', 'كويك ليد — الرياض مخرج 15', 'كويك ليد — جدة التحلية', 'كويك ليد — جدة الكورنيش', 'كويك ليد — الدمام الكورنيش', 'كويك ليد — الخبر', 'كويك ليد — مكة العزيزية', 'كويك ليد — المدينة قباء', 'كويك ليد — تبوك', 'كويك ليد — أبها', 'كويك ليد — حائل', 'كويك ليد — ينبع', 'كويك ليد — الجبيل الصناعية', 'كويك ليد — جيزان', 'كويك ليد — نجران'], i),
+    nameEn: pick(
+      [
+        'Quick Lead — Riyadh Olaya',
+        'Quick Lead — Riyadh Exit 15',
+        'Quick Lead — Jeddah Tahlia',
+        'Quick Lead — Jeddah Corniche',
+        'Quick Lead — Dammam Corniche',
+        'Quick Lead — Al Khobar',
+        'Quick Lead — Makkah Aziziyah',
+        'Quick Lead — Madinah Quba',
+        'Quick Lead — Tabuk',
+        'Quick Lead — Abha',
+        'Quick Lead — Hail',
+        'Quick Lead — Yanbu',
+        'Quick Lead — Jubail Industrial',
+        'Quick Lead — Jizan',
+        'Quick Lead — Najran',
+      ],
+      i,
+    ),
+    nameAr: pick(
+      [
+        'كويك ليد — الرياض العليا',
+        'كويك ليد — الرياض مخرج 15',
+        'كويك ليد — جدة التحلية',
+        'كويك ليد — جدة الكورنيش',
+        'كويك ليد — الدمام الكورنيش',
+        'كويك ليد — الخبر',
+        'كويك ليد — مكة العزيزية',
+        'كويك ليد — المدينة قباء',
+        'كويك ليد — تبوك',
+        'كويك ليد — أبها',
+        'كويك ليد — حائل',
+        'كويك ليد — ينبع',
+        'كويك ليد — الجبيل الصناعية',
+        'كويك ليد — جيزان',
+        'كويك ليد — نجران',
+      ],
+      i,
+    ),
     cityEn: pick(['Riyadh', 'Jeddah', 'Dammam', 'Makkah', 'Madinah'], i),
     cityAr: pick(['الرياض', 'جدة', 'الدمام', 'مكة', 'المدينة'], i),
     regionEn: 'KSA',
@@ -1287,38 +1621,208 @@ function buildMockState(): MockState {
   }))
 
   const SAUDI_COS = [
-    { en: 'Saudi Aramco', ar: 'أرامكو السعودية', cr: '1010000100', vat: '300000000100003', cp: 'Khalid Al-Falih', cpAr: 'خالد الفالح', pos: 'Fleet Manager' },
-    { en: 'SABIC', ar: 'سابك', cr: '1010001500', vat: '300000001500003', cp: 'Omar Al-Rashid', cpAr: 'عمر الراشد', pos: 'Transport Director' },
-    { en: 'STC Group', ar: 'مجموعة stc', cr: '1010003434', vat: '300000003434003', cp: 'Faisal Al-Ghamdi', cpAr: 'فيصل الغامدي', pos: 'Procurement Head' },
-    { en: 'Al Rajhi Bank', ar: 'مصرف الراجحي', cr: '1010028610', vat: '300028610000003', cp: 'Nasser Al-Dossary', cpAr: 'ناصر الدوسري', pos: 'Admin Services' },
-    { en: 'Almarai Company', ar: 'شركة المراعي', cr: '1010084450', vat: '300084450000003', cp: 'Sultan Al-Mutairi', cpAr: 'سلطان المطيري', pos: 'Logistics Manager' },
-    { en: 'ACWA Power', ar: 'أكوا باور', cr: '1010245670', vat: '300245670000003', cp: 'Tariq Al-Harbi', cpAr: 'طارق الحربي', pos: 'Operations Head' },
-    { en: 'Abdul Latif Jameel', ar: 'عبداللطيف جميل', cr: '4030012345', vat: '300012345000003', cp: 'Youssef Jameel', cpAr: 'يوسف جميل', pos: 'Fleet Coordinator' },
-    { en: 'Zahid Group', ar: 'مجموعة زاهد', cr: '4030067890', vat: '300067890000003', cp: 'Hamad Al-Zahid', cpAr: 'حمد الزاهد', pos: 'Vehicle Admin' },
-    { en: 'Saudi Binladin Group', ar: 'مجموعة بن لادن', cr: '4030098765', vat: '300098765000003', cp: 'Ahmed Al-Qahtani', cpAr: 'أحمد القحطاني', pos: 'Transport Manager' },
-    { en: 'Savola Group', ar: 'مجموعة صافولا', cr: '4030045678', vat: '300045678000003', cp: 'Rashed Al-Shehri', cpAr: 'راشد الشهري', pos: 'Fleet Director' },
-    { en: 'National Water Co.', ar: 'شركة المياه الوطنية', cr: '1010156789', vat: '300156789000003', cp: 'Majed Al-Otaibi', cpAr: 'ماجد العتيبي', pos: 'Admin Manager' },
-    { en: 'Saudi Electricity Co.', ar: 'الشركة السعودية للكهرباء', cr: '1010023456', vat: '300023456000003', cp: 'Bandar Al-Zahrani', cpAr: 'بندر الزهراني', pos: 'Procurement Officer' },
-    { en: 'Jarir Marketing', ar: 'مكتبة جرير', cr: '1010189012', vat: '300189012000003', cp: 'Nawaf Al-Subaie', cpAr: 'نواف السبيعي', pos: 'Admin Head' },
-    { en: 'Extra Electronics', ar: 'اكسترا', cr: '1010234567', vat: '300234567000003', cp: 'Turki Al-Harthy', cpAr: 'تركي الحارثي', pos: 'Logistics Officer' },
-    { en: 'Riyad Bank', ar: 'بنك الرياض', cr: '1010010010', vat: '300010010000003', cp: 'Abdulaziz Al-Jasser', cpAr: 'عبدالعزيز الجاسر', pos: 'Services Director' },
-    { en: 'Bupa Arabia', ar: 'بوبا العربية', cr: '4030034567', vat: '300034567000003', cp: 'Adel Al-Malki', cpAr: 'عادل المالكي', pos: 'Admin Director' },
-    { en: 'Al Faisaliah Group', ar: 'مجموعة الفيصلية', cr: '1010345678', vat: '300345678000003', cp: 'Saad Al-Faisal', cpAr: 'سعد الفيصل', pos: 'Fleet Coordinator' },
-    { en: 'SACO Hardware', ar: 'ساكو', cr: '4030156789', vat: '304156789000003', cp: 'Saleh Al-Yamani', cpAr: 'صالح اليماني', pos: 'Fleet Ops' },
-    { en: 'Ma\'aden Mining', ar: 'شركة معادن', cr: '1010234500', vat: '300234500000003', cp: 'Ibrahim Al-Thumairy', cpAr: 'إبراهيم الثميري', pos: 'Operations Manager' },
-    { en: 'Saudi Airlines Catering', ar: 'الخطوط السعودية للتموين', cr: '4030087654', vat: '300087654000003', cp: 'Waleed Al-Anazi', cpAr: 'وليد العنزي', pos: 'Fleet Manager' },
+    {
+      en: 'Saudi Aramco',
+      ar: 'أرامكو السعودية',
+      cr: '1010000100',
+      vat: '300000000100003',
+      cp: 'Khalid Al-Falih',
+      cpAr: 'خالد الفالح',
+      pos: 'Fleet Manager',
+    },
+    {
+      en: 'SABIC',
+      ar: 'سابك',
+      cr: '1010001500',
+      vat: '300000001500003',
+      cp: 'Omar Al-Rashid',
+      cpAr: 'عمر الراشد',
+      pos: 'Transport Director',
+    },
+    {
+      en: 'STC Group',
+      ar: 'مجموعة stc',
+      cr: '1010003434',
+      vat: '300000003434003',
+      cp: 'Faisal Al-Ghamdi',
+      cpAr: 'فيصل الغامدي',
+      pos: 'Procurement Head',
+    },
+    {
+      en: 'Al Rajhi Bank',
+      ar: 'مصرف الراجحي',
+      cr: '1010028610',
+      vat: '300028610000003',
+      cp: 'Nasser Al-Dossary',
+      cpAr: 'ناصر الدوسري',
+      pos: 'Admin Services',
+    },
+    {
+      en: 'Almarai Company',
+      ar: 'شركة المراعي',
+      cr: '1010084450',
+      vat: '300084450000003',
+      cp: 'Sultan Al-Mutairi',
+      cpAr: 'سلطان المطيري',
+      pos: 'Logistics Manager',
+    },
+    {
+      en: 'ACWA Power',
+      ar: 'أكوا باور',
+      cr: '1010245670',
+      vat: '300245670000003',
+      cp: 'Tariq Al-Harbi',
+      cpAr: 'طارق الحربي',
+      pos: 'Operations Head',
+    },
+    {
+      en: 'Abdul Latif Jameel',
+      ar: 'عبداللطيف جميل',
+      cr: '4030012345',
+      vat: '300012345000003',
+      cp: 'Youssef Jameel',
+      cpAr: 'يوسف جميل',
+      pos: 'Fleet Coordinator',
+    },
+    {
+      en: 'Zahid Group',
+      ar: 'مجموعة زاهد',
+      cr: '4030067890',
+      vat: '300067890000003',
+      cp: 'Hamad Al-Zahid',
+      cpAr: 'حمد الزاهد',
+      pos: 'Vehicle Admin',
+    },
+    {
+      en: 'Saudi Binladin Group',
+      ar: 'مجموعة بن لادن',
+      cr: '4030098765',
+      vat: '300098765000003',
+      cp: 'Ahmed Al-Qahtani',
+      cpAr: 'أحمد القحطاني',
+      pos: 'Transport Manager',
+    },
+    {
+      en: 'Savola Group',
+      ar: 'مجموعة صافولا',
+      cr: '4030045678',
+      vat: '300045678000003',
+      cp: 'Rashed Al-Shehri',
+      cpAr: 'راشد الشهري',
+      pos: 'Fleet Director',
+    },
+    {
+      en: 'National Water Co.',
+      ar: 'شركة المياه الوطنية',
+      cr: '1010156789',
+      vat: '300156789000003',
+      cp: 'Majed Al-Otaibi',
+      cpAr: 'ماجد العتيبي',
+      pos: 'Admin Manager',
+    },
+    {
+      en: 'Saudi Electricity Co.',
+      ar: 'الشركة السعودية للكهرباء',
+      cr: '1010023456',
+      vat: '300023456000003',
+      cp: 'Bandar Al-Zahrani',
+      cpAr: 'بندر الزهراني',
+      pos: 'Procurement Officer',
+    },
+    {
+      en: 'Jarir Marketing',
+      ar: 'مكتبة جرير',
+      cr: '1010189012',
+      vat: '300189012000003',
+      cp: 'Nawaf Al-Subaie',
+      cpAr: 'نواف السبيعي',
+      pos: 'Admin Head',
+    },
+    {
+      en: 'Extra Electronics',
+      ar: 'اكسترا',
+      cr: '1010234567',
+      vat: '300234567000003',
+      cp: 'Turki Al-Harthy',
+      cpAr: 'تركي الحارثي',
+      pos: 'Logistics Officer',
+    },
+    {
+      en: 'Riyad Bank',
+      ar: 'بنك الرياض',
+      cr: '1010010010',
+      vat: '300010010000003',
+      cp: 'Abdulaziz Al-Jasser',
+      cpAr: 'عبدالعزيز الجاسر',
+      pos: 'Services Director',
+    },
+    {
+      en: 'Bupa Arabia',
+      ar: 'بوبا العربية',
+      cr: '4030034567',
+      vat: '300034567000003',
+      cp: 'Adel Al-Malki',
+      cpAr: 'عادل المالكي',
+      pos: 'Admin Director',
+    },
+    {
+      en: 'Al Faisaliah Group',
+      ar: 'مجموعة الفيصلية',
+      cr: '1010345678',
+      vat: '300345678000003',
+      cp: 'Saad Al-Faisal',
+      cpAr: 'سعد الفيصل',
+      pos: 'Fleet Coordinator',
+    },
+    {
+      en: 'SACO Hardware',
+      ar: 'ساكو',
+      cr: '4030156789',
+      vat: '304156789000003',
+      cp: 'Saleh Al-Yamani',
+      cpAr: 'صالح اليماني',
+      pos: 'Fleet Ops',
+    },
+    {
+      en: "Ma'aden Mining",
+      ar: 'شركة معادن',
+      cr: '1010234500',
+      vat: '300234500000003',
+      cp: 'Ibrahim Al-Thumairy',
+      cpAr: 'إبراهيم الثميري',
+      pos: 'Operations Manager',
+    },
+    {
+      en: 'Saudi Airlines Catering',
+      ar: 'الخطوط السعودية للتموين',
+      cr: '4030087654',
+      vat: '300087654000003',
+      cp: 'Waleed Al-Anazi',
+      cpAr: 'وليد العنزي',
+      pos: 'Fleet Manager',
+    },
   ]
   const PERSON_NAMES: [string, string][] = [
-    ['Mohammed Al-Harbi', 'محمد الحربي'], ['Abdullah Al-Otaibi', 'عبدالله العتيبي'],
-    ['Fahad Al-Dosari', 'فهد الدوسري'], ['Saad Al-Qahtani', 'سعد القحطاني'],
-    ['Khalid Al-Shehri', 'خالد الشهري'], ['Ahmed Al-Ghamdi', 'أحمد الغامدي'],
-    ['Nasser Al-Mutairi', 'ناصر المطيري'], ['Sultan Al-Zahrani', 'سلطان الزهراني'],
-    ['Omar Al-Anazi', 'عمر العنزي'], ['Bandar Al-Harthy', 'بندر الحارثي'],
-    ['Turki Al-Subaie', 'تركي السبيعي'], ['Faisal Al-Rashidi', 'فيصل الرشيدي'],
-    ['Majed Al-Tamimi', 'ماجد التميمي'], ['Nawaf Al-Shamrani', 'نواف الشمراني'],
-    ['Rashed Al-Bishi', 'راشد البيشي'], ['Youssef Al-Malki', 'يوسف المالكي'],
-    ['Hamad Al-Juhani', 'حمد الجهني'], ['Ibrahim Al-Murri', 'إبراهيم المري'],
-    ['Saleh Al-Yami', 'صالح اليامي'], ['Waleed Al-Khaldi', 'وليد الخالدي'],
+    ['Mohammed Al-Harbi', 'محمد الحربي'],
+    ['Abdullah Al-Otaibi', 'عبدالله العتيبي'],
+    ['Fahad Al-Dosari', 'فهد الدوسري'],
+    ['Saad Al-Qahtani', 'سعد القحطاني'],
+    ['Khalid Al-Shehri', 'خالد الشهري'],
+    ['Ahmed Al-Ghamdi', 'أحمد الغامدي'],
+    ['Nasser Al-Mutairi', 'ناصر المطيري'],
+    ['Sultan Al-Zahrani', 'سلطان الزهراني'],
+    ['Omar Al-Anazi', 'عمر العنزي'],
+    ['Bandar Al-Harthy', 'بندر الحارثي'],
+    ['Turki Al-Subaie', 'تركي السبيعي'],
+    ['Faisal Al-Rashidi', 'فيصل الرشيدي'],
+    ['Majed Al-Tamimi', 'ماجد التميمي'],
+    ['Nawaf Al-Shamrani', 'نواف الشمراني'],
+    ['Rashed Al-Bishi', 'راشد البيشي'],
+    ['Youssef Al-Malki', 'يوسف المالكي'],
+    ['Hamad Al-Juhani', 'حمد الجهني'],
+    ['Ibrahim Al-Murri', 'إبراهيم المري'],
+    ['Saleh Al-Yami', 'صالح اليامي'],
+    ['Waleed Al-Khaldi', 'وليد الخالدي'],
   ]
 
   const customers: CustomerDetail[] = Array.from({ length: 500 }).map((_, i) => {
@@ -1334,7 +1838,9 @@ function buildMockState(): MockState {
       status,
       displayName: isB2B ? co!.en : person[0],
       displayNameAr: isB2B ? co!.ar : person[1],
-      email: isB2B ? `fleet@${co!.en.toLowerCase().replace(/[^a-z]/g, '')}.com.sa` : `${person[0].toLowerCase().replace(/ /g, '.')}@email.sa`,
+      email: isB2B
+        ? `fleet@${co!.en.toLowerCase().replace(/[^a-z]/g, '')}.com.sa`
+        : `${person[0].toLowerCase().replace(/ /g, '.')}@email.sa`,
       mobile: `+9665${(10000000 + i).toString().slice(-8)}`,
       nationalAddress: `${branch.cityEn ?? 'Riyadh'}, Saudi Arabia`,
       preferredLanguage: i % 2 === 0 ? 'ar' : 'en',
@@ -1346,14 +1852,18 @@ function buildMockState(): MockState {
       contactPersonNameEn: isB2B ? co!.cp : null,
       contactPersonNameAr: isB2B ? co!.cpAr : null,
       contactPersonMobile: isB2B ? `+9665${(50000000 + i).toString().slice(-8)}` : null,
-      contactPersonEmail: isB2B ? `${co!.cp.toLowerCase().replace(/ /g, '.')}@${co!.en.toLowerCase().replace(/[^a-z]/g, '')}.com.sa` : null,
+      contactPersonEmail: isB2B
+        ? `${co!.cp.toLowerCase().replace(/ /g, '.')}@${co!.en.toLowerCase().replace(/[^a-z]/g, '')}.com.sa`
+        : null,
       contactPersonPosition: isB2B ? co!.pos : null,
       creditLimit: isB2B ? 100000 + i * 100 : null,
       creditCurrency: isB2B ? 'SAR' : null,
       personNameEn: isB2B ? null : person[0],
       personNameAr: isB2B ? null : person[1],
       idTypeCode: isB2B ? null : i % 3 === 0 ? 2 : 1,
-      personIdNumber: isB2B ? null : `${i % 3 === 0 ? '2' : '1'}${(100000000 + i).toString().slice(-9)}`,
+      personIdNumber: isB2B
+        ? null
+        : `${i % 3 === 0 ? '2' : '1'}${(100000000 + i).toString().slice(-9)}`,
       dateOfBirth: isB2B ? null : `19${80 + (i % 20)}-01-15`,
       nationalityCode: isB2B ? null : i % 3 === 0 ? 'EG' : 'SA',
       kycVerified: i % 4 !== 0,
@@ -1416,11 +1926,21 @@ function buildMockState(): MockState {
       fuelType: pick(['Petrol91', 'Petrol95', 'Diesel', 'Hybrid', 'Electric'], i),
       transmissionType: pick(['Automatic', 'Manual', 'CVT'], i),
       bodyType,
-      seats: bodyType === 'Bus' ? pick([14, 20, 26], i) : bodyType === 'Van' ? pick([7, 9, 12], i) : bodyType === 'Suv' ? pick([5, 7], i) : pick([4, 5], i),
+      seats:
+        bodyType === 'Bus'
+          ? pick([14, 20, 26], i)
+          : bodyType === 'Van'
+            ? pick([7, 9, 12], i)
+            : bodyType === 'Suv'
+              ? pick([5, 7], i)
+              : pick([4, 5], i),
       licenseExpiryDate: `2027-${String((i % 12) + 1).padStart(2, '0')}-15`,
       insuranceExpiryDate: `2027-${String((i % 12) + 1).padStart(2, '0')}-20`,
       inspectionExpiryDate: `2027-${String((i % 12) + 1).padStart(2, '0')}-25`,
-      insuranceCompany: pick(['Tawuniya', 'Bupa Arabia', 'Walaa', 'Al Rajhi Takaful', 'AXA Cooperative'], i),
+      insuranceCompany: pick(
+        ['Tawuniya', 'Bupa Arabia', 'Walaa', 'Al Rajhi Takaful', 'AXA Cooperative'],
+        i,
+      ),
       insurancePolicyNumber: `POL-${100000 + i}`,
       ownerBranchId: branch.id,
       currentBranchId: branch.id,
@@ -1476,22 +1996,34 @@ function buildMockState(): MockState {
       validUntilDate: new Date(now.getTime() + 14 * 86400000).toISOString().substring(0, 10),
       estimatedDurationMonths: 12,
       submittedAtUtc: status === 'Draft' ? null : now.toISOString(),
-      approvedAtUtc: status === 'Approved' || status === 'SentToCustomer' || status === 'Accepted' ? now.toISOString() : null,
+      approvedAtUtc:
+        status === 'Approved' || status === 'SentToCustomer' || status === 'Accepted'
+          ? now.toISOString()
+          : null,
       sentAtUtc: status === 'SentToCustomer' || status === 'Accepted' ? now.toISOString() : null,
       acceptedAtUtc: status === 'Accepted' ? now.toISOString() : null,
-      lines: [{
-        id: mockId('line', i + 1),
-        lineNumber: 1,
-        itemType: 'Vehicle',
-        description: pick(vehicles, i).make + ' ' + pick(vehicles, i).model,
-        vehicleSpecRef: pick(vehicles, i).id,
-        quantity: 1,
-        unitPriceSar: sub,
-        discountPercent: i % 10,
-        lineTotalSar: sub,
-      }],
+      lines: [
+        {
+          id: mockId('line', i + 1),
+          lineNumber: 1,
+          itemType: 'Vehicle',
+          description: pick(vehicles, i).make + ' ' + pick(vehicles, i).model,
+          vehicleSpecRef: pick(vehicles, i).id,
+          quantity: 1,
+          unitPriceSar: sub,
+          discountPercent: i % 10,
+          lineTotalSar: sub,
+        },
+      ],
       approvals: [
-        { tierLevel: 1, requiredRoleCode: 'SALES_TIER_1', status: status === 'Draft' ? 'Pending' : 'Approved', comment: null, decidedByUserId: null, decidedAtUtc: null },
+        {
+          tierLevel: 1,
+          requiredRoleCode: 'SALES_TIER_1',
+          status: status === 'Draft' ? 'Pending' : 'Approved',
+          comment: null,
+          decidedByUserId: null,
+          decidedAtUtc: null,
+        },
       ],
       pdfBlobUri: null,
       acceptedByCustomerSignature: status === 'Accepted' ? 'Signed Customer' : null,
@@ -1499,7 +2031,16 @@ function buildMockState(): MockState {
   })
 
   // ─── Leases (200) — built after vehicles so we can mark OnRent ──────────────
-  const LEASE_STATUSES = ['Draft', 'PendingIssuance', 'Active', 'Active', 'Extended', 'Suspended', 'Closed', 'Cancelled']
+  const LEASE_STATUSES = [
+    'Draft',
+    'PendingIssuance',
+    'Active',
+    'Active',
+    'Extended',
+    'Suspended',
+    'Closed',
+    'Cancelled',
+  ]
   const CONTRACT_TYPES_L = ['Daily', 'Monthly', 'Annual']
   const PAYMENT_METHODS_L = ['Cash', 'CreditCard', 'BankTransfer']
   const INCIDENT_TYPES = ['Accident', 'Traffic', 'Mechanical', 'Theft']
@@ -1518,7 +2059,7 @@ function buildMockState(): MockState {
     if (isActive) vehicle.status = 'OnRent'
 
     const contractStart = new Date(now.getTime() - (365 - i * 1.5) * 86400000)
-    const contractEnd = new Date(contractStart.getTime() + (6 + i % 18) * 30 * 86400000)
+    const contractEnd = new Date(contractStart.getTime() + (6 + (i % 18)) * 30 * 86400000)
     const rentSar = 1500 + (i % 30) * 200
     const vatSar = Math.round(rentSar * 0.15 * 100) / 100
     const totalSar = rentSar + vatSar
@@ -1551,48 +2092,109 @@ function buildMockState(): MockState {
       remainingAmountSar: isActive ? vatSar : isClosed ? 0 : totalSar,
       allowedKmPerDay: pick([100, 150, 200, 250, 300], i),
       paymentMethodCode: pick(PAYMENT_METHODS_L, i),
-      issuedAtUtc: lsStatus === 'Draft' || lsStatus === 'PendingIssuance' ? null : contractStart.toISOString(),
-      suspendedAtUtc: lsStatus === 'Suspended' ? new Date(contractStart.getTime() + 30 * 86400000).toISOString() : null,
+      issuedAtUtc:
+        lsStatus === 'Draft' || lsStatus === 'PendingIssuance' ? null : contractStart.toISOString(),
+      suspendedAtUtc:
+        lsStatus === 'Suspended'
+          ? new Date(contractStart.getTime() + 30 * 86400000).toISOString()
+          : null,
       resumedAtUtc: null,
       closedAtUtc: isClosed ? contractEnd.toISOString() : null,
-      cancelledAtUtc: lsStatus === 'Cancelled' ? new Date(contractStart.getTime() + 5 * 86400000).toISOString() : null,
-      tajeerStatus: lsStatus === 'Draft' ? null : lsStatus === 'PendingIssuance' ? 'Pending' : 'Confirmed',
-      tajeerIssuanceUrl: lsStatus !== 'Draft' && lsStatus !== 'PendingIssuance' ? `https://rabet.staging/contract/${9000000000 + i}` : null,
+      cancelledAtUtc:
+        lsStatus === 'Cancelled'
+          ? new Date(contractStart.getTime() + 5 * 86400000).toISOString()
+          : null,
+      tajeerStatus:
+        lsStatus === 'Draft' ? null : lsStatus === 'PendingIssuance' ? 'Pending' : 'Confirmed',
+      tajeerIssuanceUrl:
+        lsStatus !== 'Draft' && lsStatus !== 'PendingIssuance'
+          ? `https://rabet.staging/contract/${9000000000 + i}`
+          : null,
       zatcaSubmissionStatus: isClosed ? 'Cleared' : isActive ? 'Pending' : null,
       zatcaInvoiceNumber: isClosed ? `INV-${(1000 + i).toString().padStart(6, '0')}` : null,
-      inspections: hasInspections ? [
-        {
-          id: mockId('insp', i * 2 + 1), type: 'CheckOut',
-          inspectedAtUtc: contractStart.toISOString(),
-          odometer: vehicle.currentKm - 5000, conditionCode: 'Good',
-          notes: 'Vehicle checked out — no damage.', branch: pick(branches, i).nameEn, inspector: `Staff ${i + 1}`,
-          vehicleAssignmentType: 'Permanent', vehicleSubType: null, switchedFromVehicleId: null, switchedToVehicleId: null,
-          images: [`https://cdn.imagin.studio/getimage?customer=img&make=${vehicle.make.toLowerCase()}&modelFamily=${vehicle.model.toLowerCase().replace(/ /g, '-')}&angle=29&width=400`],
-        },
-        ...(isClosed ? [{
-          id: mockId('insp', i * 2 + 2), type: 'CheckIn',
-          inspectedAtUtc: contractEnd.toISOString(),
-          odometer: vehicle.currentKm, conditionCode: pick(CONDITIONS, i),
-          notes: pick(CONDITIONS, i) === 'Damaged' ? 'Minor scratches on rear bumper.' : 'Returned in good condition.',
-          branch: pick(branches, i).nameEn, inspector: `Staff ${i + 2}`,
-          vehicleAssignmentType: 'Permanent', vehicleSubType: null, switchedFromVehicleId: null, switchedToVehicleId: null,
-          images: [`https://cdn.imagin.studio/getimage?customer=img&make=${vehicle.make.toLowerCase()}&modelFamily=${vehicle.model.toLowerCase().replace(/ /g, '-')}&angle=13&width=400`],
-        }] : []),
-      ] : [],
-      incidents: hasIncident ? [{
-        id: mockId('inc', i + 1), type: pick(INCIDENT_TYPES, i),
-        occurredAtUtc: new Date(contractStart.getTime() + 30 * 86400000).toISOString(),
-        description: `${pick(INCIDENT_TYPES, i)} incident reported during rental period.`,
-        estimatedCostSar: i % 3 === 0 ? null : 1500 + (i % 10) * 500,
-        claimNumber: `CLM-${(100 + i).toString().padStart(6, '0')}`,
-        resolved: i % 2 === 0,
-      }] : [],
+      inspections: hasInspections
+        ? [
+            {
+              id: mockId('insp', i * 2 + 1),
+              type: 'CheckOut',
+              inspectedAtUtc: contractStart.toISOString(),
+              odometer: vehicle.currentKm - 5000,
+              conditionCode: 'Good',
+              notes: 'Vehicle checked out — no damage.',
+              branch: pick(branches, i).nameEn,
+              inspector: `Staff ${i + 1}`,
+              vehicleAssignmentType: 'Permanent',
+              vehicleSubType: null,
+              switchedFromVehicleId: null,
+              switchedToVehicleId: null,
+              images: [
+                `https://cdn.imagin.studio/getimage?customer=img&make=${vehicle.make.toLowerCase()}&modelFamily=${vehicle.model.toLowerCase().replace(/ /g, '-')}&angle=29&width=400`,
+              ],
+            },
+            ...(isClosed
+              ? [
+                  {
+                    id: mockId('insp', i * 2 + 2),
+                    type: 'CheckIn',
+                    inspectedAtUtc: contractEnd.toISOString(),
+                    odometer: vehicle.currentKm,
+                    conditionCode: pick(CONDITIONS, i),
+                    notes:
+                      pick(CONDITIONS, i) === 'Damaged'
+                        ? 'Minor scratches on rear bumper.'
+                        : 'Returned in good condition.',
+                    branch: pick(branches, i).nameEn,
+                    inspector: `Staff ${i + 2}`,
+                    vehicleAssignmentType: 'Permanent',
+                    vehicleSubType: null,
+                    switchedFromVehicleId: null,
+                    switchedToVehicleId: null,
+                    images: [
+                      `https://cdn.imagin.studio/getimage?customer=img&make=${vehicle.make.toLowerCase()}&modelFamily=${vehicle.model.toLowerCase().replace(/ /g, '-')}&angle=13&width=400`,
+                    ],
+                  },
+                ]
+              : []),
+          ]
+        : [],
+      incidents: hasIncident
+        ? [
+            {
+              id: mockId('inc', i + 1),
+              type: pick(INCIDENT_TYPES, i),
+              occurredAtUtc: new Date(contractStart.getTime() + 30 * 86400000).toISOString(),
+              description: `${pick(INCIDENT_TYPES, i)} incident reported during rental period.`,
+              estimatedCostSar: i % 3 === 0 ? null : 1500 + (i % 10) * 500,
+              claimNumber: `CLM-${(100 + i).toString().padStart(6, '0')}`,
+              resolved: i % 2 === 0,
+            },
+          ]
+        : [],
     }
   })
 
   // ─── Damage Records ──────────────────────────────────────────────────────────
-  const DAMAGE_TYPES: DamageType[] = ['Accident', 'ScratchDent', 'Glass', 'TyreWheel', 'Mechanical', 'Flood', 'TheftVandalism', 'Fire', 'Other']
-  const DAMAGE_LOCS: DamageLocation[] = ['Front', 'Rear', 'LeftSide', 'RightSide', 'Roof', 'Underbody', 'Interior', 'Multiple']
+  const DAMAGE_TYPES: DamageType[] = [
+    'Accident',
+    'ScratchDent',
+    'Glass',
+    'TyreWheel',
+    'Mechanical',
+    'Flood',
+    'TheftVandalism',
+    'Fire',
+    'Other',
+  ]
+  const DAMAGE_LOCS: DamageLocation[] = [
+    'Front',
+    'Rear',
+    'LeftSide',
+    'RightSide',
+    'Roof',
+    'Underbody',
+    'Interior',
+    'Multiple',
+  ]
   const DAMAGE_SEVS: DamageSeverity[] = ['Minor', 'Moderate', 'Major', 'TotalLoss']
   const DAMAGE_FAULTS: DamageFault[] = ['Customer', 'ThirdParty', 'Unknown', 'ActOfGod']
   const REPAIR_STATUSES: RepairStatus[] = ['Pending', 'InProgress', 'Completed', 'Waived']
@@ -1615,7 +2217,8 @@ function buildMockState(): MockState {
       repairStatus: pick(REPAIR_STATUSES, i + j),
       insuranceClaimNumber: i % 7 === 0 ? `CLM-${100000 + i + j}` : null,
       chargeToCustomer: pick(DAMAGE_FAULTS, i + j) === 'Customer',
-      chargedAmountSar: pick(DAMAGE_FAULTS, i + j) === 'Customer' ? (300 + (i + j) * 150) % 8000 : null,
+      chargedAmountSar:
+        pick(DAMAGE_FAULTS, i + j) === 'Customer' ? (300 + (i + j) * 150) % 8000 : null,
       notes: j % 3 === 0 ? 'Customer acknowledged damage at check-out inspection.' : null,
       reportedBy: `Staff ${(i % 10) + 1}`,
       createdAtUtc: new Date(now.getTime() - (28 + i + j) * 86400000).toISOString(),
@@ -1623,9 +2226,25 @@ function buildMockState(): MockState {
   })
 
   // ─── Traffic Violations ───────────────────────────────────────────────────────
-  const VIOL_TYPES: ViolationType[] = ['Speeding', 'Parking', 'RedLight', 'WrongWay', 'MobilePhone', 'ExpiredRegistration', 'Seatbelt', 'RecklessDriving', 'Other']
+  const VIOL_TYPES: ViolationType[] = [
+    'Speeding',
+    'Parking',
+    'RedLight',
+    'WrongWay',
+    'MobilePhone',
+    'ExpiredRegistration',
+    'Seatbelt',
+    'RecklessDriving',
+    'Other',
+  ]
   const VIOL_AUTHS: ViolationAuthority[] = ['Muroor', 'Municipality', 'MOT', 'Other']
-  const VIOL_PAY: ViolationPaymentStatus[] = ['Unpaid', 'PaidByCustomer', 'PaidByCompany', 'Waived', 'Contested']
+  const VIOL_PAY: ViolationPaymentStatus[] = [
+    'Unpaid',
+    'PaidByCustomer',
+    'PaidByCompany',
+    'Waived',
+    'Contested',
+  ]
 
   const violations: TrafficViolation[] = leases.flatMap((l, i) => {
     if (i % 4 !== 0) return []
@@ -1641,12 +2260,28 @@ function buildMockState(): MockState {
         violationNumber: `MRR-${(2024000000 + i * 3 + j).toString()}`,
         type: pick(VIOL_TYPES, i + j),
         authority: pick(VIOL_AUTHS, i + j),
-        occurredAt: new Date(now.getTime() - (20 + i + j) * 86400000).toISOString().substring(0, 10),
-        location: pick(['King Fahd Road, Riyadh', 'King Abdullah Road, Jeddah', 'Prince Sultan Road, Dammam', 'Olaya St, Riyadh', 'Tahlia St, Jeddah'], i + j),
+        occurredAt: new Date(now.getTime() - (20 + i + j) * 86400000)
+          .toISOString()
+          .substring(0, 10),
+        location: pick(
+          [
+            'King Fahd Road, Riyadh',
+            'King Abdullah Road, Jeddah',
+            'Prince Sultan Road, Dammam',
+            'Olaya St, Riyadh',
+            'Tahlia St, Jeddah',
+          ],
+          i + j,
+        ),
         fineAmountSar: pick([150, 300, 500, 600, 900, 1500, 3000], i + j),
-        responsibleParty: (pick(VIOL_TYPES, i + j) === 'ExpiredRegistration' ? 'Company' : 'Customer') as ViolationResponsible,
+        responsibleParty: (pick(VIOL_TYPES, i + j) === 'ExpiredRegistration'
+          ? 'Company'
+          : 'Customer') as ViolationResponsible,
         paymentStatus: payStatus,
-        paidAt: (payStatus === 'PaidByCustomer' || payStatus === 'PaidByCompany') ? new Date(now.getTime() - (10 + i) * 86400000).toISOString().substring(0, 10) : null,
+        paidAt:
+          payStatus === 'PaidByCustomer' || payStatus === 'PaidByCompany'
+            ? new Date(now.getTime() - (10 + i) * 86400000).toISOString().substring(0, 10)
+            : null,
         absherRefNumber: i % 5 === 0 ? `ABS-${700000 + i + j}` : null,
         notes: null,
         createdAtUtc: new Date(now.getTime() - (18 + i + j) * 86400000).toISOString(),
@@ -1676,9 +2311,22 @@ function buildMockState(): MockState {
       const rentVat = Math.round(rent * 0.15 * 100) / 100
 
       // Damage charges in this period
-      const periodDamages = damages.filter((d) => d.leaseId === l.id && d.chargeToCustomer && d.chargedAmountSar && d.occurredAt >= pStartStr && d.occurredAt <= pEndStr)
+      const periodDamages = damages.filter(
+        (d) =>
+          d.leaseId === l.id &&
+          d.chargeToCustomer &&
+          d.chargedAmountSar &&
+          d.occurredAt >= pStartStr &&
+          d.occurredAt <= pEndStr,
+      )
       // Violation charges in this period (company-responsible ones)
-      const periodViolations = violations.filter((v) => v.leaseId === l.id && v.responsibleParty === 'Customer' && v.occurredAt >= pStartStr && v.occurredAt <= pEndStr)
+      const periodViolations = violations.filter(
+        (v) =>
+          v.leaseId === l.id &&
+          v.responsibleParty === 'Customer' &&
+          v.occurredAt >= pStartStr &&
+          v.occurredAt <= pEndStr,
+      )
 
       let lineNum = 1
       const lines: InvoiceLine[] = [
@@ -1688,8 +2336,11 @@ function buildMockState(): MockState {
           description: `Monthly Rent — ${pStartStr.substring(0, 7)} (${l.vehicleMakeModel})`,
           plateNumberEn: l.vehiclePlate,
           plateNumberAr: plateAr,
-          quantity: 1, unitPriceSar: rent, vatPercent: 15,
-          lineTotalSar: rent, vatAmountSar: rentVat,
+          quantity: 1,
+          unitPriceSar: rent,
+          vatPercent: 15,
+          lineTotalSar: rent,
+          vatAmountSar: rentVat,
         },
         ...periodDamages.map((d) => {
           const amt = d.chargedAmountSar!
@@ -1700,8 +2351,11 @@ function buildMockState(): MockState {
             description: `Damage Charge — ${d.type} (${d.location}) ${d.occurredAt}`,
             plateNumberEn: l.vehiclePlate,
             plateNumberAr: plateAr,
-            quantity: 1, unitPriceSar: amt, vatPercent: 15,
-            lineTotalSar: amt, vatAmountSar: dVat,
+            quantity: 1,
+            unitPriceSar: amt,
+            vatPercent: 15,
+            lineTotalSar: amt,
+            vatAmountSar: dVat,
           }
         }),
         ...periodViolations.map((v) => {
@@ -1713,8 +2367,11 @@ function buildMockState(): MockState {
             description: `Traffic Violation — ${v.type} (${v.authority}) ${v.occurredAt}`,
             plateNumberEn: l.vehiclePlate,
             plateNumberAr: plateAr,
-            quantity: 1, unitPriceSar: amt, vatPercent: 15,
-            lineTotalSar: amt, vatAmountSar: vVat,
+            quantity: 1,
+            unitPriceSar: amt,
+            vatPercent: 15,
+            lineTotalSar: amt,
+            vatAmountSar: vVat,
           }
         }),
       ]
@@ -1723,10 +2380,15 @@ function buildMockState(): MockState {
       const vatTotal = lines.reduce((s, ln) => s + ln.vatAmountSar, 0)
       const total = subTotal + vatTotal
 
-      const invStatuses: InvoiceStatus[] = l.status === 'Closed' ? ['Paid'] :
-        m < months - 1 ? ['Paid', 'Paid', 'Paid', 'PartiallyPaid'] : ['Issued', 'Issued', 'Overdue', 'Draft']
+      const invStatuses: InvoiceStatus[] =
+        l.status === 'Closed'
+          ? ['Paid']
+          : m < months - 1
+            ? ['Paid', 'Paid', 'Paid', 'PartiallyPaid']
+            : ['Issued', 'Issued', 'Overdue', 'Draft']
       const st = pick(invStatuses, i + m)
-      const paid = st === 'Paid' ? total : st === 'PartiallyPaid' ? Math.round(total * 0.5 * 100) / 100 : 0
+      const paid =
+        st === 'Paid' ? total : st === 'PartiallyPaid' ? Math.round(total * 0.5 * 100) / 100 : 0
       return {
         id: mockId('inv', i * 8 + m + 1),
         invoiceNumber: `INV-${String(i * 8 + m + 1).padStart(7, '0')}`,
@@ -1740,7 +2402,8 @@ function buildMockState(): MockState {
         supplierName: SUPPLIER_NAME,
         supplierCrNo: SUPPLIER_CR,
         supplierVatNo: SUPPLIER_VAT,
-        quotationNumber: i % 5 === 0 ? `QT-${String(Math.floor(i / 5) + 1).padStart(6, '0')}` : null,
+        quotationNumber:
+          i % 5 === 0 ? `QT-${String(Math.floor(i / 5) + 1).padStart(6, '0')}` : null,
         poNumber: i % 7 === 0 ? `PO-${String(i + 1000).padStart(6, '0')}` : null,
         billingPeriodStart: pStartStr,
         billingPeriodEnd: pEndStr,
@@ -1753,7 +2416,8 @@ function buildMockState(): MockState {
         totalSar: total,
         paidAmountSar: paid,
         balanceSar: Math.round((total - paid) * 100) / 100,
-        zatcaInvoiceNumber: st === 'Paid' ? `ZATCA-${String(i * 8 + m + 1).padStart(7, '0')}` : null,
+        zatcaInvoiceNumber:
+          st === 'Paid' ? `ZATCA-${String(i * 8 + m + 1).padStart(7, '0')}` : null,
         notes: null,
         createdAtUtc: periodStart.toISOString(),
       }
@@ -1761,32 +2425,44 @@ function buildMockState(): MockState {
   })
 
   // ─── Advance Payments ─────────────────────────────────────────────────────────
-  const PAY_METHODS: PaymentMethod[] = ['Cash', 'CreditCard', 'BankTransfer', 'Cheque', 'OnlineTransfer']
+  const PAY_METHODS: PaymentMethod[] = [
+    'Cash',
+    'CreditCard',
+    'BankTransfer',
+    'Cheque',
+    'OnlineTransfer',
+  ]
   const advancePayments: AdvancePayment[] = customers.flatMap((c, i) => {
     if (i % 3 !== 0) return []
     const count = 1 + (i % 3)
     return Array.from({ length: count }).map((_, j) => {
-      const amount = (5000 + i * 1000 + j * 2500) % 100000 + 5000
-      const cInvoices = invoices.filter((inv) => inv.customerId === c.id && inv.balanceSar > 0).slice(0, 3)
+      const amount = ((5000 + i * 1000 + j * 2500) % 100000) + 5000
+      const cInvoices = invoices
+        .filter((inv) => inv.customerId === c.id && inv.balanceSar > 0)
+        .slice(0, 3)
       let remaining = amount
-      const allocs: PaymentAllocation[] = cInvoices.map((inv) => {
-        const allocAmt = Math.min(remaining, inv.balanceSar)
-        remaining = Math.max(0, remaining - allocAmt)
-        return {
-          id: mockId('alloc', i * 3 + j + 1),
-          invoiceId: inv.id,
-          invoiceNumber: inv.invoiceNumber,
-          allocatedAmountSar: allocAmt,
-          allocatedAtUtc: new Date(now.getTime() - (i + j) * 86400000).toISOString(),
-        }
-      }).filter((a) => a.allocatedAmountSar > 0)
+      const allocs: PaymentAllocation[] = cInvoices
+        .map((inv) => {
+          const allocAmt = Math.min(remaining, inv.balanceSar)
+          remaining = Math.max(0, remaining - allocAmt)
+          return {
+            id: mockId('alloc', i * 3 + j + 1),
+            invoiceId: inv.id,
+            invoiceNumber: inv.invoiceNumber,
+            allocatedAmountSar: allocAmt,
+            allocatedAtUtc: new Date(now.getTime() - (i + j) * 86400000).toISOString(),
+          }
+        })
+        .filter((a) => a.allocatedAmountSar > 0)
       return {
         id: mockId('pmt', i * 3 + j + 1),
         customerId: c.id,
         customerDisplayName: c.displayName,
         amount,
         paymentMethod: pick(PAY_METHODS, i + j),
-        receivedDate: new Date(now.getTime() - (i * 2 + j * 5 + 10) * 86400000).toISOString().substring(0, 10),
+        receivedDate: new Date(now.getTime() - (i * 2 + j * 5 + 10) * 86400000)
+          .toISOString()
+          .substring(0, 10),
         referenceNumber: i % 2 === 0 ? `REF-${200000 + i + j}` : null,
         notes: j % 2 === 0 ? 'Advance payment for upcoming lease period.' : null,
         remainingBalance: remaining,
@@ -1796,22 +2472,54 @@ function buildMockState(): MockState {
     })
   })
 
-  return { customers, vehicles, drivers, branches, quotations, leases, damages, violations, invoices, advancePayments }
+  return {
+    customers,
+    vehicles,
+    drivers,
+    branches,
+    quotations,
+    leases,
+    damages,
+    violations,
+    invoices,
+    advancePayments,
+  }
 }
 
 class MockBffClient {
   private state = buildMockState()
 
   getBranches() {
-    return Promise.resolve(this.state.branches.map((b) => ({
-      id: b.id, code: b.code, nameEn: b.nameEn, nameAr: b.nameAr, city: b.cityEn ?? undefined, isActive: b.isActive,
-    })))
+    return Promise.resolve(
+      this.state.branches.map((b) => ({
+        id: b.id,
+        code: b.code,
+        nameEn: b.nameEn,
+        nameAr: b.nameAr,
+        city: b.cityEn ?? undefined,
+        isActive: b.isActive,
+      })),
+    )
   }
-  getRentPolicies() { return Promise.resolve([{ id: 'rp-1', code: 'STD', nameEn: 'Standard', nameAr: 'قياسي', isActive: true }]) }
-  getExtendedCoverages() { return Promise.resolve([{ id: 'ec-1', code: 'CDW', nameEn: 'CDW', nameAr: 'تأمين', isActive: true }]) }
+  getRentPolicies() {
+    return Promise.resolve([
+      { id: 'rp-1', code: 'STD', nameEn: 'Standard', nameAr: 'قياسي', isActive: true },
+    ])
+  }
+  getExtendedCoverages() {
+    return Promise.resolve([
+      { id: 'ec-1', code: 'CDW', nameEn: 'CDW', nameAr: 'تأمين', isActive: true },
+    ])
+  }
 
   getCustomers(page = 1, pageSize = 20, search?: string) {
-    const filtered = this.state.customers.filter((c) => !search || c.displayName.toLowerCase().includes(search.toLowerCase()) || (c.mobile ?? '').includes(search) || (c.commercialRegistration ?? '').includes(search))
+    const filtered = this.state.customers.filter(
+      (c) =>
+        !search ||
+        c.displayName.toLowerCase().includes(search.toLowerCase()) ||
+        (c.mobile ?? '').includes(search) ||
+        (c.commercialRegistration ?? '').includes(search),
+    )
     const items: CustomerSummary[] = filtered.map((c) => ({
       id: c.id,
       displayName: c.displayName,
@@ -1828,23 +2536,51 @@ class MockBffClient {
     return Promise.resolve(paginate(items, page, pageSize))
   }
   getVehicles(page = 1, pageSize = 20, search?: string, status?: number) {
-    const COLOR_MAP: Record<string, string> = { White: 'white', Silver: 'silver', Black: 'black', Grey: 'grey', Navy: 'navy', Red: 'red', Bronze: 'bronze' }
+    const COLOR_MAP: Record<string, string> = {
+      White: 'white',
+      Silver: 'silver',
+      Black: 'black',
+      Grey: 'grey',
+      Navy: 'navy',
+      Red: 'red',
+      Bronze: 'bronze',
+    }
     const mapped = this.state.vehicles.map((v) => {
       const makeSlug = v.make.toLowerCase().replace(/ /g, '-')
       const modelSlug = v.model.toLowerCase().replace(/ /g, '-')
       const paintId = COLOR_MAP[v.color ?? ''] ?? 'white'
       const year = v.modelYear ?? 2022
       return {
-        id: v.id, plateNumber: v.plateNumber, make: v.make, model: v.model, modelYear: v.modelYear,
-        color: v.color, bodyType: v.bodyType, fuelType: v.fuelType, transmissionType: v.transmissionType, seats: v.seats,
+        id: v.id,
+        plateNumber: v.plateNumber,
+        make: v.make,
+        model: v.model,
+        modelYear: v.modelYear,
+        color: v.color,
+        bodyType: v.bodyType,
+        fuelType: v.fuelType,
+        transmissionType: v.transmissionType,
+        seats: v.seats,
         thumbnailUrl: `https://cdn.imagin.studio/getimage?customer=img&make=${makeSlug}&modelFamily=${modelSlug}&modelYear=${year}&paintId=${paintId}&angle=23&width=400`,
-        status: v.status === 'Available' ? 1 : v.status === 'Reserved' ? 2 : v.status === 'OnRent' ? 3 : v.status === 'InService' ? 4 : 5,
+        status:
+          v.status === 'Available'
+            ? 1
+            : v.status === 'Reserved'
+              ? 2
+              : v.status === 'OnRent'
+                ? 3
+                : v.status === 'InService'
+                  ? 4
+                  : 5,
         currentKm: v.currentKm,
       }
     })
-    const filtered = mapped.filter((v) =>
-      (!search || `${v.plateNumber} ${v.make} ${v.model}`.toLowerCase().includes(search.toLowerCase())) &&
-      (!status || v.status === status))
+    const filtered = mapped.filter(
+      (v) =>
+        (!search ||
+          `${v.plateNumber} ${v.make} ${v.model}`.toLowerCase().includes(search.toLowerCase())) &&
+        (!status || v.status === status),
+    )
     return Promise.resolve(paginate(filtered, page, pageSize))
   }
   getDrivers(page = 1, pageSize = 20, search?: string) {
@@ -1856,17 +2592,39 @@ class MockBffClient {
       licenseExpiryDate: d.licenseExpiryDate,
       status: d.status === 'Active' ? 1 : d.status === 'Suspended' ? 2 : 3,
     }))
-    const filtered = mapped.filter((d) => !search || `${d.personNameEn ?? ''} ${d.personNameAr ?? ''} ${d.driverLicenseNumber}`.toLowerCase().includes(search.toLowerCase()))
+    const filtered = mapped.filter(
+      (d) =>
+        !search ||
+        `${d.personNameEn ?? ''} ${d.personNameAr ?? ''} ${d.driverLicenseNumber}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+    )
     return Promise.resolve(paginate(filtered, page, pageSize))
   }
 
   saveContract(_body: SaveContractRequest, _idempotencyKey: string) {
-    return Promise.resolve({ leaseId: mockId('lease', Date.now()), tajeerContractNumber: 9000000001, issuanceUrl: 'https://demo.local/issuance' })
+    return Promise.resolve({
+      leaseId: mockId('lease', Date.now()),
+      tajeerContractNumber: 9000000001,
+      issuanceUrl: 'https://demo.local/issuance',
+    })
   }
 
   getQuotations(page = 1, pageSize = 20, search?: string) {
-    const filtered = this.state.quotations.filter((q) => !search || `${q.quoteNumber} ${q.customerDisplayName ?? ''}`.toLowerCase().includes(search.toLowerCase()))
-    return Promise.resolve(paginate(filtered.map((q) => ({ ...q })), page, pageSize))
+    const filtered = this.state.quotations.filter(
+      (q) =>
+        !search ||
+        `${q.quoteNumber} ${q.customerDisplayName ?? ''}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+    )
+    return Promise.resolve(
+      paginate(
+        filtered.map((q) => ({ ...q })),
+        page,
+        pageSize,
+      ),
+    )
   }
   getQuotation(id: string) {
     const q = this.state.quotations.find((x) => x.id === id)
@@ -1875,14 +2633,31 @@ class MockBffClient {
   }
   createQuotation(body: CreateQuotationRequest, _idempotencyKey: string) {
     const id = mockId('quote', this.state.quotations.length + 1)
-    const customerDisplayName = this.state.customers.find((c) => c.id === body.customerId)?.displayName
+    const customerDisplayName = this.state.customers.find(
+      (c) => c.id === body.customerId,
+    )?.displayName
     const detail: QuotationDetail = {
-      id, quoteNumber: `QT-${String(this.state.quotations.length + 1).padStart(6, '0')}`,
+      id,
+      quoteNumber: `QT-${String(this.state.quotations.length + 1).padStart(6, '0')}`,
       customerId: body.customerId,
       ...(customerDisplayName ? { customerDisplayName } : {}),
-      status: 'Draft', contractType: body.contractType, totalSar: 0, subTotalSar: 0, vatSar: 0, discountPercent: body.discountPercent,
-      quoteDate: body.quoteDate, validUntilDate: body.validUntilDate, estimatedDurationMonths: body.estimatedDurationMonths,
-      submittedAtUtc: null, approvedAtUtc: null, sentAtUtc: null, acceptedAtUtc: null, lines: [], approvals: [], pdfBlobUri: null, acceptedByCustomerSignature: null,
+      status: 'Draft',
+      contractType: contractTypeCodeToName(body.contractType),
+      totalSar: 0,
+      subTotalSar: 0,
+      vatSar: 0,
+      discountPercent: body.discountPercent,
+      quoteDate: body.quoteDate,
+      validUntilDate: body.validUntilDate,
+      estimatedDurationMonths: body.estimatedDurationMonths,
+      submittedAtUtc: null,
+      approvedAtUtc: null,
+      sentAtUtc: null,
+      acceptedAtUtc: null,
+      lines: [],
+      approvals: [],
+      pdfBlobUri: null,
+      acceptedByCustomerSignature: null,
     }
     this.state.quotations.unshift(detail)
     return Promise.resolve(detail)
@@ -1891,8 +2666,15 @@ class MockBffClient {
     const q = this.state.quotations.find((x) => x.id === quotationId)
     if (!q) throw new Error('Quotation not found')
     q.lines.push({
-      id: mockId('line', q.lines.length + 1), lineNumber: q.lines.length + 1, itemType: body.itemType, description: body.description, vehicleSpecRef: body.vehicleSpecRef ?? null,
-      quantity: body.quantity, unitPriceSar: body.unitPriceSar, discountPercent: body.discountPercent, lineTotalSar: body.quantity * body.unitPriceSar,
+      id: mockId('line', q.lines.length + 1),
+      lineNumber: q.lines.length + 1,
+      itemType: itemTypeCodeToName(body.itemType),
+      description: body.description,
+      vehicleSpecRef: body.vehicleSpecRef ?? null,
+      quantity: body.quantity,
+      unitPriceSar: body.unitPriceSar,
+      discountPercent: body.discountPercent,
+      lineTotalSar: body.quantity * body.unitPriceSar,
     })
     q.subTotalSar = q.lines.reduce((s, l) => s + l.lineTotalSar, 0)
     q.vatSar = Math.round(q.subTotalSar * 0.15 * 100) / 100
@@ -1900,110 +2682,289 @@ class MockBffClient {
     return Promise.resolve(q)
   }
   submitQuotationForApproval(quotationId: string, _idempotencyKey: string) {
-    const q = this.state.quotations.find((x) => x.id === quotationId); if (!q) throw new Error('Quotation not found')
+    const q = this.state.quotations.find((x) => x.id === quotationId)
+    if (!q) throw new Error('Quotation not found')
     q.status = 'PendingApproval'
-    q.approvals = [{ tierLevel: 1, requiredRoleCode: 'SALES_TIER_1', status: 'Pending', decidedByUserId: null, comment: null, decidedAtUtc: null }]
-    return Promise.resolve({ success: true, quotationId, status: q.status, nextTierLevel: 1, nextRequiredRoleCode: 'SALES_TIER_1' })
+    q.approvals = [
+      {
+        tierLevel: 1,
+        requiredRoleCode: 'SALES_TIER_1',
+        status: 'Pending',
+        decidedByUserId: null,
+        comment: null,
+        decidedAtUtc: null,
+      },
+    ]
+    return Promise.resolve({
+      success: true,
+      quotationId,
+      status: q.status,
+      nextTierLevel: 1,
+      nextRequiredRoleCode: 'SALES_TIER_1',
+    })
   }
-  recordApprovalDecision(quotationId: string, tierLevel: number, approved: boolean, comment: string | undefined, _idempotencyKey: string) {
-    const q = this.state.quotations.find((x) => x.id === quotationId); if (!q) throw new Error('Quotation not found')
+  recordApprovalDecision(
+    quotationId: string,
+    tierLevel: number,
+    approved: boolean,
+    comment: string | undefined,
+    _idempotencyKey: string,
+  ) {
+    const q = this.state.quotations.find((x) => x.id === quotationId)
+    if (!q) throw new Error('Quotation not found')
     const tier = q.approvals.find((a) => a.tierLevel === tierLevel)
-    if (tier) { tier.status = approved ? 'Approved' : 'Rejected'; tier.comment = comment ?? null; tier.decidedAtUtc = new Date().toISOString() }
+    if (tier) {
+      tier.status = approved ? 'Approved' : 'Rejected'
+      tier.comment = comment ?? null
+      tier.decidedAtUtc = new Date().toISOString()
+    }
     q.status = approved ? 'Approved' : 'Rejected'
     return Promise.resolve({ success: true, quotationId, status: q.status })
   }
-  acceptQuotation(quotationId: string, customerSignature: string | undefined, _idempotencyKey: string) {
-    const q = this.state.quotations.find((x) => x.id === quotationId); if (!q) throw new Error('Quotation not found')
-    q.status = 'Accepted'; q.acceptedAtUtc = new Date().toISOString(); q.acceptedByCustomerSignature = customerSignature ?? null
-    return Promise.resolve({ success: true, quotationId, quoteNumber: q.quoteNumber, status: q.status, acceptedAtUtc: q.acceptedAtUtc })
+  acceptQuotation(
+    quotationId: string,
+    customerSignature: string | undefined,
+    _idempotencyKey: string,
+  ) {
+    const q = this.state.quotations.find((x) => x.id === quotationId)
+    if (!q) throw new Error('Quotation not found')
+    q.status = 'Accepted'
+    q.acceptedAtUtc = new Date().toISOString()
+    q.acceptedByCustomerSignature = customerSignature ?? null
+    return Promise.resolve({
+      success: true,
+      quotationId,
+      quoteNumber: q.quoteNumber,
+      status: q.status,
+      acceptedAtUtc: q.acceptedAtUtc,
+    })
   }
 
-  getCustomerById(id: string) { const x = this.state.customers.find((c) => c.id === id); if (!x) throw new Error('Customer not found'); return Promise.resolve(x) }
+  getCustomerById(id: string) {
+    const x = this.state.customers.find((c) => c.id === id)
+    if (!x) throw new Error('Customer not found')
+    return Promise.resolve(x)
+  }
   createCustomerB2B(body: CreateCustomerB2BRequest, _idempotencyKey: string) {
     const id = mockId('customer', this.state.customers.length + 1)
     this.state.customers.unshift({
-      id, tenantId: DEV_TENANT_ID, type: 'B2B', status: 'Active', displayName: body.legalName, displayNameAr: body.legalNameAr ?? null,
-      email: body.email ?? null, mobile: body.mobile ?? null, nationalAddress: body.nationalAddress ?? null, preferredLanguage: 'ar',
-      legalName: body.legalName, legalNameAr: body.legalNameAr ?? null, commercialRegistration: body.commercialRegistration, vatNumber: body.vatNumber ?? null,
-      billingAddress: body.billingAddress ?? null, creditLimit: body.creditLimit ?? null, creditCurrency: body.creditCurrency ?? null,
-      personNameEn: null, personNameAr: null, idTypeCode: null, personIdNumber: null, dateOfBirth: null, nationalityCode: null,
-      kycVerified: false, kycVerifiedAtUtc: null, kycVerifiedBy: null, createdAtUtc: new Date().toISOString(), updatedAtUtc: new Date().toISOString(),
+      id,
+      tenantId: DEV_TENANT_ID,
+      type: 'B2B',
+      status: 'Active',
+      displayName: body.legalName,
+      displayNameAr: body.legalNameAr ?? null,
+      email: body.email ?? null,
+      mobile: body.mobile ?? null,
+      nationalAddress: body.nationalAddress ?? null,
+      preferredLanguage: 'ar',
+      legalName: body.legalName,
+      legalNameAr: body.legalNameAr ?? null,
+      commercialRegistration: body.commercialRegistration,
+      vatNumber: body.vatNumber ?? null,
+      billingAddress: body.billingAddress ?? null,
+      creditLimit: body.creditLimit ?? null,
+      creditCurrency: body.creditCurrency ?? null,
+      personNameEn: null,
+      personNameAr: null,
+      idTypeCode: null,
+      personIdNumber: null,
+      dateOfBirth: null,
+      nationalityCode: null,
+      kycVerified: false,
+      kycVerifiedAtUtc: null,
+      kycVerifiedBy: null,
+      createdAtUtc: new Date().toISOString(),
+      updatedAtUtc: new Date().toISOString(),
     })
     return Promise.resolve({ success: true, customerId: id, status: 'Active' })
   }
   createCustomerB2C(body: CreateCustomerB2CRequest, _idempotencyKey: string) {
     const id = mockId('customer', this.state.customers.length + 1)
     this.state.customers.unshift({
-      id, tenantId: DEV_TENANT_ID, type: 'B2C', status: 'Active', displayName: body.personNameEn, displayNameAr: body.personNameAr ?? null,
-      email: body.email ?? null, mobile: body.mobile ?? null, nationalAddress: body.nationalAddress ?? null, preferredLanguage: 'ar',
-      legalName: null, legalNameAr: null, commercialRegistration: null, vatNumber: null, billingAddress: null, creditLimit: null, creditCurrency: null,
-      personNameEn: body.personNameEn, personNameAr: body.personNameAr ?? null, idTypeCode: body.idTypeCode, personIdNumber: body.personIdNumber,
-      dateOfBirth: body.dateOfBirth ?? null, nationalityCode: body.nationalityCode ?? null, kycVerified: false, kycVerifiedAtUtc: null, kycVerifiedBy: null,
-      createdAtUtc: new Date().toISOString(), updatedAtUtc: new Date().toISOString(),
+      id,
+      tenantId: DEV_TENANT_ID,
+      type: 'B2C',
+      status: 'Active',
+      displayName: body.personNameEn,
+      displayNameAr: body.personNameAr ?? null,
+      email: body.email ?? null,
+      mobile: body.mobile ?? null,
+      nationalAddress: body.nationalAddress ?? null,
+      preferredLanguage: 'ar',
+      legalName: null,
+      legalNameAr: null,
+      commercialRegistration: null,
+      vatNumber: null,
+      billingAddress: null,
+      creditLimit: null,
+      creditCurrency: null,
+      personNameEn: body.personNameEn,
+      personNameAr: body.personNameAr ?? null,
+      idTypeCode: body.idTypeCode,
+      personIdNumber: body.personIdNumber,
+      dateOfBirth: body.dateOfBirth ?? null,
+      nationalityCode: body.nationalityCode ?? null,
+      kycVerified: false,
+      kycVerifiedAtUtc: null,
+      kycVerifiedBy: null,
+      createdAtUtc: new Date().toISOString(),
+      updatedAtUtc: new Date().toISOString(),
     })
     return Promise.resolve({ success: true, customerId: id, status: 'Active' })
   }
   updateCustomerStatus(id: string, action: string, _idempotencyKey: string) {
-    const x = this.state.customers.find((c) => c.id === id); if (!x) throw new Error('Customer not found')
+    const x = this.state.customers.find((c) => c.id === id)
+    if (!x) throw new Error('Customer not found')
     x.status = action === 'suspend' ? 'Suspended' : action === 'close' ? 'Closed' : 'Active'
     x.updatedAtUtc = new Date().toISOString()
     return Promise.resolve({ success: true, customerId: id, status: x.status })
   }
 
-  getVehicleById(id: string) { const x = this.state.vehicles.find((v) => v.id === id); if (!x) throw new Error('Vehicle not found'); return Promise.resolve(x) }
+  getVehicleById(id: string) {
+    const x = this.state.vehicles.find((v) => v.id === id)
+    if (!x) throw new Error('Vehicle not found')
+    return Promise.resolve(x)
+  }
   createVehicle(body: CreateVehicleRequest, _idempotencyKey: string) {
     const id = mockId('vehicle', this.state.vehicles.length + 1)
     this.state.vehicles.unshift({
-      id, tenantId: DEV_TENANT_ID, status: 'Available', plateNumber: body.plateNumber, plateLetters: body.plateLetters, plateTypeCode: body.plateTypeCode,
-      vin: body.vin, engineNumber: body.engineNumber ?? null, make: body.make, model: body.model, modelYear: body.modelYear, color: body.color ?? null,
-      fuelType: String(body.fuelType), transmissionType: String(body.transmissionType), bodyType: String(body.bodyType), seats: body.seats,
-      licenseExpiryDate: body.licenseExpiryDate ?? null, insuranceExpiryDate: body.insuranceExpiryDate ?? null, inspectionExpiryDate: body.inspectionExpiryDate ?? null,
-      insuranceCompany: body.insuranceCompany ?? null, insurancePolicyNumber: body.insurancePolicyNumber ?? null,
-      ownerBranchId: body.ownerBranchId, currentBranchId: body.ownerBranchId, currentKm: body.currentKm, purchasePrice: body.purchasePrice ?? null, purchaseDate: body.purchaseDate ?? null,
-      createdAtUtc: new Date().toISOString(), updatedAtUtc: new Date().toISOString(),
+      id,
+      tenantId: DEV_TENANT_ID,
+      status: 'Available',
+      plateNumber: body.plateNumber,
+      plateLetters: body.plateLetters,
+      plateTypeCode: body.plateTypeCode,
+      vin: body.vin,
+      engineNumber: body.engineNumber ?? null,
+      make: body.make,
+      model: body.model,
+      modelYear: body.modelYear,
+      color: body.color ?? null,
+      fuelType: String(body.fuelType),
+      transmissionType: String(body.transmissionType),
+      bodyType: String(body.bodyType),
+      seats: body.seats,
+      licenseExpiryDate: body.licenseExpiryDate ?? null,
+      insuranceExpiryDate: body.insuranceExpiryDate ?? null,
+      inspectionExpiryDate: body.inspectionExpiryDate ?? null,
+      insuranceCompany: body.insuranceCompany ?? null,
+      insurancePolicyNumber: body.insurancePolicyNumber ?? null,
+      ownerBranchId: body.ownerBranchId,
+      currentBranchId: body.ownerBranchId,
+      currentKm: body.currentKm,
+      purchasePrice: body.purchasePrice ?? null,
+      purchaseDate: body.purchaseDate ?? null,
+      createdAtUtc: new Date().toISOString(),
+      updatedAtUtc: new Date().toISOString(),
       serviceHistory: [],
     })
     return Promise.resolve({ success: true, vehicleId: id })
   }
 
-  getDriverById(id: string) { const x = this.state.drivers.find((d) => d.id === id); if (!x) throw new Error('Driver not found'); return Promise.resolve(x) }
+  getDriverById(id: string) {
+    const x = this.state.drivers.find((d) => d.id === id)
+    if (!x) throw new Error('Driver not found')
+    return Promise.resolve(x)
+  }
   createDriver(body: CreateDriverRequest, _idempotencyKey: string) {
     const id = mockId('driver', this.state.drivers.length + 1)
     this.state.drivers.unshift({
-      id, tenantId: DEV_TENANT_ID, status: 'Active', customerId: body.customerId ?? null, personNameEn: body.personNameEn, personNameAr: body.personNameAr ?? null,
-      idTypeCode: body.idTypeCode, personIdNumber: body.personIdNumber, dateOfBirth: body.dateOfBirth ?? null, nationalityCode: body.nationalityCode ?? null,
-      driverLicenseNumber: body.driverLicenseNumber, licenseClass: body.licenseClass, licenseExpiryDate: body.licenseExpiryDate,
-      mobile: body.mobile ?? null, email: body.email ?? null, nationalAddress: body.nationalAddress ?? null, tammAuthorizationStatus: 'NotRequested',
-      createdAtUtc: new Date().toISOString(), updatedAtUtc: new Date().toISOString(),
+      id,
+      tenantId: DEV_TENANT_ID,
+      status: 'Active',
+      customerId: body.customerId ?? null,
+      personNameEn: body.personNameEn,
+      personNameAr: body.personNameAr ?? null,
+      idTypeCode: body.idTypeCode,
+      personIdNumber: body.personIdNumber,
+      dateOfBirth: body.dateOfBirth ?? null,
+      nationalityCode: body.nationalityCode ?? null,
+      driverLicenseNumber: body.driverLicenseNumber,
+      licenseClass: body.licenseClass,
+      licenseExpiryDate: body.licenseExpiryDate,
+      mobile: body.mobile ?? null,
+      email: body.email ?? null,
+      nationalAddress: body.nationalAddress ?? null,
+      tammAuthorizationStatus: 'NotRequested',
+      createdAtUtc: new Date().toISOString(),
+      updatedAtUtc: new Date().toISOString(),
     })
     return Promise.resolve({ success: true, driverId: id })
   }
 
-  getBranchById(id: string) { const x = this.state.branches.find((b) => b.id === id); if (!x) throw new Error('Branch not found'); return Promise.resolve(x) }
+  getBranchById(id: string) {
+    const x = this.state.branches.find((b) => b.id === id)
+    if (!x) throw new Error('Branch not found')
+    return Promise.resolve(x)
+  }
   createBranch(body: CreateBranchRequest, _idempotencyKey: string) {
     const id = mockId('branch', this.state.branches.length + 1)
     this.state.branches.unshift({
-      id, tenantId: DEV_TENANT_ID, code: body.code, nameEn: body.nameEn, nameAr: body.nameAr, cityEn: body.cityEn ?? null, cityAr: body.cityAr ?? null,
-      regionEn: body.regionEn ?? null, regionAr: body.regionAr ?? null, licenseNumber: body.licenseNumber ?? null, address: body.address ?? null,
-      phoneNumber: body.phoneNumber ?? null, latitude: body.latitude ?? null, longitude: body.longitude ?? null, tajeerBranchId: body.tajeerBranchId, tajeerOperatorId: body.tajeerOperatorId,
-      isActive: true, createdAtUtc: new Date().toISOString(), updatedAtUtc: new Date().toISOString(),
+      id,
+      tenantId: DEV_TENANT_ID,
+      code: body.code,
+      nameEn: body.nameEn,
+      nameAr: body.nameAr,
+      cityEn: body.cityEn ?? null,
+      cityAr: body.cityAr ?? null,
+      regionEn: body.regionEn ?? null,
+      regionAr: body.regionAr ?? null,
+      licenseNumber: body.licenseNumber ?? null,
+      address: body.address ?? null,
+      phoneNumber: body.phoneNumber ?? null,
+      latitude: body.latitude ?? null,
+      longitude: body.longitude ?? null,
+      tajeerBranchId: body.tajeerBranchId,
+      tajeerOperatorId: body.tajeerOperatorId,
+      isActive: true,
+      createdAtUtc: new Date().toISOString(),
+      updatedAtUtc: new Date().toISOString(),
     })
     return Promise.resolve({ success: true, branchId: id })
   }
   updateBranchStatus(id: string, activate: boolean, _idempotencyKey: string) {
-    const x = this.state.branches.find((b) => b.id === id); if (!x) throw new Error('Branch not found')
-    x.isActive = activate; x.updatedAtUtc = new Date().toISOString()
+    const x = this.state.branches.find((b) => b.id === id)
+    if (!x) throw new Error('Branch not found')
+    x.isActive = activate
+    x.updatedAtUtc = new Date().toISOString()
     return Promise.resolve({ success: true, branchId: id })
   }
 
   // ─── Leases ────────────────────────────────────────────────────────────────
 
   getLeases(page = 1, pageSize = 20, search?: string, status?: string) {
-    const filtered = this.state.leases.filter((l) =>
-      (!search || `${l.leaseNumber} ${l.customerDisplayName} ${l.vehiclePlate} ${l.vehicleMakeModel}`.toLowerCase().includes(search.toLowerCase())) &&
-      (!status || l.status === status)
+    const filtered = this.state.leases.filter(
+      (l) =>
+        (!search ||
+          `${l.leaseNumber} ${l.customerDisplayName} ${l.vehiclePlate} ${l.vehicleMakeModel}`
+            .toLowerCase()
+            .includes(search.toLowerCase())) &&
+        (!status || l.status === status),
     )
-    const summaries: LeaseSummary[] = filtered.map(({ inspections, incidents, rentPolicyId, paidAmountSar, vatAmountSar, totalAmountSar, remainingAmountSar, allowedKmPerDay, paymentMethodCode, issuedAtUtc, suspendedAtUtc, resumedAtUtc, closedAtUtc, cancelledAtUtc, tajeerStatus, tajeerIssuanceUrl, zatcaSubmissionStatus, zatcaInvoiceNumber, ...s }) => s)
+    const summaries: LeaseSummary[] = filtered.map(
+      ({
+        inspections,
+        incidents,
+        rentPolicyId,
+        paidAmountSar,
+        vatAmountSar,
+        totalAmountSar,
+        remainingAmountSar,
+        allowedKmPerDay,
+        paymentMethodCode,
+        issuedAtUtc,
+        suspendedAtUtc,
+        resumedAtUtc,
+        closedAtUtc,
+        cancelledAtUtc,
+        tajeerStatus,
+        tajeerIssuanceUrl,
+        zatcaSubmissionStatus,
+        zatcaInvoiceNumber,
+        ...s
+      }) => s,
+    )
     return Promise.resolve(paginate(summaries, page, pageSize))
   }
   getLeaseById(id: string) {
@@ -2014,46 +2975,162 @@ class MockBffClient {
   getCustomerLeases(customerId: string): Promise<LeaseSummary[]> {
     const result = this.state.leases
       .filter((l) => l.customerId === customerId)
-      .map(({ inspections, incidents, rentPolicyId, paidAmountSar, vatAmountSar, totalAmountSar, remainingAmountSar, allowedKmPerDay, paymentMethodCode, issuedAtUtc, suspendedAtUtc, resumedAtUtc, closedAtUtc, cancelledAtUtc, tajeerStatus, tajeerIssuanceUrl, zatcaSubmissionStatus, zatcaInvoiceNumber, ...s }) => s)
+      .map(
+        ({
+          inspections,
+          incidents,
+          rentPolicyId,
+          paidAmountSar,
+          vatAmountSar,
+          totalAmountSar,
+          remainingAmountSar,
+          allowedKmPerDay,
+          paymentMethodCode,
+          issuedAtUtc,
+          suspendedAtUtc,
+          resumedAtUtc,
+          closedAtUtc,
+          cancelledAtUtc,
+          tajeerStatus,
+          tajeerIssuanceUrl,
+          zatcaSubmissionStatus,
+          zatcaInvoiceNumber,
+          ...s
+        }) => s,
+      )
     return Promise.resolve(result)
   }
   getCustomerVehicles(customerId: string): Promise<VehicleSummary[]> {
-    const vehicleIds = new Set(this.state.leases.filter((l) => l.customerId === customerId).map((l) => l.vehicleId))
-    return Promise.resolve(this.state.vehicles.filter((v) => vehicleIds.has(v.id)).map((v) => ({
-      id: v.id, plateNumber: v.plateNumber, make: v.make, model: v.model, modelYear: v.modelYear, currentKm: v.currentKm,
-      status: v.status === 'Available' ? 1 : v.status === 'Reserved' ? 2 : v.status === 'OnRent' ? 3 : v.status === 'InService' ? 4 : 5,
-    })))
+    const vehicleIds = new Set(
+      this.state.leases.filter((l) => l.customerId === customerId).map((l) => l.vehicleId),
+    )
+    return Promise.resolve(
+      this.state.vehicles
+        .filter((v) => vehicleIds.has(v.id))
+        .map((v) => ({
+          id: v.id,
+          plateNumber: v.plateNumber,
+          make: v.make,
+          model: v.model,
+          modelYear: v.modelYear,
+          currentKm: v.currentKm,
+          status:
+            v.status === 'Available'
+              ? 1
+              : v.status === 'Reserved'
+                ? 2
+                : v.status === 'OnRent'
+                  ? 3
+                  : v.status === 'InService'
+                    ? 4
+                    : 5,
+        })),
+    )
   }
   getCustomerDrivers(customerId: string): Promise<DriverSummary[]> {
-    return Promise.resolve(this.state.drivers.filter((d) => d.customerId === customerId).map((d) => ({
-      id: d.id,
-      personNameEn: d.personNameEn,
-      ...(d.personNameAr ? { personNameAr: d.personNameAr } : {}),
-      driverLicenseNumber: d.driverLicenseNumber,
-      licenseExpiryDate: d.licenseExpiryDate,
-      status: d.status === 'Active' ? 1 : d.status === 'Suspended' ? 2 : 3,
-    })))
+    return Promise.resolve(
+      this.state.drivers
+        .filter((d) => d.customerId === customerId)
+        .map((d) => ({
+          id: d.id,
+          personNameEn: d.personNameEn,
+          ...(d.personNameAr ? { personNameAr: d.personNameAr } : {}),
+          driverLicenseNumber: d.driverLicenseNumber,
+          licenseExpiryDate: d.licenseExpiryDate,
+          status: d.status === 'Active' ? 1 : d.status === 'Suspended' ? 2 : 3,
+        })),
+    )
   }
   getVehicleCurrentLease(vehicleId: string): Promise<LeaseSummary | null> {
-    const lease = this.state.leases.find((l) => l.vehicleId === vehicleId && (l.status === 'Active' || l.status === 'Extended'))
+    const lease = this.state.leases.find(
+      (l) => l.vehicleId === vehicleId && (l.status === 'Active' || l.status === 'Extended'),
+    )
     if (!lease) return Promise.resolve(null)
-    const { inspections, incidents, rentPolicyId, paidAmountSar, vatAmountSar, totalAmountSar, remainingAmountSar, allowedKmPerDay, paymentMethodCode, issuedAtUtc, suspendedAtUtc, resumedAtUtc, closedAtUtc, cancelledAtUtc, tajeerStatus, tajeerIssuanceUrl, zatcaSubmissionStatus, zatcaInvoiceNumber, ...s } = lease
+    const {
+      inspections,
+      incidents,
+      rentPolicyId,
+      paidAmountSar,
+      vatAmountSar,
+      totalAmountSar,
+      remainingAmountSar,
+      allowedKmPerDay,
+      paymentMethodCode,
+      issuedAtUtc,
+      suspendedAtUtc,
+      resumedAtUtc,
+      closedAtUtc,
+      cancelledAtUtc,
+      tajeerStatus,
+      tajeerIssuanceUrl,
+      zatcaSubmissionStatus,
+      zatcaInvoiceNumber,
+      ...s
+    } = lease
     return Promise.resolve(s)
   }
   getDriverCurrentLease(driverId: string): Promise<LeaseSummary | null> {
-    const lease = this.state.leases.find((l) => l.primaryDriverId === driverId && (l.status === 'Active' || l.status === 'Extended'))
+    const lease = this.state.leases.find(
+      (l) => l.primaryDriverId === driverId && (l.status === 'Active' || l.status === 'Extended'),
+    )
     if (!lease) return Promise.resolve(null)
-    const { inspections, incidents, rentPolicyId, paidAmountSar, vatAmountSar, totalAmountSar, remainingAmountSar, allowedKmPerDay, paymentMethodCode, issuedAtUtc, suspendedAtUtc, resumedAtUtc, closedAtUtc, cancelledAtUtc, tajeerStatus, tajeerIssuanceUrl, zatcaSubmissionStatus, zatcaInvoiceNumber, ...s } = lease
+    const {
+      inspections,
+      incidents,
+      rentPolicyId,
+      paidAmountSar,
+      vatAmountSar,
+      totalAmountSar,
+      remainingAmountSar,
+      allowedKmPerDay,
+      paymentMethodCode,
+      issuedAtUtc,
+      suspendedAtUtc,
+      resumedAtUtc,
+      closedAtUtc,
+      cancelledAtUtc,
+      tajeerStatus,
+      tajeerIssuanceUrl,
+      zatcaSubmissionStatus,
+      zatcaInvoiceNumber,
+      ...s
+    } = lease
     return Promise.resolve(s)
   }
   getVehicleLeases(vehicleId: string): Promise<LeaseSummary[]> {
     const result = this.state.leases
       .filter((l) => l.vehicleId === vehicleId)
-      .map(({ inspections, incidents, rentPolicyId, paidAmountSar, vatAmountSar, totalAmountSar, remainingAmountSar, allowedKmPerDay, paymentMethodCode, issuedAtUtc, suspendedAtUtc, resumedAtUtc, closedAtUtc, cancelledAtUtc, tajeerStatus, tajeerIssuanceUrl, zatcaSubmissionStatus, zatcaInvoiceNumber, ...s }) => s)
+      .map(
+        ({
+          inspections,
+          incidents,
+          rentPolicyId,
+          paidAmountSar,
+          vatAmountSar,
+          totalAmountSar,
+          remainingAmountSar,
+          allowedKmPerDay,
+          paymentMethodCode,
+          issuedAtUtc,
+          suspendedAtUtc,
+          resumedAtUtc,
+          closedAtUtc,
+          cancelledAtUtc,
+          tajeerStatus,
+          tajeerIssuanceUrl,
+          zatcaSubmissionStatus,
+          zatcaInvoiceNumber,
+          ...s
+        }) => s,
+      )
     return Promise.resolve(result)
   }
 
-  switchLeaseVehicle(leaseId: string, body: SwitchVehicleRequest, _idempotencyKey: string): Promise<SwitchVehicleResult> {
+  switchLeaseVehicle(
+    leaseId: string,
+    body: SwitchVehicleRequest,
+    _idempotencyKey: string,
+  ): Promise<SwitchVehicleResult> {
     const lease = this.state.leases.find((l) => l.id === leaseId)
     if (!lease) throw new Error('Lease not found')
     const newVehicle = this.state.vehicles.find((v) => v.id === body.newVehicleId)
@@ -2098,7 +3175,13 @@ class MockBffClient {
     lease.vehicleId = body.newVehicleId
     lease.vehiclePlate = `${newVehicle.plateLetters} ${newVehicle.plateNumber}`
     lease.vehicleMakeModel = `${newVehicle.make} ${newVehicle.model} (${newVehicle.modelYear})`
-    return Promise.resolve({ success: true, inspectionId: mockId('insp', Date.now() + 1), previousVehicleId, newVehicleId: body.newVehicleId, errorMessage: null })
+    return Promise.resolve({
+      success: true,
+      inspectionId: mockId('insp', Date.now() + 1),
+      previousVehicleId,
+      newVehicleId: body.newVehicleId,
+      errorMessage: null,
+    })
   }
 
   // ─── Delete operations ─────────────────────────────────────────────────────
@@ -2130,7 +3213,11 @@ class MockBffClient {
 
   // ─── Vehicle extended ops ──────────────────────────────────────────────────
 
-  updateVehicle(id: string, body: UpdateVehicleRequest, _idempotencyKey: string): Promise<VehicleCommandResult> {
+  updateVehicle(
+    id: string,
+    body: UpdateVehicleRequest,
+    _idempotencyKey: string,
+  ): Promise<VehicleCommandResult> {
     const v = this.state.vehicles.find((x) => x.id === id)
     if (!v) throw new Error('Vehicle not found')
     if (body.color != null) v.color = body.color
@@ -2185,7 +3272,11 @@ class MockBffClient {
     return Promise.resolve(v.serviceHistory)
   }
 
-  createServiceRecord(vehicleId: string, body: CreateServiceRecordRequest, _idempotencyKey: string): Promise<VehicleCommandResult> {
+  createServiceRecord(
+    vehicleId: string,
+    body: CreateServiceRecordRequest,
+    _idempotencyKey: string,
+  ): Promise<VehicleCommandResult> {
     const v = this.state.vehicles.find((x) => x.id === vehicleId)
     if (!v) throw new Error('Vehicle not found')
     const id = `svc-${vehicleId}-${v.serviceHistory.length + 1}`
@@ -2239,18 +3330,28 @@ class MockBffClient {
   getDamageRecords(leaseId: string): Promise<DamageRecord[]> {
     return Promise.resolve(this.state.damages.filter((d) => d.leaseId === leaseId))
   }
-  createDamageRecord(body: CreateDamageRecordRequest, _idempotencyKey: string): Promise<DamageRecord> {
+  createDamageRecord(
+    body: CreateDamageRecordRequest,
+    _idempotencyKey: string,
+  ): Promise<DamageRecord> {
     const record: DamageRecord = {
       id: mockId('dmg', this.state.damages.length + 1),
-      leaseId: body.leaseId, vehicleId: body.vehicleId,
-      type: body.type, location: body.location, severity: body.severity, fault: body.fault,
-      description: body.description, occurredAt: body.occurredAt,
-      estimatedCostSar: body.estimatedCostSar ?? null, actualCostSar: null,
+      leaseId: body.leaseId,
+      vehicleId: body.vehicleId,
+      type: body.type,
+      location: body.location,
+      severity: body.severity,
+      fault: body.fault,
+      description: body.description,
+      occurredAt: body.occurredAt,
+      estimatedCostSar: body.estimatedCostSar ?? null,
+      actualCostSar: null,
       repairStatus: 'Pending',
       insuranceClaimNumber: body.insuranceClaimNumber ?? null,
       chargeToCustomer: body.chargeToCustomer ?? false,
       chargedAmountSar: body.chargedAmountSar ?? null,
-      notes: body.notes ?? null, reportedBy: 'Current User',
+      notes: body.notes ?? null,
+      reportedBy: 'Current User',
       createdAtUtc: new Date().toISOString(),
     }
     this.state.damages.unshift(record)
@@ -2261,17 +3362,27 @@ class MockBffClient {
   getTrafficViolations(leaseId: string): Promise<TrafficViolation[]> {
     return Promise.resolve(this.state.violations.filter((v) => v.leaseId === leaseId))
   }
-  createTrafficViolation(body: CreateTrafficViolationRequest, _idempotencyKey: string): Promise<TrafficViolation> {
+  createTrafficViolation(
+    body: CreateTrafficViolationRequest,
+    _idempotencyKey: string,
+  ): Promise<TrafficViolation> {
     const record: TrafficViolation = {
       id: mockId('viol', this.state.violations.length + 1),
-      leaseId: body.leaseId, vehicleId: body.vehicleId,
+      leaseId: body.leaseId,
+      vehicleId: body.vehicleId,
       driverId: body.driverId ?? null,
-      driverName: body.driverId ? (this.state.drivers.find((d) => d.id === body.driverId)?.personNameEn ?? null) : null,
-      violationNumber: body.violationNumber, type: body.type, authority: body.authority,
+      driverName: body.driverId
+        ? (this.state.drivers.find((d) => d.id === body.driverId)?.personNameEn ?? null)
+        : null,
+      violationNumber: body.violationNumber,
+      type: body.type,
+      authority: body.authority,
       occurredAt: body.occurredAt,
       location: body.location ?? null,
-      fineAmountSar: body.fineAmountSar, responsibleParty: body.responsibleParty,
-      paymentStatus: 'Unpaid', paidAt: null,
+      fineAmountSar: body.fineAmountSar,
+      responsibleParty: body.responsibleParty,
+      paymentStatus: 'Unpaid',
+      paidAt: null,
       absherRefNumber: body.absherRefNumber ?? null,
       notes: body.notes ?? null,
       createdAtUtc: new Date().toISOString(),
@@ -2284,11 +3395,18 @@ class MockBffClient {
   }
 
   // ─── Invoices ────────────────────────────────────────────────────────────────
-  getInvoices(page = 1, pageSize = 20, leaseId?: string, customerId?: string, status?: InvoiceStatus): Promise<PagedResult<Invoice>> {
-    const filtered = this.state.invoices.filter((inv) =>
-      (!leaseId || inv.leaseId === leaseId) &&
-      (!customerId || inv.customerId === customerId) &&
-      (!status || inv.status === status)
+  getInvoices(
+    page = 1,
+    pageSize = 20,
+    leaseId?: string,
+    customerId?: string,
+    status?: InvoiceStatus,
+  ): Promise<PagedResult<Invoice>> {
+    const filtered = this.state.invoices.filter(
+      (inv) =>
+        (!leaseId || inv.leaseId === leaseId) &&
+        (!customerId || inv.customerId === customerId) &&
+        (!status || inv.status === status),
     )
     return Promise.resolve(paginate(filtered, page, pageSize))
   }
@@ -2301,22 +3419,81 @@ class MockBffClient {
     const lease = this.state.leases.find((l) => l.id === body.leaseId)
     if (!lease) throw new Error('Lease not found')
     // Deduplication: reject if invoice already exists for this lease+period
-    const exists = this.state.invoices.find((inv) => inv.leaseId === body.leaseId && inv.billingPeriodStart === body.billingPeriodStart)
-    if (exists) throw new Error(`Invoice already exists for lease ${lease.leaseNumber} billing period ${body.billingPeriodStart} (${exists.invoiceNumber})`)
+    const exists = this.state.invoices.find(
+      (inv) => inv.leaseId === body.leaseId && inv.billingPeriodStart === body.billingPeriodStart,
+    )
+    if (exists)
+      throw new Error(
+        `Invoice already exists for lease ${lease.leaseNumber} billing period ${body.billingPeriodStart} (${exists.invoiceNumber})`,
+      )
     const vehicle = this.state.vehicles.find((v) => v.id === lease.vehicleId)
     const plateAr = vehicle ? `${vehicle.plateLetters} ${vehicle.plateNumber}` : lease.vehiclePlate
     const rent = lease.rentAmountSar
     const rentVat = Math.round(rent * 0.15 * 100) / 100
 
     // Damage and violation charges in period
-    const periodDamages = this.state.damages.filter((d) => d.leaseId === lease.id && d.chargeToCustomer && d.chargedAmountSar && d.occurredAt >= body.billingPeriodStart && d.occurredAt <= body.billingPeriodEnd)
-    const periodViolations = this.state.violations.filter((v) => v.leaseId === lease.id && v.responsibleParty === 'Customer' && v.occurredAt >= body.billingPeriodStart && v.occurredAt <= body.billingPeriodEnd)
+    const periodDamages = this.state.damages.filter(
+      (d) =>
+        d.leaseId === lease.id &&
+        d.chargeToCustomer &&
+        d.chargedAmountSar &&
+        d.occurredAt >= body.billingPeriodStart &&
+        d.occurredAt <= body.billingPeriodEnd,
+    )
+    const periodViolations = this.state.violations.filter(
+      (v) =>
+        v.leaseId === lease.id &&
+        v.responsibleParty === 'Customer' &&
+        v.occurredAt >= body.billingPeriodStart &&
+        v.occurredAt <= body.billingPeriodEnd,
+    )
 
     let lineNum = 1
     const lines: InvoiceLine[] = [
-      { id: mockId('invl', this.state.invoices.length + 1), lineNumber: lineNum++, description: `Monthly Rent — ${body.billingPeriodStart.substring(0, 7)} (${lease.vehicleMakeModel})`, plateNumberEn: lease.vehiclePlate, plateNumberAr: plateAr, quantity: 1, unitPriceSar: rent, vatPercent: 15, lineTotalSar: rent, vatAmountSar: rentVat },
-      ...periodDamages.map((d, di) => { const amt = d.chargedAmountSar!; const dv = Math.round(amt * 0.15 * 100) / 100; return { id: mockId('invl-dmg', this.state.invoices.length * 10 + di), lineNumber: lineNum++, description: `Damage — ${d.type} ${d.occurredAt}`, plateNumberEn: lease.vehiclePlate, plateNumberAr: plateAr, quantity: 1, unitPriceSar: amt, vatPercent: 15, lineTotalSar: amt, vatAmountSar: dv } }),
-      ...periodViolations.map((v, vi) => { const amt = v.fineAmountSar; const vv = Math.round(amt * 0.15 * 100) / 100; return { id: mockId('invl-viol', this.state.invoices.length * 10 + vi), lineNumber: lineNum++, description: `Violation — ${v.type} ${v.occurredAt}`, plateNumberEn: lease.vehiclePlate, plateNumberAr: plateAr, quantity: 1, unitPriceSar: amt, vatPercent: 15, lineTotalSar: amt, vatAmountSar: vv } }),
+      {
+        id: mockId('invl', this.state.invoices.length + 1),
+        lineNumber: lineNum++,
+        description: `Monthly Rent — ${body.billingPeriodStart.substring(0, 7)} (${lease.vehicleMakeModel})`,
+        plateNumberEn: lease.vehiclePlate,
+        plateNumberAr: plateAr,
+        quantity: 1,
+        unitPriceSar: rent,
+        vatPercent: 15,
+        lineTotalSar: rent,
+        vatAmountSar: rentVat,
+      },
+      ...periodDamages.map((d, di) => {
+        const amt = d.chargedAmountSar!
+        const dv = Math.round(amt * 0.15 * 100) / 100
+        return {
+          id: mockId('invl-dmg', this.state.invoices.length * 10 + di),
+          lineNumber: lineNum++,
+          description: `Damage — ${d.type} ${d.occurredAt}`,
+          plateNumberEn: lease.vehiclePlate,
+          plateNumberAr: plateAr,
+          quantity: 1,
+          unitPriceSar: amt,
+          vatPercent: 15,
+          lineTotalSar: amt,
+          vatAmountSar: dv,
+        }
+      }),
+      ...periodViolations.map((v, vi) => {
+        const amt = v.fineAmountSar
+        const vv = Math.round(amt * 0.15 * 100) / 100
+        return {
+          id: mockId('invl-viol', this.state.invoices.length * 10 + vi),
+          lineNumber: lineNum++,
+          description: `Violation — ${v.type} ${v.occurredAt}`,
+          plateNumberEn: lease.vehiclePlate,
+          plateNumberAr: plateAr,
+          quantity: 1,
+          unitPriceSar: amt,
+          vatPercent: 15,
+          lineTotalSar: amt,
+          vatAmountSar: vv,
+        }
+      }),
     ]
     const subTotal = lines.reduce((s, l) => s + l.lineTotalSar, 0)
     const vatTotal = lines.reduce((s, l) => s + l.vatAmountSar, 0)
@@ -2324,38 +3501,119 @@ class MockBffClient {
     const inv: Invoice = {
       id: mockId('inv', this.state.invoices.length + 1),
       invoiceNumber: `INV-${String(this.state.invoices.length + 1).padStart(7, '0')}`,
-      leaseId: lease.id, leaseNumber: lease.leaseNumber,
-      customerId: lease.customerId, customerDisplayName: lease.customerDisplayName,
-      vehiclePlate: lease.vehiclePlate, vehiclePlateAr: plateAr, vehicleMakeModel: lease.vehicleMakeModel,
-      supplierName: 'Auto Lead Company', supplierCrNo: '1010012345', supplierVatNo: '300123456789003',
-      quotationNumber: null, poNumber: null,
-      billingPeriodStart: body.billingPeriodStart, billingPeriodEnd: body.billingPeriodEnd,
+      leaseId: lease.id,
+      leaseNumber: lease.leaseNumber,
+      customerId: lease.customerId,
+      customerDisplayName: lease.customerDisplayName,
+      vehiclePlate: lease.vehiclePlate,
+      vehiclePlateAr: plateAr,
+      vehicleMakeModel: lease.vehicleMakeModel,
+      supplierName: 'Auto Lead Company',
+      supplierCrNo: '1010012345',
+      supplierVatNo: '300123456789003',
+      quotationNumber: null,
+      poNumber: null,
+      billingPeriodStart: body.billingPeriodStart,
+      billingPeriodEnd: body.billingPeriodEnd,
       issuedDate: new Date().toISOString().substring(0, 10),
       dueDate: new Date(Date.now() + 10 * 86400000).toISOString().substring(0, 10),
-      status: 'Issued', lines,
-      subTotalSar: subTotal, vatAmountSar: vatTotal, totalSar: total, paidAmountSar: 0, balanceSar: total,
-      zatcaInvoiceNumber: null, notes: body.notes ?? null, createdAtUtc: new Date().toISOString(),
+      status: 'Issued',
+      lines,
+      subTotalSar: subTotal,
+      vatAmountSar: vatTotal,
+      totalSar: total,
+      paidAmountSar: 0,
+      balanceSar: total,
+      zatcaInvoiceNumber: null,
+      notes: body.notes ?? null,
+      createdAtUtc: new Date().toISOString(),
     }
     this.state.invoices.unshift(inv)
     return Promise.resolve(inv)
   }
-  bulkGenerateInvoices(billingPeriodStart: string, billingPeriodEnd: string, _idempotencyKey: string): Promise<BulkGenerateResult> {
-    const activeLeases = this.state.leases.filter((l) => l.status === 'Active' || l.status === 'Extended')
+  bulkGenerateInvoices(
+    billingPeriodStart: string,
+    billingPeriodEnd: string,
+    _idempotencyKey: string,
+  ): Promise<BulkGenerateResult> {
+    const activeLeases = this.state.leases.filter(
+      (l) => l.status === 'Active' || l.status === 'Extended',
+    )
     const ids: string[] = []
     let skipped = 0
     activeLeases.forEach((l) => {
-      const exists = this.state.invoices.some((inv) => inv.leaseId === l.id && inv.billingPeriodStart === billingPeriodStart)
-      if (exists) { skipped++; return }
+      const exists = this.state.invoices.some(
+        (inv) => inv.leaseId === l.id && inv.billingPeriodStart === billingPeriodStart,
+      )
+      if (exists) {
+        skipped++
+        return
+      }
       const vehicle = this.state.vehicles.find((v) => v.id === l.vehicleId)
       const plateAr = vehicle ? `${vehicle.plateLetters} ${vehicle.plateNumber}` : l.vehiclePlate
-      const rent = l.rentAmountSar; const rentVat = Math.round(rent * 0.15 * 100) / 100
-      const periodDamages = this.state.damages.filter((d) => d.leaseId === l.id && d.chargeToCustomer && d.chargedAmountSar && d.occurredAt >= billingPeriodStart && d.occurredAt <= billingPeriodEnd)
-      const periodViolations = this.state.violations.filter((v) => v.leaseId === l.id && v.responsibleParty === 'Customer' && v.occurredAt >= billingPeriodStart && v.occurredAt <= billingPeriodEnd)
+      const rent = l.rentAmountSar
+      const rentVat = Math.round(rent * 0.15 * 100) / 100
+      const periodDamages = this.state.damages.filter(
+        (d) =>
+          d.leaseId === l.id &&
+          d.chargeToCustomer &&
+          d.chargedAmountSar &&
+          d.occurredAt >= billingPeriodStart &&
+          d.occurredAt <= billingPeriodEnd,
+      )
+      const periodViolations = this.state.violations.filter(
+        (v) =>
+          v.leaseId === l.id &&
+          v.responsibleParty === 'Customer' &&
+          v.occurredAt >= billingPeriodStart &&
+          v.occurredAt <= billingPeriodEnd,
+      )
       let lineNum = 1
       const lines: InvoiceLine[] = [
-        { id: mockId('invl', this.state.invoices.length + ids.length + 1), lineNumber: lineNum++, description: `Monthly Rent — ${billingPeriodStart.substring(0, 7)}`, plateNumberEn: l.vehiclePlate, plateNumberAr: plateAr, quantity: 1, unitPriceSar: rent, vatPercent: 15, lineTotalSar: rent, vatAmountSar: rentVat },
-        ...periodDamages.map((d, di) => { const amt = d.chargedAmountSar!; const dv = Math.round(amt * 0.15 * 100) / 100; return { id: mockId('invl-dmg', ids.length * 10 + di), lineNumber: lineNum++, description: `Damage — ${d.type}`, plateNumberEn: l.vehiclePlate, plateNumberAr: plateAr, quantity: 1, unitPriceSar: amt, vatPercent: 15, lineTotalSar: amt, vatAmountSar: dv } }),
-        ...periodViolations.map((v, vi) => { const amt = v.fineAmountSar; const vv = Math.round(amt * 0.15 * 100) / 100; return { id: mockId('invl-viol', ids.length * 10 + vi), lineNumber: lineNum++, description: `Violation — ${v.type}`, plateNumberEn: l.vehiclePlate, plateNumberAr: plateAr, quantity: 1, unitPriceSar: amt, vatPercent: 15, lineTotalSar: amt, vatAmountSar: vv } }),
+        {
+          id: mockId('invl', this.state.invoices.length + ids.length + 1),
+          lineNumber: lineNum++,
+          description: `Monthly Rent — ${billingPeriodStart.substring(0, 7)}`,
+          plateNumberEn: l.vehiclePlate,
+          plateNumberAr: plateAr,
+          quantity: 1,
+          unitPriceSar: rent,
+          vatPercent: 15,
+          lineTotalSar: rent,
+          vatAmountSar: rentVat,
+        },
+        ...periodDamages.map((d, di) => {
+          const amt = d.chargedAmountSar!
+          const dv = Math.round(amt * 0.15 * 100) / 100
+          return {
+            id: mockId('invl-dmg', ids.length * 10 + di),
+            lineNumber: lineNum++,
+            description: `Damage — ${d.type}`,
+            plateNumberEn: l.vehiclePlate,
+            plateNumberAr: plateAr,
+            quantity: 1,
+            unitPriceSar: amt,
+            vatPercent: 15,
+            lineTotalSar: amt,
+            vatAmountSar: dv,
+          }
+        }),
+        ...periodViolations.map((v, vi) => {
+          const amt = v.fineAmountSar
+          const vv = Math.round(amt * 0.15 * 100) / 100
+          return {
+            id: mockId('invl-viol', ids.length * 10 + vi),
+            lineNumber: lineNum++,
+            description: `Violation — ${v.type}`,
+            plateNumberEn: l.vehiclePlate,
+            plateNumberAr: plateAr,
+            quantity: 1,
+            unitPriceSar: amt,
+            vatPercent: 15,
+            lineTotalSar: amt,
+            vatAmountSar: vv,
+          }
+        }),
       ]
       const subTotal = lines.reduce((s, ln) => s + ln.lineTotalSar, 0)
       const vatTotal = lines.reduce((s, ln) => s + ln.vatAmountSar, 0)
@@ -2363,18 +3621,35 @@ class MockBffClient {
       const inv: Invoice = {
         id: mockId('inv', this.state.invoices.length + ids.length + 1),
         invoiceNumber: `INV-${String(this.state.invoices.length + ids.length + 1).padStart(7, '0')}`,
-        leaseId: l.id, leaseNumber: l.leaseNumber, customerId: l.customerId, customerDisplayName: l.customerDisplayName,
-        vehiclePlate: l.vehiclePlate, vehiclePlateAr: plateAr, vehicleMakeModel: l.vehicleMakeModel,
-        supplierName: 'Auto Lead Company', supplierCrNo: '1010012345', supplierVatNo: '300123456789003',
-        quotationNumber: null, poNumber: null,
-        billingPeriodStart, billingPeriodEnd,
+        leaseId: l.id,
+        leaseNumber: l.leaseNumber,
+        customerId: l.customerId,
+        customerDisplayName: l.customerDisplayName,
+        vehiclePlate: l.vehiclePlate,
+        vehiclePlateAr: plateAr,
+        vehicleMakeModel: l.vehicleMakeModel,
+        supplierName: 'Auto Lead Company',
+        supplierCrNo: '1010012345',
+        supplierVatNo: '300123456789003',
+        quotationNumber: null,
+        poNumber: null,
+        billingPeriodStart,
+        billingPeriodEnd,
         issuedDate: new Date().toISOString().substring(0, 10),
         dueDate: new Date(Date.now() + 10 * 86400000).toISOString().substring(0, 10),
-        status: 'Issued', lines,
-        subTotalSar: subTotal, vatAmountSar: vatTotal, totalSar: total, paidAmountSar: 0, balanceSar: total,
-        zatcaInvoiceNumber: null, notes: null, createdAtUtc: new Date().toISOString(),
+        status: 'Issued',
+        lines,
+        subTotalSar: subTotal,
+        vatAmountSar: vatTotal,
+        totalSar: total,
+        paidAmountSar: 0,
+        balanceSar: total,
+        zatcaInvoiceNumber: null,
+        notes: null,
+        createdAtUtc: new Date().toISOString(),
       }
-      this.state.invoices.unshift(inv); ids.push(inv.id)
+      this.state.invoices.unshift(inv)
+      ids.push(inv.id)
     })
     return Promise.resolve({ generated: ids.length, skipped, errors: [], invoiceIds: ids })
   }
@@ -2388,11 +3663,18 @@ class MockBffClient {
   }
 
   // ─── Advance Payments ────────────────────────────────────────────────────────
-  getCustomerAdvancePayments(customerId: string, page = 1, pageSize = 20): Promise<PagedResult<AdvancePayment>> {
+  getCustomerAdvancePayments(
+    customerId: string,
+    page = 1,
+    pageSize = 20,
+  ): Promise<PagedResult<AdvancePayment>> {
     const filtered = this.state.advancePayments.filter((p) => p.customerId === customerId)
     return Promise.resolve(paginate(filtered, page, pageSize))
   }
-  recordAdvancePayment(body: RecordAdvancePaymentRequest, _idempotencyKey: string): Promise<AdvancePayment> {
+  recordAdvancePayment(
+    body: RecordAdvancePaymentRequest,
+    _idempotencyKey: string,
+  ): Promise<AdvancePayment> {
     const customer = this.state.customers.find((c) => c.id === body.customerId)
     const outstandingInvoices = this.state.invoices
       .filter((inv) => inv.customerId === body.customerId && inv.balanceSar > 0)
@@ -2407,58 +3689,118 @@ class MockBffClient {
         inv.paidAmountSar += allocAmt
         inv.balanceSar = Math.round((inv.balanceSar - allocAmt) * 100) / 100
         inv.status = inv.balanceSar === 0 ? 'Paid' : 'PartiallyPaid'
-        allocs.push({ id: mockId('alloc', allocs.length + 1), invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, allocatedAmountSar: allocAmt, allocatedAtUtc: new Date().toISOString() })
+        allocs.push({
+          id: mockId('alloc', allocs.length + 1),
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          allocatedAmountSar: allocAmt,
+          allocatedAtUtc: new Date().toISOString(),
+        })
       }
     }
     const pmt: AdvancePayment = {
       id: mockId('pmt', this.state.advancePayments.length + 1),
-      customerId: body.customerId, customerDisplayName: customer?.displayName ?? '',
-      amount: body.amount, paymentMethod: body.paymentMethod, receivedDate: body.receivedDate,
-      referenceNumber: body.referenceNumber ?? null, notes: body.notes ?? null,
-      remainingBalance: remaining, allocations: allocs, createdAtUtc: new Date().toISOString(),
+      customerId: body.customerId,
+      customerDisplayName: customer?.displayName ?? '',
+      amount: body.amount,
+      paymentMethod: body.paymentMethod,
+      receivedDate: body.receivedDate,
+      referenceNumber: body.referenceNumber ?? null,
+      notes: body.notes ?? null,
+      remainingBalance: remaining,
+      allocations: allocs,
+      createdAtUtc: new Date().toISOString(),
     }
     this.state.advancePayments.unshift(pmt)
     return Promise.resolve(pmt)
   }
-  applyFifoPayments(customerId: string, _idempotencyKey: string): Promise<{ allocations: number; totalAllocatedSar: number }> {
-    const payments = this.state.advancePayments.filter((p) => p.customerId === customerId && p.remainingBalance > 0)
-    const invoices = this.state.invoices.filter((inv) => inv.customerId === customerId && inv.balanceSar > 0).sort((a, b) => a.issuedDate.localeCompare(b.issuedDate))
-    let totalAllocated = 0; let allocCount = 0
+  applyFifoPayments(
+    customerId: string,
+    _idempotencyKey: string,
+  ): Promise<{ allocations: number; totalAllocatedSar: number }> {
+    const payments = this.state.advancePayments.filter(
+      (p) => p.customerId === customerId && p.remainingBalance > 0,
+    )
+    const invoices = this.state.invoices
+      .filter((inv) => inv.customerId === customerId && inv.balanceSar > 0)
+      .sort((a, b) => a.issuedDate.localeCompare(b.issuedDate))
+    let totalAllocated = 0
+    let allocCount = 0
     for (const pmt of payments) {
       for (const inv of invoices) {
         if (pmt.remainingBalance <= 0 || inv.balanceSar <= 0) continue
         const allocAmt = Math.min(pmt.remainingBalance, inv.balanceSar)
-        pmt.remainingBalance -= allocAmt; inv.balanceSar -= allocAmt
-        inv.paidAmountSar += allocAmt; inv.status = inv.balanceSar === 0 ? 'Paid' : 'PartiallyPaid'
-        pmt.allocations.push({ id: mockId('alloc', allocCount + 1), invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, allocatedAmountSar: allocAmt, allocatedAtUtc: new Date().toISOString() })
-        totalAllocated += allocAmt; allocCount++
+        pmt.remainingBalance -= allocAmt
+        inv.balanceSar -= allocAmt
+        inv.paidAmountSar += allocAmt
+        inv.status = inv.balanceSar === 0 ? 'Paid' : 'PartiallyPaid'
+        pmt.allocations.push({
+          id: mockId('alloc', allocCount + 1),
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          allocatedAmountSar: allocAmt,
+          allocatedAtUtc: new Date().toISOString(),
+        })
+        totalAllocated += allocAmt
+        allocCount++
       }
     }
-    return Promise.resolve({ allocations: allocCount, totalAllocatedSar: Math.round(totalAllocated * 100) / 100 })
+    return Promise.resolve({
+      allocations: allocCount,
+      totalAllocatedSar: Math.round(totalAllocated * 100) / 100,
+    })
   }
 
   // ─── Statement of Account ────────────────────────────────────────────────────
   getStatementOfAccount(customerId: string, from: string, to: string): Promise<StatementOfAccount> {
     const customer = this.state.customers.find((c) => c.id === customerId)
-    const invs = this.state.invoices.filter((inv) => inv.customerId === customerId && inv.issuedDate >= from && inv.issuedDate <= to).sort((a, b) => a.issuedDate.localeCompare(b.issuedDate))
-    const pmts = this.state.advancePayments.filter((p) => p.customerId === customerId && p.receivedDate >= from && p.receivedDate <= to).sort((a, b) => a.receivedDate.localeCompare(b.receivedDate))
+    const invs = this.state.invoices
+      .filter(
+        (inv) => inv.customerId === customerId && inv.issuedDate >= from && inv.issuedDate <= to,
+      )
+      .sort((a, b) => a.issuedDate.localeCompare(b.issuedDate))
+    const pmts = this.state.advancePayments
+      .filter((p) => p.customerId === customerId && p.receivedDate >= from && p.receivedDate <= to)
+      .sort((a, b) => a.receivedDate.localeCompare(b.receivedDate))
     let balance = 0
     const transactions: SoaTransaction[] = []
     for (const inv of invs) {
       balance += inv.totalSar
-      transactions.push({ date: inv.issuedDate, type: 'Invoice', reference: inv.invoiceNumber, description: `Monthly Rent ${inv.billingPeriodStart} – ${inv.billingPeriodEnd} (${inv.vehicleMakeModel})`, debitSar: inv.totalSar, creditSar: 0, balanceSar: balance })
+      transactions.push({
+        date: inv.issuedDate,
+        type: 'Invoice',
+        reference: inv.invoiceNumber,
+        description: `Monthly Rent ${inv.billingPeriodStart} – ${inv.billingPeriodEnd} (${inv.vehicleMakeModel})`,
+        debitSar: inv.totalSar,
+        creditSar: 0,
+        balanceSar: balance,
+      })
     }
     for (const pmt of pmts) {
       const applied = pmt.amount - pmt.remainingBalance
       balance -= applied
-      transactions.push({ date: pmt.receivedDate, type: 'Payment', reference: pmt.referenceNumber ?? pmt.id, description: `Payment received — ${pmt.paymentMethod}`, debitSar: 0, creditSar: applied, balanceSar: balance })
+      transactions.push({
+        date: pmt.receivedDate,
+        type: 'Payment',
+        reference: pmt.referenceNumber ?? pmt.id,
+        description: `Payment received — ${pmt.paymentMethod}`,
+        debitSar: 0,
+        creditSar: applied,
+        balanceSar: balance,
+      })
     }
     transactions.sort((a, b) => a.date.localeCompare(b.date))
     let running = 0
-    transactions.forEach((t) => { running += t.debitSar - t.creditSar; t.balanceSar = Math.round(running * 100) / 100 })
+    transactions.forEach((t) => {
+      running += t.debitSar - t.creditSar
+      t.balanceSar = Math.round(running * 100) / 100
+    })
     return Promise.resolve({
-      customerId, customerDisplayName: customer?.displayName ?? '',
-      periodFrom: from, periodTo: to, openingBalance: 0,
+      customerId,
+      customerDisplayName: customer?.displayName ?? '',
+      periodFrom: from,
+      periodTo: to,
+      openingBalance: 0,
       transactions,
       closingBalance: Math.round(running * 100) / 100,
       totalInvoiced: invs.reduce((s, i) => s + i.totalSar, 0),
@@ -2477,21 +3819,47 @@ class MockBffClient {
         let created = 0
         lines.slice(1).forEach((line, idx) => {
           const cols = line.split(',')
-          if (cols.length < 14) { errors.push({ rowIndex: idx + 2, errorCode: 'PARSE_ERROR', errorMessage: `Row ${idx + 2}: need ≥14 cols, got ${cols.length}` }); return }
+          if (cols.length < 14) {
+            errors.push({
+              rowIndex: idx + 2,
+              errorCode: 'PARSE_ERROR',
+              errorMessage: `Row ${idx + 2}: need ≥14 cols, got ${cols.length}`,
+            })
+            return
+          }
           const id = mockId('vehicle', this.state.vehicles.length + created + 1)
           this.state.vehicles.unshift({
-            id, tenantId: DEV_TENANT_ID, status: 'Available',
-            plateNumber: cols[0]!.trim(), plateLetters: cols[1]!.trim(), plateTypeCode: parseInt(cols[2]!.trim(), 10) || 1,
-            vin: cols[3]!.trim(), engineNumber: null,
-            make: cols[4]!.trim(), model: cols[5]!.trim(), modelYear: parseInt(cols[6]!.trim(), 10) || 2024,
-            color: cols[7]!.trim() || null, fuelType: cols[8]!.trim() || 'Petrol91', transmissionType: cols[9]!.trim() || 'Automatic',
-            bodyType: cols[10]!.trim() || 'Sedan', seats: parseInt(cols[11]!.trim(), 10) || 5,
-            licenseExpiryDate: null, insuranceExpiryDate: null, inspectionExpiryDate: null,
-            insuranceCompany: null, insurancePolicyNumber: null,
-            ownerBranchId: cols[12]!.trim(), currentBranchId: cols[12]!.trim(),
-            currentKm: parseInt(cols[13]!.trim(), 10) || 0, purchasePrice: null, purchaseDate: null,
-            notes: null, createdAtUtc: new Date().toISOString(), updatedAtUtc: new Date().toISOString(),
-            serviceHistory: [], images: [],
+            id,
+            tenantId: DEV_TENANT_ID,
+            status: 'Available',
+            plateNumber: cols[0]!.trim(),
+            plateLetters: cols[1]!.trim(),
+            plateTypeCode: parseInt(cols[2]!.trim(), 10) || 1,
+            vin: cols[3]!.trim(),
+            engineNumber: null,
+            make: cols[4]!.trim(),
+            model: cols[5]!.trim(),
+            modelYear: parseInt(cols[6]!.trim(), 10) || 2024,
+            color: cols[7]!.trim() || null,
+            fuelType: cols[8]!.trim() || 'Petrol91',
+            transmissionType: cols[9]!.trim() || 'Automatic',
+            bodyType: cols[10]!.trim() || 'Sedan',
+            seats: parseInt(cols[11]!.trim(), 10) || 5,
+            licenseExpiryDate: null,
+            insuranceExpiryDate: null,
+            inspectionExpiryDate: null,
+            insuranceCompany: null,
+            insurancePolicyNumber: null,
+            ownerBranchId: cols[12]!.trim(),
+            currentBranchId: cols[12]!.trim(),
+            currentKm: parseInt(cols[13]!.trim(), 10) || 0,
+            purchasePrice: null,
+            purchaseDate: null,
+            notes: null,
+            createdAtUtc: new Date().toISOString(),
+            updatedAtUtc: new Date().toISOString(),
+            serviceHistory: [],
+            images: [],
           })
           created++
         })
@@ -2509,16 +3877,33 @@ class MockBffClient {
   // ─── Audit ──────────────────────────────────────────────────────────────────
   getAuditEvents(entityType: string, entityId: string): Promise<AuditEvent[]> {
     const now = new Date()
-    const events: AuditEvent[] = Array.from({ length: 5 + (entityId.charCodeAt(entityId.length - 1) % 8) }).map((_, i) => ({
+    const events: AuditEvent[] = Array.from({
+      length: 5 + (entityId.charCodeAt(entityId.length - 1) % 8),
+    }).map((_, i) => ({
       id: mockId('audit', i + 1),
       entityType,
       entityId,
       action: pick(['Created', 'Updated', 'StatusChanged', 'Viewed', 'Exported'], i),
-      performedBy: pick(['Admin User', 'System', 'Fleet Manager', 'Operations Lead', 'Sales Agent'], i),
+      performedBy: pick(
+        ['Admin User', 'System', 'Fleet Manager', 'Operations Lead', 'Sales Agent'],
+        i,
+      ),
       performedAtUtc: new Date(now.getTime() - i * 86400000 * 3).toISOString(),
       previousValue: i > 0 ? pick(['Draft', 'Active', 'Pending', null], i) : null,
       newValue: pick(['Active', 'Updated', 'Approved', 'Closed', 'Suspended'], i),
-      comment: i % 3 === 0 ? pick(['Routine update', 'Approved by manager', 'Customer requested change', 'Scheduled maintenance action', 'Audit compliance check'], i) : null,
+      comment:
+        i % 3 === 0
+          ? pick(
+              [
+                'Routine update',
+                'Approved by manager',
+                'Customer requested change',
+                'Scheduled maintenance action',
+                'Audit compliance check',
+              ],
+              i,
+            )
+          : null,
     }))
     return Promise.resolve(events)
   }

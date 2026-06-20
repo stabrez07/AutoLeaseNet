@@ -1,4 +1,4 @@
-using AutoLeaseNet.Domain.Shared;
+﻿using AutoLeaseNet.Domain.Shared;
 
 namespace AutoLeaseNet.Domain.Sales;
 
@@ -135,7 +135,10 @@ public sealed class Quotation : Entity
     /// <see cref="QuotationStatus.PendingApproval"/> + <see cref="QuotationSubmittedForApprovalDomainEvent"/>;
     /// with none → auto-<see cref="QuotationStatus.Approved"/> + <see cref="QuotationApprovedDomainEvent"/>.
     /// </summary>
-    public void SubmitForApproval(IReadOnlyList<ApprovalTier> requiredTiers, DateTimeOffset nowUtc)
+    public void SubmitForApproval(
+        IReadOnlyList<ApprovalTier> requiredTiers,
+        DateTimeOffset nowUtc,
+        IReadOnlyDictionary<byte, Guid>? assignedApproverByTier = null)
     {
         ArgumentNullException.ThrowIfNull(requiredTiers);
         EnsureDraft(nameof(SubmitForApproval));
@@ -151,7 +154,17 @@ public sealed class Quotation : Entity
         }
 
         foreach (var tier in requiredTiers.OrderBy(t => t.TierLevel))
-            _approvals.Add(QuotationApproval.Snapshot(TenantId, Id, tier, nowUtc));
+        {
+            Guid? assignedUserId = null;
+            if (assignedApproverByTier is not null && assignedApproverByTier.TryGetValue(tier.TierLevel, out var resolvedUserId))
+            {
+                if (resolvedUserId == Guid.Empty)
+                    throw new InvalidOperationException($"Assigned approver for tier {tier.TierLevel} is invalid.");
+                assignedUserId = resolvedUserId;
+            }
+
+            _approvals.Add(QuotationApproval.Snapshot(TenantId, Id, tier, nowUtc, assignedUserId));
+        }
 
         Status = QuotationStatus.PendingApproval;
         UpdatedAtUtc = nowUtc;
@@ -307,10 +320,14 @@ public sealed class Quotation : Entity
 
     private void Recompute()
     {
-        SubTotalSar = Math.Round(_lines.Sum(l => l.LineTotalSar), 2, MidpointRounding.AwayFromZero);
-        var taxable = Math.Round(SubTotalSar * (1 - DiscountPercent / 100m), 2, MidpointRounding.AwayFromZero);
-        VatSar = Math.Round(taxable * VatRate, 2, MidpointRounding.AwayFromZero);
-        TotalSar = taxable + VatSar;
+        var pricing = QuotationPricingCalculator.Calculate(
+            _lines,
+            quoteDiscountPercent: DiscountPercent,
+            vatPercent: VatRate * 100m);
+
+        SubTotalSar = pricing.BaseAmountSar;
+        VatSar = pricing.VatSar;
+        TotalSar = pricing.TotalSar;
     }
 
     private void EnsureDraft(string operation)

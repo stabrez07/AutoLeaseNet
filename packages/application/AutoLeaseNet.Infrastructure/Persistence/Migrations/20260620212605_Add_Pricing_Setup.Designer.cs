@@ -4,6 +4,7 @@ using AutoLeaseNet.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AutoLeaseNet.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AutoLeaseNetDbContext))]
-    partial class AutoLeaseNetDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260620212605_Add_Pricing_Setup")]
+    partial class Add_Pricing_Setup
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

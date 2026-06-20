@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from '../../../lib/locale-provider'
 import {
@@ -8,42 +8,58 @@ import {
   type AddQuotationLineRequest,
   type CreateQuotationRequest,
   type CustomerSummary,
+  type QuotationContractTypeCode,
   type QuotationDetail,
 } from '../../../lib/bff-client'
+import {
+  resolveDefaultDiscountPercent,
+  type QuotationPricingVehicleProfile,
+} from '../../../lib/quotation-pricing-catalog'
+import { loadOrSeedQuotationPricingSetup } from '../../../lib/quotation-pricing-setup-api'
 import { Card, ErrorBox, PageHeader, Spinner } from '../../../components/ui'
 
-const CONTRACT_TYPES = ['ShortTermRental', 'LongTermLease', 'FinanceLease', 'OperatingLease']
-const ITEM_TYPES = ['VehicleRental', 'InsuranceCoverage', 'MaintenancePackage', 'DeliveryCharge', 'FuelAllowance', 'CustomService']
+const CONTRACT_TYPES: { code: QuotationContractTypeCode; key: string }[] = [
+  { code: 1, key: 'Daily' },
+  { code: 2, key: 'Hourly' },
+  { code: 3, key: 'LongTermLease' },
+]
 
 interface LineInput {
-  itemType: string
   description: string
   vehicleSpecRef: string
+  make: string
+  model: string
+  year: string
   quantity: number
   unitPriceSar: number
-  discountPercent: number
 }
 
 const emptyLine = (): LineInput => ({
-  itemType: 'VehicleRental',
   description: '',
   vehicleSpecRef: '',
+  make: '',
+  model: '',
+  year: '',
   quantity: 1,
   unitPriceSar: 0,
-  discountPercent: 0,
 })
 
 const VAT = 0.15
 
 function computePricing(lines: LineInput[], discountPercent: number) {
   const subTotal = lines.reduce((s, l) => {
-    const lineTotal = l.quantity * l.unitPriceSar * (1 - l.discountPercent / 100)
+    const lineTotal = l.quantity * l.unitPriceSar
     return s + lineTotal
   }, 0)
   const taxable = subTotal * (1 - discountPercent / 100)
   const vat = Math.round(taxable * VAT * 100) / 100
   const total = Math.round((taxable + vat) * 100) / 100
-  return { subTotal: Math.round(subTotal * 100) / 100, taxable: Math.round(taxable * 100) / 100, vat, total }
+  return {
+    subTotal: Math.round(subTotal * 100) / 100,
+    taxable: Math.round(taxable * 100) / 100,
+    vat,
+    total,
+  }
 }
 
 export default function NewQuotationPage() {
@@ -52,6 +68,7 @@ export default function NewQuotationPage() {
   const f = t.quotations.newForm
 
   const [customers, setCustomers] = useState<CustomerSummary[]>([])
+  const [pricingVehicles, setPricingVehicles] = useState<QuotationPricingVehicleProfile[]>([])
   const [booting, setBooting] = useState(true)
   const [bootError, setBootError] = useState<string | null>(null)
 
@@ -63,7 +80,7 @@ export default function NewQuotationPage() {
     accountManagerId: '',
     quoteDate: today,
     validUntilDate: nextMonth,
-    contractType: 'LongTermLease',
+    contractType: 3 as QuotationContractTypeCode,
     estimatedDurationMonths: 12,
     discountPercent: 0,
     termsAndConditionsMd: '',
@@ -74,16 +91,84 @@ export default function NewQuotationPage() {
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   useEffect(() => {
-    bff.getCustomers(1, 100).then(res => {
-      setCustomers(res.items)
-      if (res.items[0]) setForm(prev => ({ ...prev, customerId: res.items[0]!.id }))
-    }).catch(e => setBootError((e as Error).message)).finally(() => setBooting(false))
+    let cancelled = false
+
+    async function loadLookups() {
+      setBooting(true)
+      const seededSetup = await loadOrSeedQuotationPricingSetup(new Date().getFullYear())
+      const seededCatalog = seededSetup.vehicles
+      setPricingVehicles(seededCatalog)
+      setForm((prev) => ({
+        ...prev,
+        discountPercent: resolveDefaultDiscountPercent(seededSetup),
+      }))
+
+      const customersRes = await bff.getCustomers(1, 100)
+
+      if (cancelled) return
+
+      setCustomers(customersRes.items)
+      if (customersRes.items[0]) {
+        setForm((prev) => ({
+          ...prev,
+          customerId: prev.customerId || customersRes.items[0]!.id,
+        }))
+      }
+
+      setBooting(false)
+    }
+
+    loadLookups().catch((e) => {
+      if (cancelled) return
+      setBootError((e as Error).message)
+      setBooting(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const pricing = computePricing(lines, form.discountPercent)
 
   function updateLine(i: number, patch: Partial<LineInput>) {
-    setLines(ls => ls.map((l, idx) => idx === i ? { ...l, ...patch } : l))
+    setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)))
+  }
+
+  const makes = useMemo(() => {
+    return Array.from(new Set(pricingVehicles.map((v) => v.make).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b),
+    )
+  }, [pricingVehicles])
+
+  function modelsForMake(make: string) {
+    if (!make) return []
+    return Array.from(
+      new Set(
+        pricingVehicles
+          .filter((v) => v.make === make)
+          .map((v) => v.model)
+          .filter(Boolean),
+      ),
+    ).sort((a, b) => a.localeCompare(b))
+  }
+
+  function yearsForMakeModel(make: string, model: string) {
+    if (!make || !model) return []
+    return Array.from(
+      new Set(
+        pricingVehicles
+          .filter((v) => v.make === make && v.model === model)
+          .map((v) => v.year)
+          .filter((y): y is number => typeof y === 'number'),
+      ),
+    ).sort((a, b) => b - a)
+  }
+
+  function profileFor(make: string, model: string, year: string) {
+    if (!make || !model || !year) return null
+    const y = Number(year)
+    return pricingVehicles.find((v) => v.make === make && v.model === model && v.year === y) ?? null
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -108,12 +193,12 @@ export default function NewQuotationPage() {
       for (const line of lines) {
         if (!line.description.trim() || line.unitPriceSar <= 0) continue
         const lineBody: AddQuotationLineRequest = {
-          itemType: line.itemType,
+          itemType: 1,
           description: line.description,
           vehicleSpecRef: line.vehicleSpecRef || undefined,
           quantity: Number(line.quantity),
           unitPriceSar: Number(line.unitPriceSar),
-          discountPercent: Number(line.discountPercent),
+          discountPercent: 0,
         }
         await bff.addQuotationLine(created.id, lineBody, crypto.randomUUID())
       }
@@ -126,7 +211,8 @@ export default function NewQuotationPage() {
   }
 
   const lbl = 'text-xs font-medium text-slate-700'
-  const inp = 'mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500'
+  const inp =
+    'mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500'
   const sel = inp + ' bg-white'
 
   return (
@@ -138,28 +224,43 @@ export default function NewQuotationPage() {
 
       {!booting && !bootError && (
         <form onSubmit={handleSubmit} className="space-y-5">
-
           {/* ── Header fields ── */}
           <Card className="p-5">
             <h2 className="mb-4 text-sm font-semibold text-slate-800">Contract Details</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div>
                 <label className={lbl}>{f.fields.customer} *</label>
-                <select className={sel} required value={form.customerId}
-                  onChange={e => setForm({ ...form, customerId: e.target.value })}>
-                  {customers.map(c => (
-                    <option key={c.id} value={c.id}>{c.displayName}</option>
+                <select
+                  className={sel}
+                  required
+                  value={form.customerId}
+                  onChange={(e) => setForm({ ...form, customerId: e.target.value })}
+                >
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.displayName}
+                    </option>
                   ))}
                 </select>
               </div>
 
               <div>
                 <label className={lbl}>{f.fields.contractType} *</label>
-                <select className={sel} value={form.contractType}
-                  onChange={e => setForm({ ...form, contractType: e.target.value })}>
-                  {CONTRACT_TYPES.map(ct => (
-                    <option key={ct} value={ct}>
-                      {t.quotations.contractTypes[ct as keyof typeof t.quotations.contractTypes] ?? ct}
+                <select
+                  className={sel}
+                  value={form.contractType}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      contractType: Number(e.target.value) as QuotationContractTypeCode,
+                    })
+                  }
+                >
+                  {CONTRACT_TYPES.map((ct) => (
+                    <option key={String(ct.code)} value={ct.code}>
+                      {t.quotations.contractTypes[
+                        ct.key as keyof typeof t.quotations.contractTypes
+                      ] ?? ct.key}
                     </option>
                   ))}
                 </select>
@@ -167,33 +268,55 @@ export default function NewQuotationPage() {
 
               <div>
                 <label className={lbl}>{f.fields.durationMonths}</label>
-                <input type="number" min={1} max={60} className={inp} value={form.estimatedDurationMonths}
-                  onChange={e => setForm({ ...form, estimatedDurationMonths: Number(e.target.value) })} />
+                <input
+                  type="number"
+                  min={1}
+                  max={60}
+                  className={inp}
+                  value={form.estimatedDurationMonths}
+                  onChange={(e) =>
+                    setForm({ ...form, estimatedDurationMonths: Number(e.target.value) })
+                  }
+                />
               </div>
 
               <div>
                 <label className={lbl}>{f.fields.quoteDate} *</label>
-                <input type="date" className={inp} required value={form.quoteDate}
-                  onChange={e => setForm({ ...form, quoteDate: e.target.value })} />
+                <input
+                  type="date"
+                  className={inp}
+                  required
+                  value={form.quoteDate}
+                  onChange={(e) => setForm({ ...form, quoteDate: e.target.value })}
+                />
               </div>
 
               <div>
                 <label className={lbl}>{f.fields.validUntilDate} *</label>
-                <input type="date" className={inp} required value={form.validUntilDate}
-                  onChange={e => setForm({ ...form, validUntilDate: e.target.value })} />
+                <input
+                  type="date"
+                  className={inp}
+                  required
+                  value={form.validUntilDate}
+                  onChange={(e) => setForm({ ...form, validUntilDate: e.target.value })}
+                />
               </div>
 
               <div>
                 <label className={lbl}>{f.fields.discountPercent}</label>
-                <input type="number" min={0} max={100} step="0.01" className={inp}
-                  value={form.discountPercent}
-                  onChange={e => setForm({ ...form, discountPercent: Number(e.target.value) })} />
+                <div className={inp + ' bg-slate-50 text-slate-600'}>
+                  {form.discountPercent.toFixed(2)}% (from setup)
+                </div>
               </div>
 
               <div className="sm:col-span-2 lg:col-span-3">
                 <label className={lbl}>{f.fields.termsNotes}</label>
-                <textarea rows={3} className={inp + ' font-mono text-xs'} value={form.termsAndConditionsMd}
-                  onChange={e => setForm({ ...form, termsAndConditionsMd: e.target.value })} />
+                <textarea
+                  rows={3}
+                  className={inp + ' font-mono text-xs'}
+                  value={form.termsAndConditionsMd}
+                  onChange={(e) => setForm({ ...form, termsAndConditionsMd: e.target.value })}
+                />
               </div>
             </div>
           </Card>
@@ -202,63 +325,156 @@ export default function NewQuotationPage() {
           <Card className="p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-800">{f.addLine}</h2>
-              <button type="button"
-                onClick={() => setLines(ls => [...ls, emptyLine()])}
-                className="rounded-md border border-dashed border-slate-300 px-3 py-1 text-xs text-slate-600 hover:border-brand-400 hover:text-brand-700">
+              <button
+                type="button"
+                onClick={() => setLines((ls) => [...ls, emptyLine()])}
+                className="hover:border-brand-400 hover:text-brand-700 rounded-md border border-dashed border-slate-300 px-3 py-1 text-xs text-slate-600"
+              >
                 + {f.addLine}
               </button>
             </div>
 
             <div className="space-y-3">
               {lines.map((line, i) => (
-                <div key={i} className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3 lg:grid-cols-6">
+                <div
+                  key={i}
+                  className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3 lg:grid-cols-6"
+                >
+                  <div className="col-span-2 sm:col-span-3">
+                    <label className={lbl}>{f.lineFields.description} *</label>
+                    <input
+                      className={inp}
+                      required
+                      value={line.description}
+                      placeholder="e.g. Toyota Camry 2025 — 12 months"
+                      onChange={(e) => updateLine(i, { description: e.target.value })}
+                    />
+                  </div>
+
                   <div>
-                    <label className={lbl}>{f.lineFields.itemType}</label>
-                    <select className={sel + ' text-xs'} value={line.itemType}
-                      onChange={e => updateLine(i, { itemType: e.target.value })}>
-                      {ITEM_TYPES.map(it => (
-                        <option key={it} value={it}>
-                          {f.itemTypes[it as keyof typeof f.itemTypes] ?? it}
+                    <label className={lbl}>{f.lineFields.make}</label>
+                    <select
+                      className={sel}
+                      value={line.make}
+                      onChange={(e) => {
+                        const nextMake = e.target.value
+                        updateLine(i, {
+                          make: nextMake,
+                          model: '',
+                          year: '',
+                          vehicleSpecRef: '',
+                        })
+                      }}
+                    >
+                      <option value="">Select Make</option>
+                      {makes.map((make) => (
+                        <option key={make} value={make}>
+                          {make}
                         </option>
                       ))}
                     </select>
                   </div>
 
-                  <div className="col-span-1 sm:col-span-2">
-                    <label className={lbl}>{f.lineFields.description} *</label>
-                    <input className={inp} required value={line.description}
-                      placeholder="e.g. Toyota Camry 2025 — 12 months"
-                      onChange={e => updateLine(i, { description: e.target.value })} />
+                  <div>
+                    <label className={lbl}>{f.lineFields.model}</label>
+                    <select
+                      className={sel}
+                      value={line.model}
+                      disabled={!line.make}
+                      onChange={(e) => {
+                        const nextModel = e.target.value
+                        updateLine(i, {
+                          model: nextModel,
+                          year: '',
+                          vehicleSpecRef: '',
+                        })
+                      }}
+                    >
+                      <option value="">Select Model</option>
+                      {modelsForMake(line.make).map((model) => (
+                        <option key={model} value={model}>
+                          {model}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
-                    <label className={lbl}>{f.lineFields.vehicleSpec}</label>
-                    <input className={inp} value={line.vehicleSpecRef}
-                      onChange={e => updateLine(i, { vehicleSpecRef: e.target.value })} />
+                    <label className={lbl}>{f.lineFields.year}</label>
+                    <select
+                      className={sel}
+                      value={line.year}
+                      disabled={!line.make || !line.model}
+                      onChange={(e) => {
+                        const nextYear = e.target.value
+                        const matched = profileFor(line.make, line.model, nextYear)
+                        updateLine(i, {
+                          year: nextYear,
+                          description: matched
+                            ? `${matched.make} ${matched.model} ${matched.year} - ${matched.leaseDurationMonths} months`
+                            : line.description,
+                          unitPriceSar: matched
+                            ? matched.monthlyLeasePriceSar +
+                              matched.maintenanceCostSar +
+                              matched.insuranceCoverageSar +
+                              matched.otherServicesSar +
+                              matched.adminChargesSar +
+                              matched.operationChargesSar +
+                              matched.fuelAllowanceSar +
+                              matched.deliveryChargesSar +
+                              matched.customerServiceChargesSar
+                            : line.unitPriceSar,
+                          vehicleSpecRef:
+                            line.make && line.model && nextYear
+                              ? `${line.make}/${line.model}/${nextYear}`
+                              : '',
+                        })
+                      }}
+                    >
+                      <option value="">Select Year</option>
+                      {yearsForMakeModel(line.make, line.model).map((year) => (
+                        <option key={String(year)} value={String(year)}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
                     <label className={lbl}>{f.lineFields.quantity}</label>
-                    <input type="number" min={1} className={inp} value={line.quantity}
-                      onChange={e => updateLine(i, { quantity: Number(e.target.value) })} />
+                    <input
+                      type="number"
+                      min={1}
+                      className={inp}
+                      value={line.quantity}
+                      onChange={(e) => updateLine(i, { quantity: Number(e.target.value) })}
+                    />
                   </div>
 
                   <div>
                     <label className={lbl}>{f.lineFields.unitPrice} *</label>
-                    <input type="number" min={0} step="0.01" className={inp} required value={line.unitPriceSar}
-                      onChange={e => updateLine(i, { unitPriceSar: Number(e.target.value) })} />
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className={inp}
+                      required
+                      value={line.unitPriceSar}
+                      onChange={(e) => updateLine(i, { unitPriceSar: Number(e.target.value) })}
+                    />
                   </div>
 
                   <div className="flex items-end gap-2">
-                    <div className="flex-1">
-                      <label className={lbl}>{f.lineFields.lineDiscount}</label>
-                      <input type="number" min={0} max={100} step="0.01" className={inp}
-                        value={line.discountPercent}
-                        onChange={e => updateLine(i, { discountPercent: Number(e.target.value) })} />
+                    <div className="flex-1 text-xs text-slate-500">
+                      Discount policy is controlled from Setup.
                     </div>
                     {lines.length > 1 && (
-                      <button type="button" onClick={() => setLines(ls => ls.filter((_, idx) => idx !== i))}
-                        className="mb-1 rounded p-1 text-red-400 hover:text-red-600" title="Remove line">
+                      <button
+                        type="button"
+                        onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))}
+                        className="mb-1 rounded p-1 text-red-400 hover:text-red-600"
+                        title="Remove line"
+                      >
                         ✕
                       </button>
                     )}
@@ -274,23 +490,35 @@ export default function NewQuotationPage() {
             <dl className="space-y-1 text-sm">
               <div className="flex justify-between text-slate-600">
                 <dt>{f.subTotal}</dt>
-                <dd className="font-mono">{pricing.subTotal.toLocaleString('en-SA', { minimumFractionDigits: 2 })} SAR</dd>
+                <dd className="font-mono">
+                  {pricing.subTotal.toLocaleString('en-SA', { minimumFractionDigits: 2 })} SAR
+                </dd>
               </div>
               {form.discountPercent > 0 && (
                 <div className="flex justify-between text-slate-600">
-                  <dt>{f.discount} ({form.discountPercent}%)</dt>
+                  <dt>
+                    {f.discount} ({form.discountPercent}%)
+                  </dt>
                   <dd className="font-mono text-red-600">
-                    − {(pricing.subTotal - pricing.taxable).toLocaleString('en-SA', { minimumFractionDigits: 2 })} SAR
+                    −{' '}
+                    {(pricing.subTotal - pricing.taxable).toLocaleString('en-SA', {
+                      minimumFractionDigits: 2,
+                    })}{' '}
+                    SAR
                   </dd>
                 </div>
               )}
               <div className="flex justify-between text-slate-600">
                 <dt>{f.vat}</dt>
-                <dd className="font-mono">{pricing.vat.toLocaleString('en-SA', { minimumFractionDigits: 2 })} SAR</dd>
+                <dd className="font-mono">
+                  {pricing.vat.toLocaleString('en-SA', { minimumFractionDigits: 2 })} SAR
+                </dd>
               </div>
               <div className="flex justify-between border-t border-slate-200 pt-1 text-base font-semibold text-slate-900">
                 <dt>{f.total}</dt>
-                <dd className="font-mono">{pricing.total.toLocaleString('en-SA', { minimumFractionDigits: 2 })} SAR</dd>
+                <dd className="font-mono">
+                  {pricing.total.toLocaleString('en-SA', { minimumFractionDigits: 2 })} SAR
+                </dd>
               </div>
             </dl>
           </Card>
@@ -298,8 +526,11 @@ export default function NewQuotationPage() {
           {submitError && <ErrorBox message={`${f.error}: ${submitError}`} />}
 
           <div>
-            <button type="submit" disabled={submitting}
-              className="bg-brand-600 hover:bg-brand-700 inline-flex items-center rounded-md px-5 py-2.5 text-sm font-medium text-white shadow-sm disabled:opacity-60">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="bg-brand-600 hover:bg-brand-700 inline-flex items-center rounded-md px-5 py-2.5 text-sm font-medium text-white shadow-sm disabled:opacity-60"
+            >
               {submitting ? f.submitting : f.submit}
             </button>
           </div>

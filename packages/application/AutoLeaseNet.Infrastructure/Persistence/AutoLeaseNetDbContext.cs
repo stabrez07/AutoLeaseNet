@@ -6,6 +6,7 @@ using AutoLeaseNet.Domain.ExtendedCoverages;
 using AutoLeaseNet.Domain.Leases;
 using AutoLeaseNet.Domain.Operations;
 using AutoLeaseNet.Domain.Outbox;
+using AutoLeaseNet.Domain.Pricing;
 using AutoLeaseNet.Domain.RentPolicies;
 using AutoLeaseNet.Domain.Sales;
 using AutoLeaseNet.Domain.Vehicles;
@@ -43,6 +44,9 @@ public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> optio
     public DbSet<QuotationLine> QuotationLines => Set<QuotationLine>();
     public DbSet<QuotationApproval> QuotationApprovals => Set<QuotationApproval>();
     public DbSet<ApprovalTier> ApprovalTiers => Set<ApprovalTier>();
+    public DbSet<PricingVersion> PricingVersions => Set<PricingVersion>();
+    public DbSet<PricingFormulaDefinition> PricingFormulaDefinitions => Set<PricingFormulaDefinition>();
+    public DbSet<PricingDiscountPolicy> PricingDiscountPolicies => Set<PricingDiscountPolicy>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<ZatcaSubmission> ZatcaSubmissions => Set<ZatcaSubmission>();
 

@@ -1,4 +1,4 @@
-using AutoLeaseNet.Adapters.Cache.InMemory;
+﻿using AutoLeaseNet.Adapters.Cache.InMemory;
 using AutoLeaseNet.Application.Ports.Persistence;
 using AutoLeaseNet.Application.Ports.Tenancy;
 using AutoLeaseNet.Application.Ports.Time;
@@ -119,6 +119,105 @@ public sealed class QuotationApprovalCommandHandlersTests
         second.Status.Should().Be(QuotationStatus.Approved);
         quote.Approvals.Should().OnlyContain(a => a.Status == QuotationApprovalStatus.Approved);
         await uow.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Submit_handler_with_named_approvers_overrides_matrix_and_assigns_users()
+    {
+        var quote = NewDraft();
+        quote.AddLine(new AddQuotationLineInput
+        {
+            ItemType = QuotationItemType.VehicleRental,
+            Description = "Camry lease",
+            Quantity = 1,
+            UnitPriceSar = 80_000m,
+            DiscountPercent = 0m,
+            NowUtc = Now,
+        });
+
+        var quotations = Substitute.For<IQuotationRepository>();
+        quotations.GetByIdAsync(TenantId, quote.Id, Arg.Any<CancellationToken>())
+            .Returns(quote);
+
+        var approvalTiers = Substitute.For<IApprovalTierRepository>();
+
+        var uow = Substitute.For<IUnitOfWork>();
+        uow.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(1);
+
+        var handler = new SubmitQuotationForApprovalCommandHandler(
+            quotations,
+            approvalTiers,
+            uow,
+            new InMemoryIdempotencyStore(new MemoryCache(new MemoryCacheOptions())),
+            new StubTenantContext(TenantId, ApproverId),
+            new FixedClock(Now),
+            NullLogger<SubmitQuotationForApprovalCommandHandler>.Instance);
+
+        var firstNamedApprover = Guid.Parse("eeee3333-0000-0000-0000-000000000001");
+        var secondNamedApprover = Guid.Parse("ffff3333-0000-0000-0000-000000000001");
+
+        var result = await handler.Handle(
+            new SubmitQuotationForApprovalCommand(
+                "idem-submit-named-1",
+                quote.Id,
+                [
+                    new NamedApproverInput(firstNamedApprover, "Approver One"),
+                    new NamedApproverInput(secondNamedApprover, "Approver Two"),
+                ]),
+            CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Status.Should().Be(QuotationStatus.PendingApproval);
+        result.NextTierLevel.Should().Be(1);
+        result.NextAssignedUserId.Should().Be(firstNamedApprover);
+
+        quote.Approvals.Select(a => a.TierLevel).Should().Equal((byte)1, (byte)2);
+        quote.Approvals.Select(a => a.AssignedUserId).Should().Equal(firstNamedApprover, secondNamedApprover);
+
+        await approvalTiers.DidNotReceive().GetActiveForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await uow.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Submit_handler_with_single_named_approver_fails_validation()
+    {
+        var quote = NewDraft();
+        quote.AddLine(new AddQuotationLineInput
+        {
+            ItemType = QuotationItemType.VehicleRental,
+            Description = "Camry lease",
+            Quantity = 1,
+            UnitPriceSar = 10_000m,
+            DiscountPercent = 0m,
+            NowUtc = Now,
+        });
+
+        var quotations = Substitute.For<IQuotationRepository>();
+        quotations.GetByIdAsync(TenantId, quote.Id, Arg.Any<CancellationToken>())
+            .Returns(quote);
+
+        var approvalTiers = Substitute.For<IApprovalTierRepository>();
+        var uow = Substitute.For<IUnitOfWork>();
+
+        var handler = new SubmitQuotationForApprovalCommandHandler(
+            quotations,
+            approvalTiers,
+            uow,
+            new InMemoryIdempotencyStore(new MemoryCache(new MemoryCacheOptions())),
+            new StubTenantContext(TenantId, ApproverId),
+            new FixedClock(Now),
+            NullLogger<SubmitQuotationForApprovalCommandHandler>.Instance);
+
+        var result = await handler.Handle(
+            new SubmitQuotationForApprovalCommand(
+                "idem-submit-named-invalid",
+                quote.Id,
+                [new NamedApproverInput(Guid.Parse("12123333-0000-0000-0000-000000000001"), "Only One")]),
+            CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be("approval.named_approvers_invalid_count");
+        await uow.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     private static Quotation NewDraft() =>

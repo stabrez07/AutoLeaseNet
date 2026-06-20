@@ -1,4 +1,4 @@
-using AutoLeaseNet.Application.Ports.Idempotency;
+﻿using AutoLeaseNet.Application.Ports.Idempotency;
 using AutoLeaseNet.Application.Ports.Persistence;
 using AutoLeaseNet.Application.Ports.Tenancy;
 using AutoLeaseNet.Application.Ports.Time;
@@ -37,6 +37,7 @@ internal static class QuotationApprovalIdempotency
                 Status: quotation.Status,
                 NextTierLevel: nextPending?.TierLevel,
                 NextRequiredRoleCode: nextPending?.RequiredRoleCode,
+                NextAssignedUserId: nextPending?.AssignedUserId,
                 ErrorCode: null,
                 ErrorMessage: null);
         }
@@ -72,12 +73,36 @@ public sealed partial class SubmitQuotationForApprovalCommandHandler(
         if (quotation is null)
             return Fail("quotation.not_found", $"Quotation {request.QuotationId} not found.");
 
-        var tiers = await approvalTiers.GetActiveForTenantAsync(tenantId, cancellationToken).ConfigureAwait(false);
-        var requiredTiers = ApprovalTierEvaluator.RequiredTiers(quotation.TotalSar, tiers);
+        var nowUtc = clock.UtcNow;
+        IReadOnlyList<ApprovalTier> requiredTiers;
+        IReadOnlyDictionary<byte, Guid>? assignedApproverByTier = null;
+
+        if (request.NamedApprovers is { Count: > 0 } namedApprovers)
+        {
+            if (namedApprovers.Count is < 2 or > 5)
+                return Fail("approval.named_approvers_invalid_count", "Named approvers must be between 2 and 5 people.");
+            if (namedApprovers.Any(a => a.UserId == Guid.Empty || string.IsNullOrWhiteSpace(a.Name)))
+                return Fail("approval.named_approvers_invalid", "Each named approver must include a valid user id and name.");
+            if (namedApprovers.Select(a => a.UserId).Distinct().Count() != namedApprovers.Count)
+                return Fail("approval.named_approvers_duplicate", "Named approvers must be unique.");
+
+            requiredTiers = namedApprovers
+                .Select((_, i) => ApprovalTier.Create(tenantId, (byte)(i + 1), "ASSIGNED_APPROVER", 0m, nowUtc))
+                .ToList();
+
+            assignedApproverByTier = namedApprovers
+                .Select((a, i) => new { TierLevel = (byte)(i + 1), a.UserId })
+                .ToDictionary(x => x.TierLevel, x => x.UserId);
+        }
+        else
+        {
+            var tiers = await approvalTiers.GetActiveForTenantAsync(tenantId, cancellationToken).ConfigureAwait(false);
+            requiredTiers = ApprovalTierEvaluator.RequiredTiers(quotation.TotalSar, tiers);
+        }
 
         try
         {
-            quotation.SubmitForApproval(requiredTiers, clock.UtcNow);
+            quotation.SubmitForApproval(requiredTiers, nowUtc, assignedApproverByTier);
         }
         catch (InvalidOperationException ex)
         {
@@ -91,7 +116,7 @@ public sealed partial class SubmitQuotationForApprovalCommandHandler(
     }
 
     private static QuotationApprovalCommandResult Fail(string code, string message) =>
-        new(false, null, null, null, null, code, message);
+        new(false, null, null, null, null, null, code, message);
 
     [LoggerMessage(EventId = 9301, Level = LogLevel.Information, Message = "Quotation approval submit idempotency replay for key {IdempotencyKey}")]
     partial void LogReplay(string idempotencyKey);
@@ -148,7 +173,7 @@ public sealed partial class RecordQuotationApprovalDecisionCommandHandler(
     }
 
     private static QuotationApprovalCommandResult Fail(string code, string message) =>
-        new(false, null, null, null, null, code, message);
+        new(false, null, null, null, null, null, code, message);
 
     [LoggerMessage(EventId = 9302, Level = LogLevel.Information, Message = "Quotation approval decision idempotency replay for key {IdempotencyKey}")]
     partial void LogReplay(string idempotencyKey);
@@ -182,6 +207,7 @@ public sealed class GetPendingQuotationApprovalsQueryHandler(
             SubmittedAtUtc: quotation.SubmittedAtUtc,
             NextTierLevel: next?.TierLevel,
             NextRequiredRoleCode: next?.RequiredRoleCode,
+            NextAssignedUserId: next?.AssignedUserId,
             PendingTierCount: quotation.Approvals.Count(a => a.Status == QuotationApprovalStatus.Pending));
     }
 }

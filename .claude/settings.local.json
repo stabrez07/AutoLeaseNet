@@ -51,10 +51,37 @@
       "Bash(cat .env.local)",
       "Bash(cat .env)",
       "Skill(run)",
-      "Skill(run:*)"
+      "Skill(run:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "WebFetch(domain:localhost)",
+      "Bash(curl -s http://localhost:3000/vehicles)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/vehicles/bulk-upload)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/vehicles/123e4567-e89b-12d3-a456-426614174000)",
+      "Bash(curl -s http://localhost:3000/vehicles/bulk-upload)",
+      "Bash(curl -s http://localhost:3000/vehicles/123e4567-e89b-12d3-a456-426614174000)",
+      "Bash(mkdir -p \"c:/Users/admin/Downloads/Temp/Shams Github/AutoLeaseNet/AutoLeaseNet/Plans/workstreams/2026-06-17-contract-lifecycle-invoicing\")",
+      "Bash(mkdir -p \"c:/Users/admin/Downloads/Temp/Shams Github/AutoLeaseNet/AutoLeaseNet/apps/web-portal/app/invoices/[id]\" && mkdir -p \"c:/Users/admin/Downloads/Temp/Shams Github/AutoLeaseNet/AutoLeaseNet/apps/web-portal/app/invoices/generate\")",
+      "Bash(mkdir -p \"c:/Users/admin/Downloads/Temp/Shams Github/AutoLeaseNet/AutoLeaseNet/apps/web-portal/app/customers/[id]/account\")",
+      "PowerShell(\\(Get-Command pnpm\\).Source)",
+      "Bash(pnpm dev *)",
+      "Bash(echo \"web-portal PID: $!\")",
+      "Bash(echo \"customer-portal PID: $!\")",
+      "Bash(sleep 5 && cat /tmp/web-portal.log)",
+      "Read(//tmp/**)",
+      "Bash(dir \"c:\\\\Users\\\\admin\\\\Downloads\\\\Temp\\\\Shams Github\\\\AutoLeaseNet\\\\AutoLeaseNet\\\\apps\\\\web-portal\\\\components\")",
+      "Bash(npx tsc *)",
+      "PowerShell(ls \"c:\\\\Users\\\\admin\\\\Downloads\\\\Temp\\\\Shams Github\\\\AutoLeaseNet\\\\AutoLeaseNet\\\\.claude\\\\worktrees\\\\\")",
+      "Bash(git add *)",
+      "Bash(cp \"c:/Users/admin/Downloads/Temp/Shams Github/AutoLeaseNet/AutoLeaseNet/.claude/worktrees/agent-ae0c0dd43e2f18dac/apps/customer-portal/app/invoices/[id]/page.tsx\" \"c:/Users/admin/Downloads/Temp/Shams Github/AutoLeaseNet/AutoLeaseNet/apps/customer-portal/app/invoices/[id]/page.tsx\")",
+      "Bash(echo \"Copied: $?\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001)"
     ],
     "additionalDirectories": [
-      "C:\\Users\\Administrator\\Desktop\\AutoLeaseNet\\.git"
+      "C:\\Users\\Administrator\\Desktop\\AutoLeaseNet\\.git",
+      "c:\\Users\\admin\\Downloads\\Temp\\Shams Github\\AutoLeaseNet\\AutoLeaseNet\\Plans\\workstreams",
+      "c:\\Users\\admin\\Downloads\\Temp\\Shams Github\\AutoLeaseNet\\AutoLeaseNet\\apps\\web-portal\\app\\invoices",
+      "c:\\Users\\admin\\Downloads\\Temp\\Shams Github\\AutoLeaseNet\\AutoLeaseNet\\apps\\web-portal\\app\\customers\\[id]"
     ]
   }
 }

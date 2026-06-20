@@ -1,4 +1,4 @@
-using AutoLeaseNet.Domain.Shared;
+﻿using AutoLeaseNet.Domain.Shared;
 
 namespace AutoLeaseNet.Domain.Sales;
 
@@ -16,7 +16,7 @@ namespace AutoLeaseNet.Domain.Sales;
 /// </summary>
 public sealed class ApprovalTier : Entity
 {
-    /// <summary>1, 2, or 3 — the order in which this tier must approve.</summary>
+    /// <summary>1 through 5 — the order in which this tier must approve.</summary>
     public byte TierLevel { get; private set; }
 
     /// <summary>Role required to decide this tier (snapshotted onto the approval row at submit).</summary>
@@ -39,8 +39,8 @@ public sealed class ApprovalTier : Entity
         bool isActive = true)
     {
         if (tenantId == Guid.Empty) throw new ArgumentException("TenantId required.", nameof(tenantId));
-        if (tierLevel is < 1 or > 3)
-            throw new ArgumentOutOfRangeException(nameof(tierLevel), tierLevel, "TierLevel must be 1, 2, or 3.");
+        if (tierLevel is < 1 or > 5)
+            throw new ArgumentOutOfRangeException(nameof(tierLevel), tierLevel, "TierLevel must be between 1 and 5.");
         ArgumentException.ThrowIfNullOrWhiteSpace(requiredRoleCode);
         if (minAmountSar < 0)
             throw new ArgumentOutOfRangeException(nameof(minAmountSar), minAmountSar, "MinAmountSar cannot be negative.");

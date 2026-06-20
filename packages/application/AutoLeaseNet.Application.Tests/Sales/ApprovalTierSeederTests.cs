@@ -1,4 +1,4 @@
-using AutoLeaseNet.Adapters.Seed;
+﻿using AutoLeaseNet.Adapters.Seed;
 using AutoLeaseNet.Application.Ports.Persistence;
 using AutoLeaseNet.Application.Ports.Time;
 using AutoLeaseNet.Domain.Sales;
@@ -34,7 +34,8 @@ public sealed class ApprovalTierSeederTests
             new EfApprovalTierRepository(db),
             new InMemoryUow(db),
             new FixedClock(Now),
-            NullLogger<BogusDataSeeder>.Instance);
+            NullLogger<BogusDataSeeder>.Instance,
+            new EfQuotationRepository(db));
 
         await seeder.SeedAsync(CancellationToken.None);
         await seeder.SeedAsync(CancellationToken.None);

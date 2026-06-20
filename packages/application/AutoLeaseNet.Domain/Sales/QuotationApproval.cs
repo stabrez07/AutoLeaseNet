@@ -1,4 +1,4 @@
-using AutoLeaseNet.Domain.Shared;
+﻿using AutoLeaseNet.Domain.Shared;
 
 namespace AutoLeaseNet.Domain.Sales;
 
@@ -30,7 +30,8 @@ public sealed class QuotationApproval : Entity
         Guid tenantId,
         Guid quotationId,
         ApprovalTier tier,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc,
+        Guid? assignedUserId = null)
     {
         ArgumentNullException.ThrowIfNull(tier);
         return new QuotationApproval
@@ -39,6 +40,7 @@ public sealed class QuotationApproval : Entity
             QuotationId = quotationId,
             TierLevel = tier.TierLevel,
             RequiredRoleCode = tier.RequiredRoleCode,
+            AssignedUserId = assignedUserId,
             Status = QuotationApprovalStatus.Pending,
             CreatedAtUtc = nowUtc,
             UpdatedAtUtc = nowUtc,

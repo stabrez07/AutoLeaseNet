@@ -1,4 +1,4 @@
-using AutoLeaseNet.Application.Lookups;
+﻿using AutoLeaseNet.Application.Lookups;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -52,7 +52,7 @@ public static class LookupEndpoints
                     ct);
                 return Results.Ok(result);
             })
-            .WithName("GetVehicles")
+            .WithName("GetLookupVehicles")
             .WithSummary("Paged vehicles for the current tenant. Filter by status (1=Available, 2=Reserved, ...).");
 
         lookups.MapGet("/drivers",

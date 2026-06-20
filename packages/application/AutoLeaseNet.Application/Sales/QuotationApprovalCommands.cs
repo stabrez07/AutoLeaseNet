@@ -1,4 +1,4 @@
-using AutoLeaseNet.Domain.Sales;
+﻿using AutoLeaseNet.Domain.Sales;
 using MediatR;
 
 namespace AutoLeaseNet.Application.Sales;
@@ -8,7 +8,10 @@ namespace AutoLeaseNet.Application.Sales;
 /// </summary>
 public sealed record SubmitQuotationForApprovalCommand(
     string IdempotencyKey,
-    Guid QuotationId) : IRequest<QuotationApprovalCommandResult>;
+    Guid QuotationId,
+    IReadOnlyList<NamedApproverInput>? NamedApprovers = null) : IRequest<QuotationApprovalCommandResult>;
+
+public sealed record NamedApproverInput(Guid UserId, string Name);
 
 public sealed record RecordQuotationApprovalDecisionCommand(
     string IdempotencyKey,
@@ -25,6 +28,7 @@ public sealed record QuotationApprovalCommandResult(
     QuotationStatus? Status,
     byte? NextTierLevel,
     string? NextRequiredRoleCode,
+    Guid? NextAssignedUserId,
     string? ErrorCode,
     string? ErrorMessage);
 
@@ -35,4 +39,5 @@ public sealed record PendingQuotationApprovalDto(
     DateTimeOffset? SubmittedAtUtc,
     byte? NextTierLevel,
     string? NextRequiredRoleCode,
+    Guid? NextAssignedUserId,
     int PendingTierCount);

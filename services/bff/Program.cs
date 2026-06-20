@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authentication;
+﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -11,6 +11,7 @@ using AutoLeaseNet.Adapters.Images.InMemory;
 using AutoLeaseNet.Adapters.Pdf.QuestPdf;
 using AutoLeaseNet.Adapters.Seed;
 using AutoLeaseNet.Adapters.Sms.InMemory;
+using AutoLeaseNet.Adapters.Storage.InMemory;
 using AutoLeaseNet.Adapters.Tajeer;
 using AutoLeaseNet.Adapters.Tajeer.Configuration;
 using AutoLeaseNet.Adapters.Tajeer.InMemory;
@@ -104,6 +105,7 @@ builder.Services.AddQuestPdfRenderer();
 builder.Services.AddInMemoryEmail();
 builder.Services.AddSeed(builder.Configuration.GetSection(SeedOptions.SectionName));
 builder.Services.AddInMemoryVehicleImages();
+builder.Services.AddInMemoryStorage();
 // Future: AddInMemoryStorage() etc.
 
 var app = builder.Build();
@@ -144,6 +146,18 @@ app.UseTenancy();
 app.MapHealthChecks("/health/liveness", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/readiness", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 
+app.MapGet("/", () => Results.Ok(new
+{
+    service = "AutoLeaseNet.Bff",
+    version = "v1",
+    health = new
+    {
+        liveness = "/health/liveness",
+        readiness = "/health/readiness"
+    },
+    apiBase = "/api/v1"
+}));
+
 // === API v1 ===
 var v1 = app.MapGroup("/api/v1");
 v1.MapHealthRoot();
@@ -152,6 +166,8 @@ v1.MapInspectionEndpoints();
 v1.MapIncidentEndpoints();
 v1.MapLeaseEndpoints();
 v1.MapQuotationEndpoints();
+v1.MapPricingSetupEndpoints();
+v1.MapQuotationPricingSetupEndpoints();
 v1.MapInvoiceEndpoints();
 v1.MapZatcaStatusEndpoints();
 v1.MapMeEndpoints();
