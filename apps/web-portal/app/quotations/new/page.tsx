@@ -13,9 +13,11 @@ import {
 } from '../../../lib/bff-client'
 import {
   resolveDefaultDiscountPercent,
+  type QuotationPricingSetupData,
   type QuotationPricingVehicleProfile,
 } from '../../../lib/quotation-pricing-catalog'
 import { loadOrSeedQuotationPricingSetup } from '../../../lib/quotation-pricing-setup-api'
+import { calculatePricingWaterfallMonthly } from '../../../lib/quotation-pricing-engine'
 import { Card, ErrorBox, PageHeader, Spinner } from '../../../components/ui'
 
 const CONTRACT_TYPES: { code: QuotationContractTypeCode; key: string }[] = [
@@ -69,6 +71,7 @@ export default function NewQuotationPage() {
 
   const [customers, setCustomers] = useState<CustomerSummary[]>([])
   const [pricingVehicles, setPricingVehicles] = useState<QuotationPricingVehicleProfile[]>([])
+  const [pricingSetup, setPricingSetup] = useState<QuotationPricingSetupData | null>(null)
   const [booting, setBooting] = useState(true)
   const [bootError, setBootError] = useState<string | null>(null)
 
@@ -97,6 +100,7 @@ export default function NewQuotationPage() {
       setBooting(true)
       const seededSetup = await loadOrSeedQuotationPricingSetup(new Date().getFullYear())
       const seededCatalog = seededSetup.vehicles
+      setPricingSetup(seededSetup)
       setPricingVehicles(seededCatalog)
       setForm((prev) => ({
         ...prev,
@@ -169,6 +173,46 @@ export default function NewQuotationPage() {
     if (!make || !model || !year) return null
     const y = Number(year)
     return pricingVehicles.find((v) => v.make === make && v.model === model && v.year === y) ?? null
+  }
+
+  function computeLinePrice(profile: QuotationPricingVehicleProfile): number {
+    if (!pricingSetup) {
+      return (
+        profile.monthlyLeasePriceSar +
+        profile.maintenanceCostSar +
+        profile.insuranceCoverageSar +
+        profile.otherServicesSar +
+        profile.adminChargesSar +
+        profile.operationChargesSar +
+        profile.fuelAllowanceSar +
+        profile.deliveryChargesSar +
+        profile.customerServiceChargesSar
+      )
+    }
+
+    try {
+      const waterfall = calculatePricingWaterfallMonthly({
+        setup: pricingSetup,
+        vehicle: profile,
+        termMonths: Math.max(1, Number(form.estimatedDurationMonths) || 12),
+        downPaymentSar: 0,
+        additionsCostSar: 0,
+        salesChannelName: 'Direct',
+      })
+      return waterfall.finalMonthlyRateSar
+    } catch {
+      return (
+        profile.monthlyLeasePriceSar +
+        profile.maintenanceCostSar +
+        profile.insuranceCoverageSar +
+        profile.otherServicesSar +
+        profile.adminChargesSar +
+        profile.operationChargesSar +
+        profile.fuelAllowanceSar +
+        profile.deliveryChargesSar +
+        profile.customerServiceChargesSar
+      )
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -274,9 +318,20 @@ export default function NewQuotationPage() {
                   max={60}
                   className={inp}
                   value={form.estimatedDurationMonths}
-                  onChange={(e) =>
-                    setForm({ ...form, estimatedDurationMonths: Number(e.target.value) })
-                  }
+                  onChange={(e) => {
+                    const months = Number(e.target.value)
+                    setForm({ ...form, estimatedDurationMonths: months })
+                    setLines((prev) =>
+                      prev.map((line) => {
+                        const matched = profileFor(line.make, line.model, line.year)
+                        if (!matched) return line
+                        return {
+                          ...line,
+                          unitPriceSar: computeLinePrice(matched),
+                        }
+                      }),
+                    )
+                  }}
                 />
               </div>
 
@@ -413,17 +468,7 @@ export default function NewQuotationPage() {
                           description: matched
                             ? `${matched.make} ${matched.model} ${matched.year} - ${matched.leaseDurationMonths} months`
                             : line.description,
-                          unitPriceSar: matched
-                            ? matched.monthlyLeasePriceSar +
-                              matched.maintenanceCostSar +
-                              matched.insuranceCoverageSar +
-                              matched.otherServicesSar +
-                              matched.adminChargesSar +
-                              matched.operationChargesSar +
-                              matched.fuelAllowanceSar +
-                              matched.deliveryChargesSar +
-                              matched.customerServiceChargesSar
-                            : line.unitPriceSar,
+                          unitPriceSar: matched ? computeLinePrice(matched) : line.unitPriceSar,
                           vehicleSpecRef:
                             line.make && line.model && nextYear
                               ? `${line.make}/${line.model}/${nextYear}`

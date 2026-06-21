@@ -57,6 +57,9 @@ export interface MaintenanceSetupRow {
   minMileageKm: number
   maxMileageKm: number
   mtcRateSar: number
+  strategy?: 'A' | 'B'
+  rateType?: 'FIXED_AMOUNT' | 'PERCENT_OF_TFV'
+  rateValue?: number
 }
 
 export interface DiscountOptionSetupRow {
@@ -74,6 +77,78 @@ export interface TrackingChargeSetupRow {
   tireChangeChargesSar: number
 }
 
+export interface LeaseTermSetupRow {
+  id: string
+  termMonths: number
+  description: string
+}
+
+export interface InterestRateSetupRow {
+  id: string
+  termMonths: number
+  strategy: 'A' | 'B'
+  annualRatePercent: number
+  effectiveFrom: string
+  effectiveTo?: string
+  isActive: boolean
+}
+
+export interface ResidualValueSetupRow {
+  id: string
+  vehicleType: string
+  termMonths: number
+  rvPercent: number
+  effectiveFrom: string
+  effectiveTo?: string
+  isActive: boolean
+}
+
+export interface ReplacementPolicySetupRow {
+  id: string
+  policyName: string
+  strategy: 'OPEN' | 'PERMANENT'
+  replacementRatePercent: number
+  maxReplacementsPerTerm: number
+  isActive: boolean
+}
+
+export type FeeCode = 'ADMIN' | 'REGISTRATION' | 'CARD_FEE' | 'TRACKING' | 'CAR_WASH_MANPOWER'
+
+export interface FeeMasterSetupRow {
+  id: string
+  feeCode: FeeCode
+  feeName: string
+  calculationMethod: 'FIXED_AMOUNT' | 'PERCENT_OF_TFV' | 'PERCENT_OF_INSTALLMENT'
+  feeValue: number
+  frequency: 'ONE_TIME' | 'MONTHLY' | 'ANNUAL'
+  isActive: boolean
+}
+
+export interface CommissionRateSetupRow {
+  id: string
+  channelName: string
+  commissionPercent: number
+  effectiveFrom: string
+  effectiveTo?: string
+  isActive: boolean
+}
+
+export interface ProfitMarginSetupRow {
+  id: string
+  vehicleType: string
+  marginPercent: number
+  effectiveFrom: string
+  effectiveTo?: string
+  isActive: boolean
+}
+
+export interface CalendarPeriodSetupRow {
+  id: string
+  periodLabel: string
+  periodStart: string
+  periodEnd: string
+}
+
 export interface QuotationPricingSetupData {
   vehicles: QuotationPricingVehicleProfile[]
   insurance: InsuranceSetupRow[]
@@ -82,6 +157,14 @@ export interface QuotationPricingSetupData {
   maintenance: MaintenanceSetupRow[]
   discountOptions: DiscountOptionSetupRow[]
   trackingCharges: TrackingChargeSetupRow[]
+  leaseTerms: LeaseTermSetupRow[]
+  interestRateTable: InterestRateSetupRow[]
+  residualValueTable: ResidualValueSetupRow[]
+  replacementPolicy: ReplacementPolicySetupRow[]
+  feeMaster: FeeMasterSetupRow[]
+  commissionRateTable: CommissionRateSetupRow[]
+  profitMarginSetup: ProfitMarginSetupRow[]
+  calendarPeriods: CalendarPeriodSetupRow[]
 }
 
 export const QUOTATION_PRICING_STORAGE_KEY = 'autoleasenet.quotationPricingSetup.v2'
@@ -413,6 +496,221 @@ export function buildDummyTrackingChargeSetupRows(
   ]
 }
 
+export function buildDummyLeaseTermsSetupRows(): LeaseTermSetupRow[] {
+  return [
+    { id: 'term-12', termMonths: 12, description: '1 year' },
+    { id: 'term-24', termMonths: 24, description: '2 years' },
+    { id: 'term-36', termMonths: 36, description: '3 years' },
+    { id: 'term-48', termMonths: 48, description: '4 years' },
+  ]
+}
+
+export function buildDummyInterestRateTableRows(
+  year: number = currentYear(),
+): InterestRateSetupRow[] {
+  const from = `${year}-01-01`
+  return [
+    {
+      id: `${year}-ir-12-a`,
+      termMonths: 12,
+      strategy: 'A',
+      annualRatePercent: 5.2,
+      effectiveFrom: from,
+      isActive: true,
+    },
+    {
+      id: `${year}-ir-24-b`,
+      termMonths: 24,
+      strategy: 'B',
+      annualRatePercent: 5.9,
+      effectiveFrom: from,
+      isActive: true,
+    },
+    {
+      id: `${year}-ir-36-b`,
+      termMonths: 36,
+      strategy: 'B',
+      annualRatePercent: 6.3,
+      effectiveFrom: from,
+      isActive: true,
+    },
+  ]
+}
+
+export function buildDummyResidualValueSetupRows(
+  year: number = currentYear(),
+): ResidualValueSetupRow[] {
+  const from = `${year}-01-01`
+  return [
+    {
+      id: `${year}-rv-sedan-24`,
+      vehicleType: 'Sedan',
+      termMonths: 24,
+      rvPercent: 38,
+      effectiveFrom: from,
+      isActive: true,
+    },
+    {
+      id: `${year}-rv-suv-24`,
+      vehicleType: 'SUV',
+      termMonths: 24,
+      rvPercent: 42,
+      effectiveFrom: from,
+      isActive: true,
+    },
+    {
+      id: `${year}-rv-pickup-24`,
+      vehicleType: 'Pickup',
+      termMonths: 24,
+      rvPercent: 40,
+      effectiveFrom: from,
+      isActive: true,
+    },
+  ]
+}
+
+export function buildDummyReplacementPolicySetupRows(
+  year: number = currentYear(),
+): ReplacementPolicySetupRow[] {
+  return [
+    {
+      id: `${year}-rp-open`,
+      policyName: 'Open Replacement',
+      strategy: 'OPEN',
+      replacementRatePercent: 2.5,
+      maxReplacementsPerTerm: 2,
+      isActive: true,
+    },
+    {
+      id: `${year}-rp-permanent`,
+      policyName: 'Permanent Vehicle',
+      strategy: 'PERMANENT',
+      replacementRatePercent: 0,
+      maxReplacementsPerTerm: 0,
+      isActive: true,
+    },
+  ]
+}
+
+export function buildDummyFeeMasterSetupRows(year: number = currentYear()): FeeMasterSetupRow[] {
+  return [
+    {
+      id: `${year}-fee-admin`,
+      feeCode: 'ADMIN',
+      feeName: 'Admin',
+      calculationMethod: 'FIXED_AMOUNT',
+      feeValue: 75,
+      frequency: 'MONTHLY',
+      isActive: true,
+    },
+    {
+      id: `${year}-fee-reg`,
+      feeCode: 'REGISTRATION',
+      feeName: 'Registration & Fees',
+      calculationMethod: 'FIXED_AMOUNT',
+      feeValue: 1500,
+      frequency: 'ONE_TIME',
+      isActive: true,
+    },
+    {
+      id: `${year}-fee-card`,
+      feeCode: 'CARD_FEE',
+      feeName: 'Card Fee',
+      calculationMethod: 'PERCENT_OF_INSTALLMENT',
+      feeValue: 1.5,
+      frequency: 'MONTHLY',
+      isActive: true,
+    },
+    {
+      id: `${year}-fee-track`,
+      feeCode: 'TRACKING',
+      feeName: 'Tracking',
+      calculationMethod: 'FIXED_AMOUNT',
+      feeValue: 65,
+      frequency: 'MONTHLY',
+      isActive: true,
+    },
+    {
+      id: `${year}-fee-cwm`,
+      feeCode: 'CAR_WASH_MANPOWER',
+      feeName: 'Car Wash/Manpower',
+      calculationMethod: 'FIXED_AMOUNT',
+      feeValue: 45,
+      frequency: 'MONTHLY',
+      isActive: true,
+    },
+  ]
+}
+
+export function buildDummyCommissionRateTableRows(
+  year: number = currentYear(),
+): CommissionRateSetupRow[] {
+  const from = `${year}-01-01`
+  return [
+    {
+      id: `${year}-comm-direct`,
+      channelName: 'Direct',
+      commissionPercent: 2,
+      effectiveFrom: from,
+      isActive: true,
+    },
+    {
+      id: `${year}-comm-broker`,
+      channelName: 'Broker',
+      commissionPercent: 3.5,
+      effectiveFrom: from,
+      isActive: true,
+    },
+  ]
+}
+
+export function buildDummyProfitMarginSetupRows(
+  year: number = currentYear(),
+): ProfitMarginSetupRow[] {
+  const from = `${year}-01-01`
+  return [
+    {
+      id: `${year}-pm-sedan`,
+      vehicleType: 'Sedan',
+      marginPercent: 8,
+      effectiveFrom: from,
+      isActive: true,
+    },
+    {
+      id: `${year}-pm-suv`,
+      vehicleType: 'SUV',
+      marginPercent: 9,
+      effectiveFrom: from,
+      isActive: true,
+    },
+    {
+      id: `${year}-pm-pickup`,
+      vehicleType: 'Pickup',
+      marginPercent: 8.5,
+      effectiveFrom: from,
+      isActive: true,
+    },
+  ]
+}
+
+export function buildDummyCalendarPeriodsSetupRows(
+  year: number = currentYear(),
+): CalendarPeriodSetupRow[] {
+  return Array.from({ length: 12 }, (_, i) => {
+    const month = i + 1
+    const label = `${year}-${String(month).padStart(2, '0')}`
+    const start = `${label}-01`
+    const endDate = new Date(year, month, 0)
+    const end = `${label}-${String(endDate.getDate()).padStart(2, '0')}`
+    return {
+      id: `period-${label}`,
+      periodLabel: label,
+      periodStart: start,
+      periodEnd: end,
+    }
+  })
+}
+
 export function buildDummyQuotationPricingSetupData(
   year: number = currentYear(),
 ): QuotationPricingSetupData {
@@ -424,6 +722,14 @@ export function buildDummyQuotationPricingSetupData(
     maintenance: buildDummyMaintenanceSetupRows(year),
     discountOptions: buildDummyDiscountOptionSetupRows(year),
     trackingCharges: buildDummyTrackingChargeSetupRows(year),
+    leaseTerms: buildDummyLeaseTermsSetupRows(),
+    interestRateTable: buildDummyInterestRateTableRows(year),
+    residualValueTable: buildDummyResidualValueSetupRows(year),
+    replacementPolicy: buildDummyReplacementPolicySetupRows(year),
+    feeMaster: buildDummyFeeMasterSetupRows(year),
+    commissionRateTable: buildDummyCommissionRateTableRows(year),
+    profitMarginSetup: buildDummyProfitMarginSetupRows(year),
+    calendarPeriods: buildDummyCalendarPeriodsSetupRows(year),
   }
 }
 
@@ -445,6 +751,14 @@ export function loadQuotationPricingSetupData(): QuotationPricingSetupData {
       maintenance: [],
       discountOptions: [],
       trackingCharges: [],
+      leaseTerms: [],
+      interestRateTable: [],
+      residualValueTable: [],
+      replacementPolicy: [],
+      feeMaster: [],
+      commissionRateTable: [],
+      profitMarginSetup: [],
+      calendarPeriods: [],
     }
   }
   try {
@@ -458,6 +772,14 @@ export function loadQuotationPricingSetupData(): QuotationPricingSetupData {
         maintenance: [],
         discountOptions: [],
         trackingCharges: [],
+        leaseTerms: [],
+        interestRateTable: [],
+        residualValueTable: [],
+        replacementPolicy: [],
+        feeMaster: [],
+        commissionRateTable: [],
+        profitMarginSetup: [],
+        calendarPeriods: [],
       }
     }
     const parsed = JSON.parse(raw) as QuotationPricingSetupData
@@ -472,6 +794,16 @@ export function loadQuotationPricingSetupData(): QuotationPricingSetupData {
       maintenance: Array.isArray(parsed.maintenance) ? parsed.maintenance : [],
       discountOptions: Array.isArray(parsed.discountOptions) ? parsed.discountOptions : [],
       trackingCharges: Array.isArray(parsed.trackingCharges) ? parsed.trackingCharges : [],
+      leaseTerms: Array.isArray(parsed.leaseTerms) ? parsed.leaseTerms : [],
+      interestRateTable: Array.isArray(parsed.interestRateTable) ? parsed.interestRateTable : [],
+      residualValueTable: Array.isArray(parsed.residualValueTable) ? parsed.residualValueTable : [],
+      replacementPolicy: Array.isArray(parsed.replacementPolicy) ? parsed.replacementPolicy : [],
+      feeMaster: Array.isArray(parsed.feeMaster) ? parsed.feeMaster : [],
+      commissionRateTable: Array.isArray(parsed.commissionRateTable)
+        ? parsed.commissionRateTable
+        : [],
+      profitMarginSetup: Array.isArray(parsed.profitMarginSetup) ? parsed.profitMarginSetup : [],
+      calendarPeriods: Array.isArray(parsed.calendarPeriods) ? parsed.calendarPeriods : [],
     }
   } catch {
     return {
@@ -482,6 +814,14 @@ export function loadQuotationPricingSetupData(): QuotationPricingSetupData {
       maintenance: [],
       discountOptions: [],
       trackingCharges: [],
+      leaseTerms: [],
+      interestRateTable: [],
+      residualValueTable: [],
+      replacementPolicy: [],
+      feeMaster: [],
+      commissionRateTable: [],
+      profitMarginSetup: [],
+      calendarPeriods: [],
     }
   }
 }

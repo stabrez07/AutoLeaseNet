@@ -3,12 +3,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   buildDummyQuotationPricingSetupData,
+  type CalendarPeriodSetupRow,
+  type CommissionRateSetupRow,
   type DepreciationSetupRow,
   type DiscountOptionSetupRow,
+  type FeeCode,
+  type FeeMasterSetupRow,
   type InsuranceSetupRow,
+  type InterestRateSetupRow,
+  type LeaseTermSetupRow,
   type MaintenanceSetupRow,
+  type ProfitMarginSetupRow,
   type QuotationPricingSetupData,
   type QuotationPricingVehicleProfile,
+  type ReplacementPolicySetupRow,
+  type ResidualValueSetupRow,
   type TrackingChargeSetupRow,
   type VehicleInterestSetupRow,
 } from '../../lib/quotation-pricing-catalog'
@@ -70,6 +79,14 @@ type PricingTab =
   | 'maintenance'
   | 'discount'
   | 'tracking'
+  | 'leaseTerms'
+  | 'interestRateTable'
+  | 'residualValueTable'
+  | 'replacementPolicy'
+  | 'feeMaster'
+  | 'commissionRates'
+  | 'profitMargin'
+  | 'calendarPeriods'
 
 function parseCsvRows(content: string): string[][] {
   return content
@@ -79,8 +96,8 @@ function parseCsvRows(content: string): string[][] {
     .map((line) => line.split(',').map((v) => v.trim()))
 }
 
-function toNum(v: string, fallback = 0): number {
-  const n = Number(v)
+function toNum(v: string | undefined, fallback = 0): number {
+  const n = Number(v ?? '')
   return Number.isFinite(n) ? n : fallback
 }
 
@@ -172,6 +189,41 @@ function BoolInput({ value, onChange }: { value: boolean; onChange: (v: boolean)
   )
 }
 
+function SelectInput({
+  value,
+  onChange,
+  options,
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded border border-slate-300 px-2 py-1 text-xs"
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function DateInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <input
+      type="date"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded border border-slate-300 px-2 py-1 text-xs"
+    />
+  )
+}
+
 export default function SetupPage() {
   const [mainTab, setMainTab] = useState<MainTab>('pricing')
   const [pricingTab, setPricingTab] = useState<PricingTab>('vehicles')
@@ -188,6 +240,14 @@ export default function SetupPage() {
     maintenance: [],
     discountOptions: [],
     trackingCharges: [],
+    leaseTerms: [],
+    interestRateTable: [],
+    residualValueTable: [],
+    replacementPolicy: [],
+    feeMaster: [],
+    commissionRateTable: [],
+    profitMarginSetup: [],
+    calendarPeriods: [],
   })
   const [ready, setReady] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -283,6 +343,14 @@ export default function SetupPage() {
                   ['maintenance', 'Maintenance'],
                   ['discount', 'Discount Options'],
                   ['tracking', 'Tracking & Tires'],
+                  ['leaseTerms', 'Lease Terms'],
+                  ['interestRateTable', 'Interest Rate Table'],
+                  ['residualValueTable', 'Residual Value Table'],
+                  ['replacementPolicy', 'Replacement Policy'],
+                  ['feeMaster', 'Fee Master'],
+                  ['commissionRates', 'Commission Rates'],
+                  ['profitMargin', 'Profit Margin'],
+                  ['calendarPeriods', 'Calendar Periods'],
                 ] as [PricingTab, string][]
               ).map(([key, label]) => (
                 <button
@@ -514,47 +582,59 @@ export default function SetupPage() {
             )}
 
             {ready && pricingTab === 'insurance' && (
-              <PricingTableInsurance
-                setupData={setupData}
-                setSetupData={setSetupData}
-                thisYear={thisYear}
-              />
+              <PricingTableInsurance setupData={setupData} setSetupData={setSetupData} />
             )}
 
             {ready && pricingTab === 'interest' && (
-              <PricingTableInterest
-                setupData={setupData}
-                setSetupData={setSetupData}
-                thisYear={thisYear}
-              />
+              <PricingTableInterest setupData={setupData} setSetupData={setSetupData} />
             )}
 
             {ready && pricingTab === 'depreciation' && (
-              <PricingTableDepreciation
-                setupData={setupData}
-                setSetupData={setSetupData}
-                thisYear={thisYear}
-              />
+              <PricingTableDepreciation setupData={setupData} setSetupData={setSetupData} />
             )}
 
             {ready && pricingTab === 'maintenance' && (
-              <PricingTableMaintenance
-                setupData={setupData}
-                setSetupData={setSetupData}
-                thisYear={thisYear}
-              />
+              <PricingTableMaintenance setupData={setupData} setSetupData={setSetupData} />
             )}
 
             {ready && pricingTab === 'discount' && (
-              <PricingTableDiscount
-                setupData={setupData}
-                setSetupData={setSetupData}
-                thisYear={thisYear}
-              />
+              <PricingTableDiscount setupData={setupData} setSetupData={setSetupData} />
             )}
 
             {ready && pricingTab === 'tracking' && (
-              <PricingTableTracking
+              <PricingTableTracking setupData={setupData} setSetupData={setSetupData} />
+            )}
+
+            {ready && pricingTab === 'leaseTerms' && (
+              <PricingTableLeaseTerms setupData={setupData} setSetupData={setSetupData} />
+            )}
+
+            {ready && pricingTab === 'interestRateTable' && (
+              <PricingTableInterestRateTable setupData={setupData} setSetupData={setSetupData} />
+            )}
+
+            {ready && pricingTab === 'residualValueTable' && (
+              <PricingTableResidualValue setupData={setupData} setSetupData={setSetupData} />
+            )}
+
+            {ready && pricingTab === 'replacementPolicy' && (
+              <PricingTableReplacementPolicy setupData={setupData} setSetupData={setSetupData} />
+            )}
+
+            {ready && pricingTab === 'feeMaster' && (
+              <PricingTableFeeMaster setupData={setupData} setSetupData={setSetupData} />
+            )}
+
+            {ready && pricingTab === 'commissionRates' && (
+              <PricingTableCommissionRates setupData={setupData} setSetupData={setSetupData} />
+            )}
+
+            {ready && pricingTab === 'profitMargin' && (
+              <PricingTableProfitMargin setupData={setupData} setSetupData={setSetupData} />
+            )}
+
+            {ready && pricingTab === 'calendarPeriods' && (
+              <PricingTableCalendarPeriods
                 setupData={setupData}
                 setSetupData={setSetupData}
                 thisYear={thisYear}
@@ -679,11 +759,9 @@ export default function SetupPage() {
 function PricingTableInsurance({
   setupData,
   setSetupData,
-  thisYear,
 }: {
   setupData: QuotationPricingSetupData
   setSetupData: React.Dispatch<React.SetStateAction<QuotationPricingSetupData>>
-  thisYear: number
 }) {
   return (
     <>
@@ -1387,6 +1465,1262 @@ function PricingTableTracking({
                       }))
                     }
                   />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+// ─── D1: Lease Terms ─────────────────────────────────────────────────────────
+
+function PricingTableLeaseTerms({
+  setupData,
+  setSetupData,
+}: {
+  setupData: QuotationPricingSetupData
+  setSetupData: React.Dispatch<React.SetStateAction<QuotationPricingSetupData>>
+}) {
+  function addRow() {
+    const row: LeaseTermSetupRow = {
+      id: `term-${Date.now()}`,
+      termMonths: 12,
+      description: '',
+    }
+    setSetupData((p) => ({ ...p, leaseTerms: [...p.leaseTerms, row] }))
+  }
+
+  function removeRow(id: string) {
+    setSetupData((p) => ({ ...p, leaseTerms: p.leaseTerms.filter((x) => x.id !== id) }))
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">Lease Terms</h3>
+        <div className="flex gap-2">
+          <CsvUpload
+            title="Bulk Upload CSV"
+            onUploaded={(text) => {
+              const rows = parseCsvWithHeader<LeaseTermSetupRow>(text, (r, i) => ({
+                id: r.id || `term-${Date.now()}-${i}`,
+                termMonths: toNum(r.termmonths, 12),
+                description: r.description || '',
+              }))
+              if (rows.length > 0) setSetupData((p) => ({ ...p, leaseTerms: rows }))
+            }}
+          />
+          <SecondaryButton onClick={addRow}>+ Add</SecondaryButton>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded border border-slate-200">
+        <table className="min-w-[400px] text-xs">
+          <thead className="bg-slate-100">
+            <tr>
+              <th className="px-2 py-2 text-left">Term (Months)</th>
+              <th className="px-2 py-2 text-left">Description</th>
+              <th className="w-10 px-2 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {setupData.leaseTerms.map((row) => (
+              <tr key={row.id} className="border-t border-slate-100">
+                <td className="px-2 py-1">
+                  <NumInput
+                    value={row.termMonths}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        leaseTerms: p.leaseTerms.map((x) =>
+                          x.id === row.id ? { ...x, termMonths: v } : x,
+                        ),
+                      }))
+                    }
+                    min={1}
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <TxtInput
+                    value={row.description}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        leaseTerms: p.leaseTerms.map((x) =>
+                          x.id === row.id ? { ...x, description: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => removeRow(row.id)}
+                    className="text-red-400 hover:text-red-600"
+                  >
+                    x
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+// ─── D2: Interest Rate Table ─────────────────────────────────────────────────
+
+function PricingTableInterestRateTable({
+  setupData,
+  setSetupData,
+}: {
+  setupData: QuotationPricingSetupData
+  setSetupData: React.Dispatch<React.SetStateAction<QuotationPricingSetupData>>
+}) {
+  function addRow() {
+    const today = new Date().toISOString().slice(0, 10)
+    const row: InterestRateSetupRow = {
+      id: `ir-${Date.now()}`,
+      termMonths: 24,
+      strategy: 'A',
+      annualRatePercent: 5,
+      effectiveFrom: today,
+      isActive: true,
+    }
+    setSetupData((p) => ({ ...p, interestRateTable: [...p.interestRateTable, row] }))
+  }
+
+  function removeRow(id: string) {
+    setSetupData((p) => ({
+      ...p,
+      interestRateTable: p.interestRateTable.filter((x) => x.id !== id),
+    }))
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">Interest Rate Table</h3>
+        <div className="flex gap-2">
+          <CsvUpload
+            title="Bulk Upload CSV"
+            onUploaded={(text) => {
+              const rows = parseCsvWithHeader<InterestRateSetupRow>(text, (r, i) => ({
+                id: r.id || `ir-${Date.now()}-${i}`,
+                termMonths: toNum(r.termmonths, 24),
+                strategy: (r.strategy === 'B' ? 'B' : 'A') as 'A' | 'B',
+                annualRatePercent: toNum(r.annualratepercent),
+                effectiveFrom: r.effectivefrom || new Date().toISOString().slice(0, 10),
+                ...(r.effectiveto ? { effectiveTo: r.effectiveto } : {}),
+                isActive: r.isactive ? toBool(r.isactive) : true,
+              }))
+              if (rows.length > 0) setSetupData((p) => ({ ...p, interestRateTable: rows }))
+            }}
+          />
+          <SecondaryButton onClick={addRow}>+ Add</SecondaryButton>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded border border-slate-200">
+        <table className="min-w-[800px] text-xs">
+          <thead className="bg-slate-100">
+            <tr>
+              <th className="px-2 py-2 text-left">Term (Months)</th>
+              <th className="px-2 py-2 text-left">Strategy</th>
+              <th className="px-2 py-2 text-left">Annual Rate %</th>
+              <th className="px-2 py-2 text-left">Effective From</th>
+              <th className="px-2 py-2 text-left">Effective To</th>
+              <th className="px-2 py-2 text-left">Active</th>
+              <th className="w-10 px-2 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {setupData.interestRateTable.map((row) => (
+              <tr key={row.id} className="border-t border-slate-100">
+                <td className="px-2 py-1">
+                  <NumInput
+                    value={row.termMonths}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        interestRateTable: p.interestRateTable.map((x) =>
+                          x.id === row.id ? { ...x, termMonths: v } : x,
+                        ),
+                      }))
+                    }
+                    min={1}
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <SelectInput
+                    value={row.strategy}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        interestRateTable: p.interestRateTable.map((x) =>
+                          x.id === row.id ? { ...x, strategy: v as 'A' | 'B' } : x,
+                        ),
+                      }))
+                    }
+                    options={[
+                      { value: 'A', label: 'A - Flat' },
+                      { value: 'B', label: 'B - Reducing' },
+                    ]}
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <NumInput
+                    value={row.annualRatePercent}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        interestRateTable: p.interestRateTable.map((x) =>
+                          x.id === row.id ? { ...x, annualRatePercent: v } : x,
+                        ),
+                      }))
+                    }
+                    min={0}
+                    max={25}
+                    step={0.01}
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <DateInput
+                    value={row.effectiveFrom}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        interestRateTable: p.interestRateTable.map((x) =>
+                          x.id === row.id ? { ...x, effectiveFrom: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <DateInput
+                    value={row.effectiveTo ?? ''}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        interestRateTable: p.interestRateTable.map((x) =>
+                          x.id === row.id
+                            ? (() => {
+                                const { effectiveTo: _, ...rest } = x
+                                return v ? { ...rest, effectiveTo: v } : rest
+                              })()
+                            : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1 text-center">
+                  <BoolInput
+                    value={row.isActive}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        interestRateTable: p.interestRateTable.map((x) =>
+                          x.id === row.id ? { ...x, isActive: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => removeRow(row.id)}
+                    className="text-red-400 hover:text-red-600"
+                  >
+                    x
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+// ─── D3: Residual Value Table ────────────────────────────────────────────────
+
+function PricingTableResidualValue({
+  setupData,
+  setSetupData,
+}: {
+  setupData: QuotationPricingSetupData
+  setSetupData: React.Dispatch<React.SetStateAction<QuotationPricingSetupData>>
+}) {
+  function addRow() {
+    const today = new Date().toISOString().slice(0, 10)
+    const row: ResidualValueSetupRow = {
+      id: `rv-${Date.now()}`,
+      vehicleType: '',
+      termMonths: 24,
+      rvPercent: 35,
+      effectiveFrom: today,
+      isActive: true,
+    }
+    setSetupData((p) => ({ ...p, residualValueTable: [...p.residualValueTable, row] }))
+  }
+
+  function removeRow(id: string) {
+    setSetupData((p) => ({
+      ...p,
+      residualValueTable: p.residualValueTable.filter((x) => x.id !== id),
+    }))
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">Residual Value Table</h3>
+        <div className="flex gap-2">
+          <CsvUpload
+            title="Bulk Upload CSV"
+            onUploaded={(text) => {
+              const rows = parseCsvWithHeader<ResidualValueSetupRow>(text, (r, i) => ({
+                id: r.id || `rv-${Date.now()}-${i}`,
+                vehicleType: r.vehicletype || '',
+                termMonths: toNum(r.termmonths, 24),
+                rvPercent: toNum(r.rvpercent, 35),
+                effectiveFrom: r.effectivefrom || new Date().toISOString().slice(0, 10),
+                ...(r.effectiveto ? { effectiveTo: r.effectiveto } : {}),
+                isActive: r.isactive ? toBool(r.isactive) : true,
+              }))
+              if (rows.length > 0) setSetupData((p) => ({ ...p, residualValueTable: rows }))
+            }}
+          />
+          <SecondaryButton onClick={addRow}>+ Add</SecondaryButton>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded border border-slate-200">
+        <table className="min-w-[800px] text-xs">
+          <thead className="bg-slate-100">
+            <tr>
+              <th className="px-2 py-2 text-left">Vehicle Type</th>
+              <th className="px-2 py-2 text-left">Term (Months)</th>
+              <th className="px-2 py-2 text-left">RV %</th>
+              <th className="px-2 py-2 text-left">Effective From</th>
+              <th className="px-2 py-2 text-left">Effective To</th>
+              <th className="px-2 py-2 text-left">Active</th>
+              <th className="w-10 px-2 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {setupData.residualValueTable.map((row) => (
+              <tr key={row.id} className="border-t border-slate-100">
+                <td className="px-2 py-1">
+                  <TxtInput
+                    value={row.vehicleType}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        residualValueTable: p.residualValueTable.map((x) =>
+                          x.id === row.id ? { ...x, vehicleType: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <NumInput
+                    value={row.termMonths}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        residualValueTable: p.residualValueTable.map((x) =>
+                          x.id === row.id ? { ...x, termMonths: v } : x,
+                        ),
+                      }))
+                    }
+                    min={1}
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <NumInput
+                    value={row.rvPercent}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        residualValueTable: p.residualValueTable.map((x) =>
+                          x.id === row.id ? { ...x, rvPercent: v } : x,
+                        ),
+                      }))
+                    }
+                    min={0}
+                    max={100}
+                    step={0.1}
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <DateInput
+                    value={row.effectiveFrom}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        residualValueTable: p.residualValueTable.map((x) =>
+                          x.id === row.id ? { ...x, effectiveFrom: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <DateInput
+                    value={row.effectiveTo ?? ''}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        residualValueTable: p.residualValueTable.map((x) =>
+                          x.id === row.id
+                            ? (() => {
+                                const { effectiveTo: _, ...rest } = x
+                                return v ? { ...rest, effectiveTo: v } : rest
+                              })()
+                            : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1 text-center">
+                  <BoolInput
+                    value={row.isActive}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        residualValueTable: p.residualValueTable.map((x) =>
+                          x.id === row.id ? { ...x, isActive: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => removeRow(row.id)}
+                    className="text-red-400 hover:text-red-600"
+                  >
+                    x
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+// ─── D4: Replacement Policy ──────────────────────────────────────────────────
+
+function PricingTableReplacementPolicy({
+  setupData,
+  setSetupData,
+}: {
+  setupData: QuotationPricingSetupData
+  setSetupData: React.Dispatch<React.SetStateAction<QuotationPricingSetupData>>
+}) {
+  function addRow() {
+    const row: ReplacementPolicySetupRow = {
+      id: `rp-${Date.now()}`,
+      policyName: '',
+      strategy: 'PERMANENT',
+      replacementRatePercent: 0,
+      maxReplacementsPerTerm: 0,
+      isActive: true,
+    }
+    setSetupData((p) => ({ ...p, replacementPolicy: [...p.replacementPolicy, row] }))
+  }
+
+  function removeRow(id: string) {
+    setSetupData((p) => ({
+      ...p,
+      replacementPolicy: p.replacementPolicy.filter((x) => x.id !== id),
+    }))
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">Replacement Policy</h3>
+        <div className="flex gap-2">
+          <CsvUpload
+            title="Bulk Upload CSV"
+            onUploaded={(text) => {
+              const rows = parseCsvWithHeader<ReplacementPolicySetupRow>(text, (r, i) => ({
+                id: r.id || `rp-${Date.now()}-${i}`,
+                policyName: r.policyname || '',
+                strategy: (r.strategy === 'OPEN' ? 'OPEN' : 'PERMANENT') as 'OPEN' | 'PERMANENT',
+                replacementRatePercent: toNum(r.replacementratepercent),
+                maxReplacementsPerTerm: toNum(r.maxreplacementsperterm),
+                isActive: r.isactive ? toBool(r.isactive) : true,
+              }))
+              if (rows.length > 0) setSetupData((p) => ({ ...p, replacementPolicy: rows }))
+            }}
+          />
+          <SecondaryButton onClick={addRow}>+ Add</SecondaryButton>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded border border-slate-200">
+        <table className="min-w-[750px] text-xs">
+          <thead className="bg-slate-100">
+            <tr>
+              <th className="px-2 py-2 text-left">Policy Name</th>
+              <th className="px-2 py-2 text-left">Strategy</th>
+              <th className="px-2 py-2 text-left">Rate %</th>
+              <th className="px-2 py-2 text-left">Max Replacements</th>
+              <th className="px-2 py-2 text-left">Active</th>
+              <th className="w-10 px-2 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {setupData.replacementPolicy.map((row) => (
+              <tr key={row.id} className="border-t border-slate-100">
+                <td className="px-2 py-1">
+                  <TxtInput
+                    value={row.policyName}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        replacementPolicy: p.replacementPolicy.map((x) =>
+                          x.id === row.id ? { ...x, policyName: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <SelectInput
+                    value={row.strategy}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        replacementPolicy: p.replacementPolicy.map((x) =>
+                          x.id === row.id ? { ...x, strategy: v as 'OPEN' | 'PERMANENT' } : x,
+                        ),
+                      }))
+                    }
+                    options={[
+                      { value: 'OPEN', label: 'Open' },
+                      { value: 'PERMANENT', label: 'Permanent' },
+                    ]}
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <NumInput
+                    value={row.replacementRatePercent}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        replacementPolicy: p.replacementPolicy.map((x) =>
+                          x.id === row.id ? { ...x, replacementRatePercent: v } : x,
+                        ),
+                      }))
+                    }
+                    min={0}
+                    max={100}
+                    step={0.1}
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <NumInput
+                    value={row.maxReplacementsPerTerm}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        replacementPolicy: p.replacementPolicy.map((x) =>
+                          x.id === row.id ? { ...x, maxReplacementsPerTerm: v } : x,
+                        ),
+                      }))
+                    }
+                    min={0}
+                  />
+                </td>
+                <td className="px-2 py-1 text-center">
+                  <BoolInput
+                    value={row.isActive}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        replacementPolicy: p.replacementPolicy.map((x) =>
+                          x.id === row.id ? { ...x, isActive: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => removeRow(row.id)}
+                    className="text-red-400 hover:text-red-600"
+                  >
+                    x
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+// ─── D5: Fee Master ──────────────────────────────────────────────────────────
+
+const FEE_CODE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'REGISTRATION', label: 'Registration' },
+  { value: 'CARD_FEE', label: 'Card Fee' },
+  { value: 'TRACKING', label: 'Tracking' },
+  { value: 'CAR_WASH_MANPOWER', label: 'Car Wash/Manpower' },
+]
+
+const CALC_METHOD_OPTIONS: { value: string; label: string }[] = [
+  { value: 'FIXED_AMOUNT', label: 'Fixed Amount' },
+  { value: 'PERCENT_OF_TFV', label: '% of TFV' },
+  { value: 'PERCENT_OF_INSTALLMENT', label: '% of Installment' },
+]
+
+const FREQUENCY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'MONTHLY', label: 'Monthly' },
+  { value: 'ANNUAL', label: 'Annual' },
+  { value: 'ONE_TIME', label: 'One-Time' },
+]
+
+function PricingTableFeeMaster({
+  setupData,
+  setSetupData,
+}: {
+  setupData: QuotationPricingSetupData
+  setSetupData: React.Dispatch<React.SetStateAction<QuotationPricingSetupData>>
+}) {
+  function addRow() {
+    const row: FeeMasterSetupRow = {
+      id: `fee-${Date.now()}`,
+      feeCode: 'ADMIN',
+      feeName: '',
+      calculationMethod: 'FIXED_AMOUNT',
+      feeValue: 0,
+      frequency: 'MONTHLY',
+      isActive: true,
+    }
+    setSetupData((p) => ({ ...p, feeMaster: [...p.feeMaster, row] }))
+  }
+
+  function removeRow(id: string) {
+    setSetupData((p) => ({ ...p, feeMaster: p.feeMaster.filter((x) => x.id !== id) }))
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">Fee Master</h3>
+        <div className="flex gap-2">
+          <CsvUpload
+            title="Bulk Upload CSV"
+            onUploaded={(text) => {
+              const validCodes = new Set([
+                'ADMIN',
+                'REGISTRATION',
+                'CARD_FEE',
+                'TRACKING',
+                'CAR_WASH_MANPOWER',
+              ])
+              const rows = parseCsvWithHeader<FeeMasterSetupRow>(text, (r, i) => ({
+                id: r.id || `fee-${Date.now()}-${i}`,
+                feeCode: (validCodes.has(r.feecode?.toUpperCase() ?? '')
+                  ? r.feecode!.toUpperCase()
+                  : 'ADMIN') as FeeCode,
+                feeName: r.feename || '',
+                calculationMethod:
+                  (r.calculationmethod as FeeMasterSetupRow['calculationMethod']) || 'FIXED_AMOUNT',
+                feeValue: toNum(r.feevalue),
+                frequency: (r.frequency as FeeMasterSetupRow['frequency']) || 'MONTHLY',
+                isActive: r.isactive ? toBool(r.isactive) : true,
+              }))
+              if (rows.length > 0) setSetupData((p) => ({ ...p, feeMaster: rows }))
+            }}
+          />
+          <SecondaryButton onClick={addRow}>+ Add</SecondaryButton>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded border border-slate-200">
+        <table className="min-w-[900px] text-xs">
+          <thead className="bg-slate-100">
+            <tr>
+              <th className="px-2 py-2 text-left">Fee Code</th>
+              <th className="px-2 py-2 text-left">Fee Name</th>
+              <th className="px-2 py-2 text-left">Calculation Method</th>
+              <th className="px-2 py-2 text-left">Value</th>
+              <th className="px-2 py-2 text-left">Frequency</th>
+              <th className="px-2 py-2 text-left">Active</th>
+              <th className="w-10 px-2 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {setupData.feeMaster.map((row) => (
+              <tr key={row.id} className="border-t border-slate-100">
+                <td className="px-2 py-1">
+                  <SelectInput
+                    value={row.feeCode}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        feeMaster: p.feeMaster.map((x) =>
+                          x.id === row.id ? { ...x, feeCode: v as FeeCode } : x,
+                        ),
+                      }))
+                    }
+                    options={FEE_CODE_OPTIONS}
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <TxtInput
+                    value={row.feeName}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        feeMaster: p.feeMaster.map((x) =>
+                          x.id === row.id ? { ...x, feeName: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <SelectInput
+                    value={row.calculationMethod}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        feeMaster: p.feeMaster.map((x) =>
+                          x.id === row.id
+                            ? { ...x, calculationMethod: v as FeeMasterSetupRow['calculationMethod'] }
+                            : x,
+                        ),
+                      }))
+                    }
+                    options={CALC_METHOD_OPTIONS}
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <NumInput
+                    value={row.feeValue}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        feeMaster: p.feeMaster.map((x) =>
+                          x.id === row.id ? { ...x, feeValue: v } : x,
+                        ),
+                      }))
+                    }
+                    min={0}
+                    step={0.01}
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <SelectInput
+                    value={row.frequency}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        feeMaster: p.feeMaster.map((x) =>
+                          x.id === row.id
+                            ? { ...x, frequency: v as FeeMasterSetupRow['frequency'] }
+                            : x,
+                        ),
+                      }))
+                    }
+                    options={FREQUENCY_OPTIONS}
+                  />
+                </td>
+                <td className="px-2 py-1 text-center">
+                  <BoolInput
+                    value={row.isActive}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        feeMaster: p.feeMaster.map((x) =>
+                          x.id === row.id ? { ...x, isActive: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => removeRow(row.id)}
+                    className="text-red-400 hover:text-red-600"
+                  >
+                    x
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+// ─── D6: Commission Rates ────────────────────────────────────────────────────
+
+function PricingTableCommissionRates({
+  setupData,
+  setSetupData,
+}: {
+  setupData: QuotationPricingSetupData
+  setSetupData: React.Dispatch<React.SetStateAction<QuotationPricingSetupData>>
+}) {
+  function addRow() {
+    const today = new Date().toISOString().slice(0, 10)
+    const row: CommissionRateSetupRow = {
+      id: `comm-${Date.now()}`,
+      channelName: '',
+      commissionPercent: 0,
+      effectiveFrom: today,
+      isActive: true,
+    }
+    setSetupData((p) => ({ ...p, commissionRateTable: [...p.commissionRateTable, row] }))
+  }
+
+  function removeRow(id: string) {
+    setSetupData((p) => ({
+      ...p,
+      commissionRateTable: p.commissionRateTable.filter((x) => x.id !== id),
+    }))
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">Commission Rates</h3>
+        <div className="flex gap-2">
+          <CsvUpload
+            title="Bulk Upload CSV"
+            onUploaded={(text) => {
+              const rows = parseCsvWithHeader<CommissionRateSetupRow>(text, (r, i) => ({
+                id: r.id || `comm-${Date.now()}-${i}`,
+                channelName: r.channelname || '',
+                commissionPercent: toNum(r.commissionpercent),
+                effectiveFrom: r.effectivefrom || new Date().toISOString().slice(0, 10),
+                ...(r.effectiveto ? { effectiveTo: r.effectiveto } : {}),
+                isActive: r.isactive ? toBool(r.isactive) : true,
+              }))
+              if (rows.length > 0) setSetupData((p) => ({ ...p, commissionRateTable: rows }))
+            }}
+          />
+          <SecondaryButton onClick={addRow}>+ Add</SecondaryButton>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded border border-slate-200">
+        <table className="min-w-[700px] text-xs">
+          <thead className="bg-slate-100">
+            <tr>
+              <th className="px-2 py-2 text-left">Channel Name</th>
+              <th className="px-2 py-2 text-left">Commission %</th>
+              <th className="px-2 py-2 text-left">Effective From</th>
+              <th className="px-2 py-2 text-left">Effective To</th>
+              <th className="px-2 py-2 text-left">Active</th>
+              <th className="w-10 px-2 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {setupData.commissionRateTable.map((row) => (
+              <tr key={row.id} className="border-t border-slate-100">
+                <td className="px-2 py-1">
+                  <TxtInput
+                    value={row.channelName}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        commissionRateTable: p.commissionRateTable.map((x) =>
+                          x.id === row.id ? { ...x, channelName: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <NumInput
+                    value={row.commissionPercent}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        commissionRateTable: p.commissionRateTable.map((x) =>
+                          x.id === row.id ? { ...x, commissionPercent: v } : x,
+                        ),
+                      }))
+                    }
+                    min={0}
+                    max={100}
+                    step={0.01}
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <DateInput
+                    value={row.effectiveFrom}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        commissionRateTable: p.commissionRateTable.map((x) =>
+                          x.id === row.id ? { ...x, effectiveFrom: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <DateInput
+                    value={row.effectiveTo ?? ''}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        commissionRateTable: p.commissionRateTable.map((x) =>
+                          x.id === row.id
+                            ? (() => {
+                                const { effectiveTo: _, ...rest } = x
+                                return v ? { ...rest, effectiveTo: v } : rest
+                              })()
+                            : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1 text-center">
+                  <BoolInput
+                    value={row.isActive}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        commissionRateTable: p.commissionRateTable.map((x) =>
+                          x.id === row.id ? { ...x, isActive: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => removeRow(row.id)}
+                    className="text-red-400 hover:text-red-600"
+                  >
+                    x
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+// ─── D7: Profit Margin ───────────────────────────────────────────────────────
+
+function PricingTableProfitMargin({
+  setupData,
+  setSetupData,
+}: {
+  setupData: QuotationPricingSetupData
+  setSetupData: React.Dispatch<React.SetStateAction<QuotationPricingSetupData>>
+}) {
+  function addRow() {
+    const today = new Date().toISOString().slice(0, 10)
+    const row: ProfitMarginSetupRow = {
+      id: `pm-${Date.now()}`,
+      vehicleType: '',
+      marginPercent: 8,
+      effectiveFrom: today,
+      isActive: true,
+    }
+    setSetupData((p) => ({ ...p, profitMarginSetup: [...p.profitMarginSetup, row] }))
+  }
+
+  function removeRow(id: string) {
+    setSetupData((p) => ({
+      ...p,
+      profitMarginSetup: p.profitMarginSetup.filter((x) => x.id !== id),
+    }))
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">Profit Margin Setup</h3>
+        <div className="flex gap-2">
+          <CsvUpload
+            title="Bulk Upload CSV"
+            onUploaded={(text) => {
+              const rows = parseCsvWithHeader<ProfitMarginSetupRow>(text, (r, i) => ({
+                id: r.id || `pm-${Date.now()}-${i}`,
+                vehicleType: r.vehicletype || '',
+                marginPercent: toNum(r.marginpercent, 8),
+                effectiveFrom: r.effectivefrom || new Date().toISOString().slice(0, 10),
+                ...(r.effectiveto ? { effectiveTo: r.effectiveto } : {}),
+                isActive: r.isactive ? toBool(r.isactive) : true,
+              }))
+              if (rows.length > 0) setSetupData((p) => ({ ...p, profitMarginSetup: rows }))
+            }}
+          />
+          <SecondaryButton onClick={addRow}>+ Add</SecondaryButton>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded border border-slate-200">
+        <table className="min-w-[700px] text-xs">
+          <thead className="bg-slate-100">
+            <tr>
+              <th className="px-2 py-2 text-left">Vehicle Type</th>
+              <th className="px-2 py-2 text-left">Margin %</th>
+              <th className="px-2 py-2 text-left">Effective From</th>
+              <th className="px-2 py-2 text-left">Effective To</th>
+              <th className="px-2 py-2 text-left">Active</th>
+              <th className="w-10 px-2 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {setupData.profitMarginSetup.map((row) => (
+              <tr key={row.id} className="border-t border-slate-100">
+                <td className="px-2 py-1">
+                  <TxtInput
+                    value={row.vehicleType}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        profitMarginSetup: p.profitMarginSetup.map((x) =>
+                          x.id === row.id ? { ...x, vehicleType: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <NumInput
+                    value={row.marginPercent}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        profitMarginSetup: p.profitMarginSetup.map((x) =>
+                          x.id === row.id ? { ...x, marginPercent: v } : x,
+                        ),
+                      }))
+                    }
+                    min={0}
+                    max={100}
+                    step={0.01}
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <DateInput
+                    value={row.effectiveFrom}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        profitMarginSetup: p.profitMarginSetup.map((x) =>
+                          x.id === row.id ? { ...x, effectiveFrom: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <DateInput
+                    value={row.effectiveTo ?? ''}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        profitMarginSetup: p.profitMarginSetup.map((x) =>
+                          x.id === row.id
+                            ? (() => {
+                                const { effectiveTo: _, ...rest } = x
+                                return v ? { ...rest, effectiveTo: v } : rest
+                              })()
+                            : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1 text-center">
+                  <BoolInput
+                    value={row.isActive}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        profitMarginSetup: p.profitMarginSetup.map((x) =>
+                          x.id === row.id ? { ...x, isActive: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => removeRow(row.id)}
+                    className="text-red-400 hover:text-red-600"
+                  >
+                    x
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+// ─── D8: Calendar Periods ────────────────────────────────────────────────────
+
+function PricingTableCalendarPeriods({
+  setupData,
+  setSetupData,
+  thisYear,
+}: {
+  setupData: QuotationPricingSetupData
+  setSetupData: React.Dispatch<React.SetStateAction<QuotationPricingSetupData>>
+  thisYear: number
+}) {
+  function addRow() {
+    const row: CalendarPeriodSetupRow = {
+      id: `period-${Date.now()}`,
+      periodLabel: '',
+      periodStart: '',
+      periodEnd: '',
+    }
+    setSetupData((p) => ({ ...p, calendarPeriods: [...p.calendarPeriods, row] }))
+  }
+
+  function removeRow(id: string) {
+    setSetupData((p) => ({
+      ...p,
+      calendarPeriods: p.calendarPeriods.filter((x) => x.id !== id),
+    }))
+  }
+
+  function generateYear(year: number) {
+    const periods: CalendarPeriodSetupRow[] = Array.from({ length: 12 }, (_, i) => {
+      const month = i + 1
+      const label = `${year}-${String(month).padStart(2, '0')}`
+      const start = `${label}-01`
+      const endDate = new Date(year, month, 0)
+      const end = `${label}-${String(endDate.getDate()).padStart(2, '0')}`
+      return { id: `period-${label}`, periodLabel: label, periodStart: start, periodEnd: end }
+    })
+    setSetupData((p) => {
+      const existingIds = new Set(periods.map((x) => x.id))
+      const kept = p.calendarPeriods.filter((x) => !existingIds.has(x.id))
+      return { ...p, calendarPeriods: [...kept, ...periods] }
+    })
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">Calendar Periods</h3>
+        <div className="flex gap-2">
+          <CsvUpload
+            title="Bulk Upload CSV"
+            onUploaded={(text) => {
+              const rows = parseCsvWithHeader<CalendarPeriodSetupRow>(text, (r, i) => ({
+                id: r.id || `period-${Date.now()}-${i}`,
+                periodLabel: r.periodlabel || '',
+                periodStart: r.periodstart || '',
+                periodEnd: r.periodend || '',
+              }))
+              if (rows.length > 0) setSetupData((p) => ({ ...p, calendarPeriods: rows }))
+            }}
+          />
+          <SecondaryButton onClick={() => generateYear(thisYear)}>
+            Generate {thisYear}
+          </SecondaryButton>
+          <SecondaryButton onClick={() => generateYear(thisYear + 1)}>
+            Generate {thisYear + 1}
+          </SecondaryButton>
+          <SecondaryButton onClick={addRow}>+ Add</SecondaryButton>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded border border-slate-200">
+        <table className="min-w-[600px] text-xs">
+          <thead className="bg-slate-100">
+            <tr>
+              <th className="px-2 py-2 text-left">Period Label</th>
+              <th className="px-2 py-2 text-left">Start Date</th>
+              <th className="px-2 py-2 text-left">End Date</th>
+              <th className="w-10 px-2 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {setupData.calendarPeriods.map((row) => (
+              <tr key={row.id} className="border-t border-slate-100">
+                <td className="px-2 py-1">
+                  <TxtInput
+                    value={row.periodLabel}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        calendarPeriods: p.calendarPeriods.map((x) =>
+                          x.id === row.id ? { ...x, periodLabel: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <DateInput
+                    value={row.periodStart}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        calendarPeriods: p.calendarPeriods.map((x) =>
+                          x.id === row.id ? { ...x, periodStart: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <DateInput
+                    value={row.periodEnd}
+                    onChange={(v) =>
+                      setSetupData((p) => ({
+                        ...p,
+                        calendarPeriods: p.calendarPeriods.map((x) =>
+                          x.id === row.id ? { ...x, periodEnd: v } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </td>
+                <td className="px-2 py-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => removeRow(row.id)}
+                    className="text-red-400 hover:text-red-600"
+                  >
+                    x
+                  </button>
                 </td>
               </tr>
             ))}

@@ -16,6 +16,14 @@ function emptySetup(): QuotationPricingSetupData {
     maintenance: [],
     discountOptions: [],
     trackingCharges: [],
+    leaseTerms: [],
+    interestRateTable: [],
+    residualValueTable: [],
+    replacementPolicy: [],
+    feeMaster: [],
+    commissionRateTable: [],
+    profitMarginSetup: [],
+    calendarPeriods: [],
   }
 }
 
@@ -31,13 +39,21 @@ function normalizeSetupData(value: unknown): QuotationPricingSetupData {
     maintenance: Array.isArray(asObj.maintenance) ? asObj.maintenance : [],
     discountOptions: Array.isArray(asObj.discountOptions) ? asObj.discountOptions : [],
     trackingCharges: Array.isArray(asObj.trackingCharges) ? asObj.trackingCharges : [],
+    leaseTerms: Array.isArray(asObj.leaseTerms) ? asObj.leaseTerms : [],
+    interestRateTable: Array.isArray(asObj.interestRateTable) ? asObj.interestRateTable : [],
+    residualValueTable: Array.isArray(asObj.residualValueTable) ? asObj.residualValueTable : [],
+    replacementPolicy: Array.isArray(asObj.replacementPolicy) ? asObj.replacementPolicy : [],
+    feeMaster: Array.isArray(asObj.feeMaster) ? asObj.feeMaster : [],
+    commissionRateTable: Array.isArray(asObj.commissionRateTable) ? asObj.commissionRateTable : [],
+    profitMarginSetup: Array.isArray(asObj.profitMarginSetup) ? asObj.profitMarginSetup : [],
+    calendarPeriods: Array.isArray(asObj.calendarPeriods) ? asObj.calendarPeriods : [],
   }
 }
 
 function buildHeaders(extra: Record<string, string> = {}): HeadersInit {
   return {
     'X-Dev-Tenant-Id': DEV_TENANT_ID,
-    'X-Dev-User-Type': 'InternalStaff',
+    'X-Dev-User-Type': 'INTERNAL_STAFF',
     ...extra,
   }
 }

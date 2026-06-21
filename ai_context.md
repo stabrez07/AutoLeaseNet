@@ -69,6 +69,126 @@ it first; update it after every meaningful change.
 
 2. Investigate and fix the RLS `dbo.Customers` block predicate write failure (tenant/session context in that path).
 
+## Handoff update (2026-06-21) — Pricing engine redevelopment continuation
+
+### User intent in this phase
+
+- User provided pricing build spec at `Plans/AutoLeaseNet_Pricing_Engine_Build_Spec.md`.
+- User asked to consider it, make a proper plan, and redevelop pricing modules more accurately.
+- User also requested explicit repo handoff context so Claude/Copilot can continue without chat history.
+
+### What was implemented in this phase
+
+1. Spec-based workstream plan created:
+
+- `Plans/workstreams/2026-06-21-pricing-engine-redevelopment/plan.md`
+- Includes scope, delivered items, remaining work, risks, and verification checklist.
+
+2. Pricing setup model expanded in web portal catalog:
+
+- File: `apps/web-portal/lib/quotation-pricing-catalog.ts`
+- Added setup master structures aligned to the spec:
+  - `leaseTerms`
+  - `interestRateTable`
+  - `residualValueTable`
+  - `replacementPolicy`
+  - `feeMaster`
+  - `commissionRateTable`
+  - `profitMarginSetup`
+  - `calendarPeriods`
+- Added seed builders for all new tables.
+- Added backward-compatible normalization/defaulting for persisted payloads.
+
+3. New pricing waterfall engine implemented:
+
+- File: `apps/web-portal/lib/quotation-pricing-engine.ts`
+- Added `calculatePricingWaterfallMonthly(...)` with deterministic monthly output.
+- Implements core waterfall concepts:
+  - TFV and net financed amount
+  - Interest strategy A/B
+  - Insurance schedule base (monthly approximation)
+  - Maintenance strategy A/B handling
+  - Fee master application by method/frequency
+  - Profit, replacement policy impact, commission, final monthly rate
+  - Residual value / additions residual / depreciation outputs
+
+4. Quotation form integrated with new engine:
+
+- File: `apps/web-portal/app/quotations/new/page.tsx`
+- Stores full loaded setup in component state.
+- Uses waterfall engine when make/model/year are selected to compute line monthly rate.
+- Re-prices existing selected lines when `estimatedDurationMonths` changes.
+- Keeps fallback pricing behavior if engine/setup data is unavailable.
+
+5. Setup API normalizer updated for new schema:
+
+- File: `apps/web-portal/lib/quotation-pricing-setup-api.ts`
+- Empty/default and API normalization now include all new setup masters.
+
+6. Setup page adjusted for strict TS compatibility after model extension:
+
+- File: `apps/web-portal/app/setup/page.tsx`
+- Extended initial state with new setup arrays.
+- Fixed `toNum` typing to accept optional CSV fields.
+- Removed stale `thisYear` prop passing to child components.
+
+### Validation in this phase
+
+- `pnpm --filter @autoleasenet/web-portal typecheck` passes.
+- No active type errors in modified web portal pricing files.
+
+### Runtime state observed
+
+- BFF can run successfully once SQL container and DB are available.
+- Build-lock errors (`AutoLeaseNet.Bff.exe` locked) were due to attempting to start a second BFF while one instance was already running.
+- Next.js manifest JSON parse error was resolved by clearing `apps/web-portal/.next` and restarting dev server.
+
+### What is still missing vs the provided pricing spec
+
+1. Setup UI parity is incomplete:
+
+- Existing setup tabs still focus on earlier vehicle/insurance/interest/depreciation/maintenance/discount/tracking sections.
+- Dedicated CRUD screens for all newly added spec masters are not yet built.
+
+2. Income statement projection module (spec section 3) is not implemented yet.
+
+3. Full schedule persistence (`interest_schedule`, `insurance_schedule`, `maintenance_schedule`, `income_statement_projection`) is not implemented in backend/domain yet.
+
+4. Backend pricing engine service and persisted pricing snapshot tables (`pricing_calculations`) are not yet implemented server-side.
+
+### Recommended continuation order (for Claude/Copilot)
+
+1. Complete setup screens for newly added masters in web portal:
+
+- Lease Terms
+- Interest Rate Table
+- Residual Value Table
+- Replacement Policy
+- Fee Master
+- Commission Rates
+- Profit Margin
+- Calendar Periods
+
+2. Add server-side validation contract for `/api/v1/admin/quotation-pricing-setup`:
+
+- Enforce schema shape and safe defaults.
+- Add audit metadata (`updatedBy`, `updatedAt`, version).
+
+3. Add backend pricing service in Application/BFF:
+
+- Deterministic waterfall calculation endpoint for quote preview.
+- Keep web and backend formulas aligned to avoid drift.
+
+4. Implement spec section 3 projection logic:
+
+- Contract-level period projections
+- Fleet rollup by `calendar_periods`
+
+5. Add tests:
+
+- Unit tests for waterfall scenarios (A/B strategy variants).
+- Integration tests for quote repricing behavior and setup-driven defaults.
+
 ## Working rules (user-set, 2026-05-24)
 
 1. Always read the latest repo state before doing anything.
@@ -167,21 +287,20 @@ it first; update it after every meaningful change.
     predicate override that Phase 2 retires when webhook URLs encode tenant).
 13. **ZATCA adapter skeleton (Week-4 prep, 2026-05-29).** Three packages on disk —
     `Adapters.Zatca` (Pattern B), `Adapters.Zatca.InMemory`, `Adapters.Zatca.Tests` —
-    plus `Domain.Zatca.ZatcaChainState`, port `IZatcaChainStateRepository`, EF repo
-    - configuration + migration `Add_ZatcaChainState`. `IZatcaClient.SubmitInvoiceAsync`
-      is the only method this PR; DTOs are `SubmitInvoiceRequest` / `SubmitInvoiceResponse`
-      / `ZatcaResultStatus { Cleared | Reported | WarningCleared | Rejected }`. The Real
-      HTTP client (fully wired with auth handler + Polly resilience) is a **clear-error
-      stub** that returns `IntegrationResult.Failure("zatca.not_yet_implemented",
+    plus `Domain.Zatca.ZatcaChainState`, port `IZatcaChainStateRepository`, EF repo - configuration + migration `Add_ZatcaChainState`. `IZatcaClient.SubmitInvoiceAsync`
+    is the only method this PR; DTOs are `SubmitInvoiceRequest` / `SubmitInvoiceResponse`
+    / `ZatcaResultStatus { Cleared | Reported | WarningCleared | Rejected }`. The Real
+    HTTP client (fully wired with auth handler + Polly resilience) is a **clear-error
+    stub** that returns `IntegrationResult.Failure("zatca.not_yet_implemented",
 isTransient:false)` — Week-4 lights up UBL 2.1 + ECDSA P-256 + TLV QR. `Zatca:Mode`
-      switch (`Real` | `InMemory`) mirrors Tajeer; default `InMemory` in dev. **Chain
-      invariant location**: `ZatcaChainState.AdvanceTo(hash, when)` accepts any hash —
-      the saga (Week-4) is responsible for only calling it on `Cleared` / `Reported` /
-      `WarningCleared` results. This matches the existing `Lease.MarkIssued` pattern
-      (entity stays passive; cross-aggregate policy lives in the saga). `ZatcaHealthCheck`
-      reports `Healthy` when Mode=InMemory and `Degraded("not yet implemented")` when
-      Mode=Real, so the readiness probe stays green for the rest of the BFF while making
-      the unfinished state visible.
+    switch (`Real` | `InMemory`) mirrors Tajeer; default `InMemory` in dev. **Chain
+    invariant location**: `ZatcaChainState.AdvanceTo(hash, when)` accepts any hash —
+    the saga (Week-4) is responsible for only calling it on `Cleared` / `Reported` /
+    `WarningCleared` results. This matches the existing `Lease.MarkIssued` pattern
+    (entity stays passive; cross-aggregate policy lives in the saga). `ZatcaHealthCheck`
+    reports `Healthy` when Mode=InMemory and `Degraded("not yet implemented")` when
+    Mode=Real, so the readiness probe stays green for the rest of the BFF while making
+    the unfinished state visible.
 14. **Phase-2 Vehicles RLS extension (2026-05-30).** Migration `Add_Vehicles_RLS_PhaseTwo`
     introduces `dbo.fn_VehiclesTenancyPredicate(@TenantId, @Id)` and rewires
     `dbo.TenancyPolicy` via `ALTER FILTER/BLOCK PREDICATE` to point Vehicles at it

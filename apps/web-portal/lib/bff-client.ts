@@ -481,7 +481,7 @@ class BffClient {
   private headers(extra: Record<string, string> = {}): HeadersInit {
     return {
       'X-Dev-Tenant-Id': DEV_TENANT_ID,
-      'X-Dev-User-Type': 'InternalStaff',
+      'X-Dev-User-Type': 'INTERNAL_STAFF',
       ...extra,
     }
   }
