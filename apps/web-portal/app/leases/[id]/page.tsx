@@ -1,12 +1,13 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import {
   bff,
   type LeaseDetail, type DamageRecord, type TrafficViolation,
   type Invoice, type CreateDamageRecordRequest, type CreateTrafficViolationRequest,
-  type VehicleSummary, type SwitchVehicleRequest,
+  type VehicleSummary, type SwitchVehicleRequest, type AdvancePayment,
 } from '../../../lib/bff-client'
 import { Badge, Card, ErrorBox, PageHeader, PrimaryButton, SecondaryButton, Spinner } from '../../../components/ui'
 
@@ -15,13 +16,13 @@ const STATUS_TONES: Record<string, 'green' | 'amber' | 'blue' | 'slate' | 'red'>
   Suspended: 'amber', Draft: 'slate', Closed: 'slate', Cancelled: 'red',
 }
 const INV_TONES: Record<string, 'green' | 'amber' | 'blue' | 'slate' | 'red'> = {
-  Paid: 'green', PartiallyPaid: 'amber', Issued: 'blue', Draft: 'slate', Overdue: 'red', Cancelled: 'slate',
+  Draft: 'slate', Submitted: 'amber', Cleared: 'green', Finalized: 'blue', SubmissionFailed: 'red', ClearanceFailed: 'red', Voided: 'red',
 }
 const DMG_TONES: Record<string, 'red' | 'amber' | 'slate'> = {
   TotalLoss: 'red', Major: 'red', Moderate: 'amber', Minor: 'slate',
 }
 
-type Tab = 'overview' | 'damages' | 'violations' | 'invoices' | 'history'
+type Tab = 'overview' | 'damages' | 'violations' | 'invoices' | 'payments' | 'history'
 
 function Field({ label, value, mono }: { label: string; value: string | number | null | undefined; mono?: boolean }) {
   return (
@@ -306,24 +307,109 @@ function ViolationsTab({ leaseId, vehicleId, driverId }: { leaseId: string; vehi
   )
 }
 
+// ─── Payments Tab ────────────────────────────────────────────────────────────
+
+function PaymentsTab({ leaseId }: { leaseId: string }) {
+  const router = useRouter()
+  const [payments, setPayments] = useState<AdvancePayment[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    bff.getLeasePayments(leaseId).then(setPayments).catch(() => {}).finally(() => setLoading(false))
+  }, [leaseId])
+
+  if (loading) return <Spinner label="Loading payments..." />
+
+  return (
+    <Card className="p-4">
+      <SectionHdr>Payments ({payments.length})</SectionHdr>
+      {payments.length === 0 && <p className="text-sm text-slate-500">No payments recorded for this contract.</p>}
+      {payments.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <th className="px-3 py-2">Receipt #</th>
+                <th className="px-3 py-2">Customer</th>
+                <th className="px-3 py-2">Method</th>
+                <th className="px-3 py-2">Date</th>
+                <th className="px-3 py-2 text-right">Amount</th>
+                <th className="px-3 py-2 text-right">Remaining</th>
+                <th className="px-3 py-2 text-center">Allocations</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {payments.map((p) => (
+                <tr key={p.id} className="hover:bg-slate-50">
+                  <td className="px-3 py-2 font-mono font-semibold">P-{p.displayId}</td>
+                  <td className="px-3 py-2">{p.customerDisplayName}</td>
+                  <td className="px-3 py-2"><Badge tone={p.paymentMethod === 'Cash' ? 'green' : p.paymentMethod === 'CreditCard' ? 'blue' : 'slate'}>{p.paymentMethod}</Badge></td>
+                  <td className="px-3 py-2">{safeDate(p.receivedDate)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">{fmt(p.amount)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">{p.remainingBalance > 0 ? <span className="text-amber-700">{fmt(p.remainingBalance)}</span> : '—'}</td>
+                  <td className="px-3 py-2 text-center">{p.allocations.length > 0 ? <span className="font-semibold text-green-700">{p.allocations.length}</span> : '—'}</td>
+                  <td className="px-3 py-2"><SecondaryButton onClick={() => router.push(`/payments/${p.id}`)} className="px-2 py-1 text-xs">Receipt</SecondaryButton></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 // ─── Invoices Tab ─────────────────────────────────────────────────────────────
 
-function InvoicesTab({ leaseId }: { leaseId: string; lease: LeaseDetail }) {
+function InvoicesTab({ leaseId, lease }: { leaseId: string; lease: LeaseDetail }) {
   const router = useRouter()
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [period, setPeriod] = useState({ start: new Date().toISOString().substring(0, 7) + '-01', end: new Date().toISOString().substring(0, 7) + '-30' })
+  const [showGenerate, setShowGenerate] = useState(false)
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([])
 
   useEffect(() => {
     bff.getInvoices(1, 50, leaseId).then((res) => setInvoices(res.items)).finally(() => setLoading(false))
   }, [leaseId])
 
-  async function handleGenerate() {
+  // Build available months from contract start to end
+  const availableMonths: { value: string; label: string; start: string; end: string }[] = []
+  if (lease.contractStartUtc && lease.contractEndUtc) {
+    const s = new Date(lease.contractStartUtc)
+    const e = new Date(lease.contractEndUtc)
+    const cur = new Date(s.getFullYear(), s.getMonth(), 1)
+    while (cur <= e && availableMonths.length < 60) {
+      const y = cur.getFullYear()
+      const m = cur.getMonth()
+      const mStr = `${y}-${String(m + 1).padStart(2, '0')}`
+      const lastDay = new Date(y, m + 1, 0).getDate()
+      const alreadyGenerated = invoices.some((inv) => inv.billingPeriodStart?.startsWith(mStr))
+      if (!alreadyGenerated) {
+        availableMonths.push({
+          value: mStr,
+          label: cur.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }),
+          start: `${mStr}-01`,
+          end: `${mStr}-${String(lastDay).padStart(2, '0')}`,
+        })
+      }
+      cur.setMonth(cur.getMonth() + 1)
+    }
+  }
+
+  async function handleGenerateSelected() {
+    if (selectedMonths.length === 0) return
     setGenerating(true)
     try {
-      const inv = await bff.generateInvoice({ leaseId, billingPeriodStart: period.start, billingPeriodEnd: period.end }, crypto.randomUUID())
-      setInvoices((prev) => [inv, ...prev])
+      for (const mStr of selectedMonths) {
+        const mo = availableMonths.find((m) => m.value === mStr)
+        if (!mo) continue
+        const inv = await bff.generateInvoice({ leaseId, billingPeriodStart: mo.start, billingPeriodEnd: mo.end }, crypto.randomUUID())
+        setInvoices((prev) => [inv, ...prev])
+      }
+      setSelectedMonths([])
+      setShowGenerate(false)
     } catch (e) { alert((e as Error).message) }
     finally { setGenerating(false) }
   }
@@ -334,6 +420,10 @@ function InvoicesTab({ leaseId }: { leaseId: string; lease: LeaseDetail }) {
     const csv = rows.map((r) => r.join(',')).join('\n')
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
     a.download = `invoices-${leaseId}.csv`; a.click()
+  }
+
+  function toggleMonth(m: string) {
+    setSelectedMonths((prev) => prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m])
   }
 
   if (loading) return <Spinner label="Loading invoices…" />
@@ -349,12 +439,43 @@ function InvoicesTab({ leaseId }: { leaseId: string; lease: LeaseDetail }) {
         </div>
         <div className="flex items-center gap-2">
           <SecondaryButton onClick={downloadCsv} className="px-3 py-1.5 text-xs">Export CSV</SecondaryButton>
-          <input type="month" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm" value={period.start.substring(0, 7)} onChange={(e) => { const m = e.target.value; setPeriod({ start: `${m}-01`, end: `${m}-30` }) }} />
-          <PrimaryButton onClick={handleGenerate} disabled={generating} className="px-3 py-1.5 text-xs">
-            {generating ? 'Generating…' : '+ Generate Invoice'}
+          <PrimaryButton onClick={() => setShowGenerate(!showGenerate)} className="px-3 py-1.5 text-xs">
+            {showGenerate ? 'Cancel' : '+ Generate Invoice'}
           </PrimaryButton>
         </div>
       </div>
+
+      {/* Month selection for invoice generation */}
+      {showGenerate && (
+        <Card className="border-brand-200 bg-brand-50/30 p-4">
+          <p className="mb-2 text-xs font-semibold text-brand-800">Select months to generate invoices</p>
+          <p className="mb-3 text-[10px] text-brand-600">
+            Contract period: {safeDate(lease.contractStartUtc)} – {safeDate(lease.contractEndUtc)}. Already-generated months are excluded.
+          </p>
+          {availableMonths.length === 0 ? (
+            <p className="text-xs text-slate-500">All months in the contract period already have invoices generated.</p>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {availableMonths.map((m) => (
+                  <button key={m.value} type="button" onClick={() => toggleMonth(m.value)}
+                    className={`rounded-md border px-3 py-1.5 text-xs font-medium transition ${selectedMonths.includes(m.value) ? 'border-brand-600 bg-brand-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-brand-400 hover:bg-brand-50'}`}>
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 flex items-center gap-3">
+                <button type="button" onClick={() => setSelectedMonths(availableMonths.map((m) => m.value))} className="text-xs text-brand-700 hover:underline">Select All</button>
+                <button type="button" onClick={() => setSelectedMonths([])} className="text-xs text-slate-500 hover:underline">Clear</button>
+                <div className="flex-1" />
+                <PrimaryButton onClick={handleGenerateSelected} disabled={generating || selectedMonths.length === 0} className="px-4 py-2 text-sm">
+                  {generating ? 'Generating...' : `Generate ${selectedMonths.length} Invoice${selectedMonths.length !== 1 ? 's' : ''}`}
+                </PrimaryButton>
+              </div>
+            </>
+          )}
+        </Card>
+      )}
 
       {invoices.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 py-10 text-center text-sm text-slate-400">No invoices yet.</div>
@@ -408,7 +529,7 @@ export default function LeaseDetailPage() {
   // Vehicle switch state
   const [showSwitch, setShowSwitch] = useState(false)
   const [availableVehicles, setAvailableVehicles] = useState<VehicleSummary[]>([])
-  const [switchForm, setSwitchForm] = useState({ newVehicleId: '', reason: 'ServiceVehicle', odometer: 0, notes: '' })
+  const [switchForm, setSwitchForm] = useState({ newVehicleId: '', switchType: 'PermanentToTemporary', reasonCode: 'Maintenance', reasonOther: '', odometer: 0 })
   const [switchBusy, setSwitchBusy] = useState(false)
   const [switchError, setSwitchError] = useState<string | null>(null)
 
@@ -419,15 +540,23 @@ export default function LeaseDetailPage() {
   }, [showSwitch])
 
   async function handleSwitchVehicle() {
-    if (!switchForm.newVehicleId || !switchForm.notes.trim()) { setSwitchError('Select a vehicle and provide notes for audit.'); return }
+    const reason = switchForm.reasonCode === 'Other' ? switchForm.reasonOther : switchForm.reasonCode
+    if (!switchForm.newVehicleId) { setSwitchError('Please select a replacement vehicle.'); return }
+    if (!reason.trim()) { setSwitchError('Please provide a reason for the switch.'); return }
     setSwitchBusy(true); setSwitchError(null)
     try {
-      const res = await bff.switchLeaseVehicle(id, switchForm as SwitchVehicleRequest, crypto.randomUUID())
+      const body: SwitchVehicleRequest = {
+        newVehicleId: switchForm.newVehicleId,
+        reason: `[${switchForm.switchType}] ${reason}`,
+        odometer: switchForm.odometer,
+        notes: `Switch type: ${switchForm.switchType}. Reason: ${reason}`,
+      }
+      const res = await bff.switchLeaseVehicle(id, body, crypto.randomUUID())
       if (!res.success) throw new Error(res.errorMessage ?? 'Switch failed')
       const updated = await bff.getLeaseById(id)
       setLease(updated)
       setShowSwitch(false)
-      setSwitchForm({ newVehicleId: '', reason: 'ServiceVehicle', odometer: 0, notes: '' })
+      setSwitchForm({ newVehicleId: '', switchType: 'PermanentToTemporary', reasonCode: 'Maintenance', reasonOther: '', odometer: 0 })
     } catch (e) { setSwitchError((e as Error).message) }
     finally { setSwitchBusy(false) }
   }
@@ -449,14 +578,17 @@ export default function LeaseDetailPage() {
     if (!confirm(confirmMsg)) return
     setOperating(true)
     try {
-      // mock: just reload to simulate
-      await new Promise((r) => setTimeout(r, 500))
-      alert(`${op} applied (mock mode)`)
-    } finally { setOperating(false) }
+      if (op === 'activate') {
+        await bff.activateLease(id, crypto.randomUUID())
+      }
+      const updated = await bff.getLeaseById(id)
+      setLease(updated)
+    } catch (e) { alert(`${op} failed: ${(e as Error).message}`) }
+    finally { setOperating(false) }
   }
 
   function downloadCsv() {
-    const rows = [['Field', 'Value'], ['Contract #', lease!.leaseNumber], ['Customer', lease!.customerDisplayName], ['Vehicle', lease!.vehicleMakeModel], ['Plate', lease!.vehiclePlate], ['Driver', lease!.primaryDriverName ?? '—'], ['Status', lease!.status], ['Start', lease!.contractStartUtc], ['End', lease!.contractEndUtc], ['Rent/mo', String(lease!.rentAmountSar)], ['Tajeer #', String(lease!.tajeerContractNumber ?? '')]]
+    const rows = [['Field', 'Value'], ['Contract #', lease!.leaseNumber], ['Customer', lease!.customerDisplayName], ['Vehicle', lease!.vehicleMakeModel], ['Plate', lease!.vehiclePlate], ['Driver', lease!.primaryDriverName ?? '—'], ['Status', lease!.status], ['Start', lease!.contractStartUtc], ['End', lease!.contractEndUtc], ['Rent/mo', String(lease!.rentAmountSar)]]
     const csv = rows.map((r) => r.join(',')).join('\n')
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
     a.download = `contract-${lease!.leaseNumber}.csv`; a.click()
@@ -467,14 +599,15 @@ export default function LeaseDetailPage() {
     { key: 'damages', label: 'Damages' },
     { key: 'violations', label: 'Violations' },
     { key: 'invoices', label: 'Invoices' },
+    { key: 'payments', label: 'Payments' },
     { key: 'history', label: 'History' },
   ]
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title={`Contract ${lease.leaseNumber}`}
-        subtitle={`${lease.customerDisplayName} · ${lease.vehicleMakeModel}`}
+        title={`Lease Agreement ${lease.leaseNumber}`}
+        subtitle={`${lease.customerDisplayName} · ${lease.vehiclePlate} · ${lease.vehicleMakeModel}`}
         action={
           <div className="flex flex-wrap gap-2">
             <SecondaryButton onClick={downloadCsv} className="px-3 py-1.5 text-xs">Export</SecondaryButton>
@@ -489,10 +622,12 @@ export default function LeaseDetailPage() {
       {/* Status bar */}
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-2.5">
         <Badge tone={STATUS_TONES[lease.status] ?? 'slate'}>{lease.status}</Badge>
-        <span className="text-sm text-slate-600">{lease.contractTypeCode} contract</span>
+        <span className="text-sm text-slate-600">{
+          lease.contractTypeCode === '1' ? 'Long Term Lease' : lease.contractTypeCode === '2' ? 'Short Term Rental' : lease.contractTypeCode === '3' ? 'Daily Rental' : lease.contractTypeCode
+        }</span>
         <span className="text-sm text-slate-400">·</span>
         <span className="text-sm text-slate-600">{safeDate(lease.contractStartUtc)} → {safeDate(lease.contractEndUtc)}</span>
-        {lease.tajeerContractNumber && <span className="text-sm text-slate-500">Tajeer #{lease.tajeerContractNumber}</span>}
+        <span className="text-sm text-slate-500">{lease.leaseNumber}</span>
       </div>
 
       {/* Tab navigation */}
@@ -513,93 +648,151 @@ export default function LeaseDetailPage() {
       {/* Overview */}
       {tab === 'overview' && (
         <div className="grid gap-4 md:grid-cols-2">
+
+          {/* Vehicle Card */}
           <Card className="p-4">
-            <SectionHdr>Contract Details</SectionHdr>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-              <Field label="Contract Number" value={lease.leaseNumber} mono />
-              <Field label="Status" value={lease.status} />
-              <Field label="Contract Type" value={lease.contractTypeCode} />
-              <Field label="Branch" value={lease.workingBranchName} />
-              <Field label="Start Date" value={safeDate(lease.contractStartUtc)} />
-              <Field label="End Date" value={safeDate(lease.contractEndUtc)} />
-              <Field label="Monthly Rent" value={fmt(lease.rentAmountSar)} />
-              <Field label="VAT (15%)" value={fmt(lease.vatAmountSar)} />
-              <Field label="Total Amount" value={fmt(lease.totalAmountSar)} />
-              <Field label="Paid Amount" value={fmt(lease.paidAmountSar)} />
-              <Field label="Remaining" value={fmt(lease.remainingAmountSar)} />
-              <Field label="Allowed KM/day" value={lease.allowedKmPerDay ? `${lease.allowedKmPerDay} km` : '—'} />
-              <Field label="Payment Method" value={lease.paymentMethodCode} />
+            <div className="flex items-center justify-between">
+              <SectionHdr>Vehicle</SectionHdr>
+              {(lease.status === 'Active' || lease.status === 'Extended' || lease.status === 'PendingIssuance') && (
+                <SecondaryButton onClick={() => setShowSwitch((v) => !v)} className="px-2 py-1 text-xs">
+                  {showSwitch ? 'Cancel' : 'Switch Vehicle'}
+                </SecondaryButton>
+              )}
             </div>
-          </Card>
-
-          <div className="space-y-4">
-            <Card className="p-4">
-              <SectionHdr>Customer</SectionHdr>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                <Field label="Customer" value={lease.customerDisplayName} />
-                <Field label="Driver" value={lease.primaryDriverName} />
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-mono text-lg font-bold text-slate-900">{lease.vehiclePlate}</p>
+                  <p className="text-sm font-medium text-slate-700">{lease.vehicleMakeModel}</p>
+                </div>
+                <Badge tone="blue">Permanent</Badge>
               </div>
-            </Card>
-
-            <Card className="p-4">
-              <div className="flex items-center justify-between">
-                <SectionHdr>Vehicle</SectionHdr>
-                {(lease.status === 'Active' || lease.status === 'Extended') && (
-                  <SecondaryButton onClick={() => setShowSwitch((v) => !v)} className="px-2 py-1 text-xs">
-                    {showSwitch ? 'Cancel' : 'Switch Vehicle'}
-                  </SecondaryButton>
-                )}
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div><span className="text-slate-500">Checkout Date</span><p className="font-medium text-slate-900">{safeDate(lease.contractStartUtc)}</p></div>
+                <div><span className="text-slate-500">Expected Check-in</span><p className="font-medium text-slate-900">{safeDate(lease.contractEndUtc)}</p></div>
+                <div><span className="text-slate-500">Branch</span><p className="font-medium text-slate-900">{lease.workingBranchName}</p></div>
+                <div><span className="text-slate-500">Payment Method</span><p className="font-medium text-slate-900">{
+                  lease.paymentMethodCode === '1' ? 'Cash' : lease.paymentMethodCode === '2' ? 'Bank Transfer' : lease.paymentMethodCode === '3' ? 'Credit Card' : lease.paymentMethodCode === '4' ? 'Cheque' : lease.paymentMethodCode
+                }</p></div>
               </div>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                <Field label="Plate" value={lease.vehiclePlate} mono />
-                <Field label="Make / Model" value={lease.vehicleMakeModel} />
-              </div>
+            </div>
               {showSwitch && (
                 <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-amber-700">Switch to Temporary Vehicle</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-slate-600">Replacement Vehicle</label>
-                      <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={switchForm.newVehicleId} onChange={(e) => setSwitchForm((f) => ({ ...f, newVehicleId: e.target.value }))}>
-                        <option value="">— Select vehicle —</option>
-                        {availableVehicles.map((v) => <option key={v.id} value={v.id}>{v.plateNumber} — {v.make} {v.model} ({v.modelYear})</option>)}
-                      </select>
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-amber-700">Vehicle Switch</p>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1 block text-xs font-semibold text-slate-600">Replacement Vehicle *</label>
+                        <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={switchForm.newVehicleId}
+                          onChange={(e) => {
+                            const vid = e.target.value
+                            const veh = availableVehicles.find((v) => v.id === vid)
+                            setSwitchForm((f) => ({ ...f, newVehicleId: vid, odometer: veh?.currentKm ?? 0 }))
+                          }}>
+                          <option value="">— Select available vehicle —</option>
+                          {availableVehicles.map((v) => <option key={v.id} value={v.id}>{v.plateNumber} — {v.make} {v.model} ({v.modelYear}) — {v.currentKm.toLocaleString()} km</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-semibold text-slate-600">Switch Type *</label>
+                        <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={switchForm.switchType} onChange={(e) => setSwitchForm((f) => ({ ...f, switchType: e.target.value }))}>
+                          <option value="PermanentToTemporary">Permanent → Temporary</option>
+                          <option value="TemporaryToTemporary">Temporary → Temporary</option>
+                          <option value="TemporaryToPermanent">Temporary → Permanent</option>
+                        </select>
+                      </div>
                     </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-slate-600">Reason</label>
-                      <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={switchForm.reason} onChange={(e) => setSwitchForm((f) => ({ ...f, reason: e.target.value }))}>
-                        <option value="ServiceVehicle">Service Vehicle (repair/maintenance)</option>
-                        <option value="Replacement">Replacement (accident/damage)</option>
-                        <option value="PreLease">Pre-Lease (upgrade/downgrade)</option>
-                      </select>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1 block text-xs font-semibold text-slate-600">Reason *</label>
+                        <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={switchForm.reasonCode} onChange={(e) => setSwitchForm((f) => ({ ...f, reasonCode: e.target.value }))}>
+                          <option value="Maintenance">Scheduled Maintenance / PMS</option>
+                          <option value="Accident">Accident / Damage Repair</option>
+                          <option value="Breakdown">Mechanical Breakdown</option>
+                          <option value="CustomerRequest">Customer Request</option>
+                          <option value="Insurance">Insurance Claim</option>
+                          <option value="Upgrade">Vehicle Upgrade</option>
+                          <option value="Downgrade">Vehicle Downgrade</option>
+                          <option value="Recall">Manufacturer Recall</option>
+                          <option value="Other">Other (specify below)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-semibold text-slate-600">Odometer (km)</label>
+                        <input type="number" readOnly className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600" value={switchForm.odometer} />
+                        <p className="mt-0.5 text-[10px] text-slate-400">Auto-filled from selected vehicle</p>
+                      </div>
                     </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-slate-600">Current Odometer (km)</label>
-                      <input type="number" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={switchForm.odometer} onChange={(e) => setSwitchForm((f) => ({ ...f, odometer: Number(e.target.value) }))} />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-slate-600">Notes / Comment</label>
-                      <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={switchForm.notes} onChange={(e) => setSwitchForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Reason details for audit..." />
-                    </div>
+                    {switchForm.reasonCode === 'Other' && (
+                      <div>
+                        <label className="mb-1 block text-xs font-semibold text-slate-600">Specify Reason *</label>
+                        <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={switchForm.reasonOther} onChange={(e) => setSwitchForm((f) => ({ ...f, reasonOther: e.target.value }))} placeholder="Enter reason details..." />
+                      </div>
+                    )}
                   </div>
-                  {switchError && <p className="mt-2 text-sm text-red-600">{switchError}</p>}
+                  {switchError && <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-sm text-red-600">{switchError}</p>}
                   <div className="mt-3 flex gap-2">
                     <PrimaryButton onClick={handleSwitchVehicle} disabled={switchBusy || !switchForm.newVehicleId} className="px-4 py-2 text-sm">
                       {switchBusy ? 'Switching...' : 'Confirm Switch'}
                     </PrimaryButton>
-                    <SecondaryButton onClick={() => setShowSwitch(false)} className="px-3 py-2 text-sm">Cancel</SecondaryButton>
+                    <SecondaryButton onClick={() => { setShowSwitch(false); setSwitchError(null) }} className="px-3 py-2 text-sm">Cancel</SecondaryButton>
                   </div>
+                </div>
+              )}
+          </Card>
+
+          {/* Driver Card */}
+          <div className="space-y-4">
+            <Card className="p-4">
+              <SectionHdr>Driver</SectionHdr>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">{lease.primaryDriverName ?? '—'}</p>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                  <div><span className="text-slate-500">Customer</span><p className="font-medium text-slate-900">{lease.customerDisplayName}</p></div>
+                  <div><span className="text-slate-500">Status</span><p><Badge tone={STATUS_TONES[lease.status] ?? 'slate'}>{lease.status}</Badge></p></div>
+                </div>
+              </div>
+              {lease.status === 'PendingIssuance' && (
+                <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs font-semibold text-amber-800">Status: Pending Issuance</p>
+                  <p className="mt-0.5 text-[10px] text-amber-700">This lease agreement is waiting to be activated. Activate it to start the vehicle checkout.</p>
+                  <PrimaryButton onClick={() => doOperation('activate', 'Activate this lease agreement? Vehicle will be checked out to the driver.')} disabled={operating} className="mt-2 px-3 py-1.5 text-xs">
+                    {operating ? 'Activating...' : 'Activate (Checkout)'}
+                  </PrimaryButton>
                 </div>
               )}
             </Card>
 
+            {/* Financials */}
             <Card className="p-4">
-              <SectionHdr>Integration Status</SectionHdr>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                <Field label="Tajeer Status" value={lease.tajeerStatus} />
-                <Field label="Tajeer Contract #" value={lease.tajeerContractNumber} mono />
-                <Field label="ZATCA Status" value={lease.zatcaSubmissionStatus} />
-                <Field label="ZATCA Invoice #" value={lease.zatcaInvoiceNumber} mono />
+              <SectionHdr>Financials</SectionHdr>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between"><span className="text-slate-500">Monthly Rent</span><span className="font-mono font-medium text-slate-900">{fmt(lease.rentAmountSar)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">VAT (15%)</span><span className="font-mono text-slate-700">{fmt(lease.vatAmountSar)}</span></div>
+                <div className="flex justify-between border-t border-slate-200 pt-1"><span className="font-semibold text-slate-700">Total</span><span className="font-mono font-bold text-slate-900">{fmt(lease.totalAmountSar)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Paid</span><span className="font-mono text-green-700">{fmt(lease.paidAmountSar)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Remaining</span><span className={`font-mono font-semibold ${lease.remainingAmountSar > 0 ? 'text-red-600' : 'text-green-700'}`}>{fmt(lease.remainingAmountSar)}</span></div>
+              </div>
+            </Card>
+
+            {/* LA Info + Navigation */}
+            <Card className="p-4">
+              <SectionHdr>Lease Agreement Info</SectionHdr>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+                <Field label="LA Number" value={lease.leaseNumber} mono />
+                <Field label="Type" value={
+                  lease.contractTypeCode === '1' ? 'Long Term Lease' : lease.contractTypeCode === '2' ? 'Short Term Rental' : lease.contractTypeCode === '3' ? 'Daily Rental' : lease.contractTypeCode
+                } />
+              </div>
+              <div className="mt-3 flex flex-col gap-1.5 border-t border-slate-200 pt-3">
+                {lease.contractId && lease.contractId !== '00000000-0000-0000-0000-000000000000' && (
+                  <Link href={`/contracts/${lease.contractId}`} className="flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline">
+                    <span>View Contract →</span>
+                  </Link>
+                )}
+                <Link href="/contracts" className="text-xs text-brand-600 hover:underline">All Contracts</Link>
+                <Link href="/quotations" className="text-xs text-brand-600 hover:underline">All Quotations</Link>
+                <Link href="/leases" className="text-xs text-slate-500 hover:underline">← Back to Lease Agreements</Link>
               </div>
             </Card>
           </div>
@@ -641,28 +834,93 @@ export default function LeaseDetailPage() {
       {tab === 'damages' && <DamagesTab leaseId={id} vehicleId={lease.vehicleId} />}
       {tab === 'violations' && <ViolationsTab leaseId={id} vehicleId={lease.vehicleId} driverId={lease.primaryDriverId} />}
       {tab === 'invoices' && <InvoicesTab leaseId={id} lease={lease} />}
+      {tab === 'payments' && <PaymentsTab leaseId={id} />}
 
       {tab === 'history' && (
-        <Card className="p-4">
-          <SectionHdr>Contract Timeline</SectionHdr>
-          <ol className="relative ms-4 space-y-4 border-s border-slate-200">
-            {[
-              { date: safeDate(lease.createdAtUtc), event: 'Contract created', status: 'Draft' },
-              ...(lease.issuedAtUtc ? [{ date: safeDate(lease.issuedAtUtc), event: 'Contract issued (Active)', status: 'Active' }] : []),
-              ...(lease.suspendedAtUtc ? [{ date: safeDate(lease.suspendedAtUtc), event: 'Contract suspended', status: 'Suspended' }] : []),
-              ...(lease.resumedAtUtc ? [{ date: safeDate(lease.resumedAtUtc), event: 'Contract resumed', status: 'Active' }] : []),
-              ...(lease.closedAtUtc ? [{ date: safeDate(lease.closedAtUtc), event: 'Contract closed', status: 'Closed' }] : []),
-              ...(lease.cancelledAtUtc ? [{ date: safeDate(lease.cancelledAtUtc), event: 'Contract cancelled', status: 'Cancelled' }] : []),
-            ].map((ev, i) => (
-              <li key={i} className="ms-4">
-                <div className="absolute -start-1.5 mt-1 h-3 w-3 rounded-full border border-white bg-brand-600" />
-                <p className="text-xs text-slate-400">{ev.date}</p>
-                <p className="text-sm font-medium text-slate-800">{ev.event}</p>
-                <Badge tone={STATUS_TONES[ev.status] ?? 'slate'}>{ev.status}</Badge>
-              </li>
-            ))}
-          </ol>
-        </Card>
+        <div className="space-y-4">
+          {/* Checkout / Check-in Summary */}
+          <Card className="overflow-hidden">
+            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <h3 className="text-sm font-semibold text-slate-800">Checkout &amp; Check-in</h3>
+            </div>
+            <table className="w-full text-xs">
+              <thead className="bg-slate-100 text-slate-600">
+                <tr>
+                  <th className="px-3 py-2 text-start font-medium">Event</th>
+                  <th className="px-3 py-2 text-start font-medium">Date</th>
+                  <th className="px-3 py-2 text-start font-medium">Vehicle</th>
+                  <th className="px-3 py-2 text-start font-medium">Driver</th>
+                  <th className="px-3 py-2 text-start font-medium">Status</th>
+                  <th className="px-3 py-2 text-start font-medium">Reason / Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-t border-slate-100">
+                  <td className="px-3 py-2 font-medium text-green-700">Checkout</td>
+                  <td className="px-3 py-2">{safeDate(lease.issuedAtUtc ?? lease.contractStartUtc)}</td>
+                  <td className="px-3 py-2 font-mono">{lease.vehiclePlate}</td>
+                  <td className="px-3 py-2">{lease.primaryDriverName ?? '—'}</td>
+                  <td className="px-3 py-2"><Badge tone="green">Active</Badge></td>
+                  <td className="px-3 py-2 text-slate-500">Initial vehicle checkout</td>
+                </tr>
+                {lease.closedAtUtc && (
+                  <tr className="border-t border-slate-100">
+                    <td className="px-3 py-2 font-medium text-red-700">Check-in</td>
+                    <td className="px-3 py-2">{safeDate(lease.closedAtUtc)}</td>
+                    <td className="px-3 py-2 font-mono">{lease.vehiclePlate}</td>
+                    <td className="px-3 py-2">{lease.primaryDriverName ?? '—'}</td>
+                    <td className="px-3 py-2"><Badge tone="slate">Closed</Badge></td>
+                    <td className="px-3 py-2 text-slate-500">Vehicle returned</td>
+                  </tr>
+                )}
+                {!lease.closedAtUtc && lease.status !== 'Draft' && lease.status !== 'PendingIssuance' && (
+                  <tr className="border-t border-slate-100 bg-amber-50/40">
+                    <td className="px-3 py-2 font-medium text-amber-700">Check-in (pending)</td>
+                    <td className="px-3 py-2 text-slate-400">{safeDate(lease.contractEndUtc)}</td>
+                    <td className="px-3 py-2 font-mono text-slate-400">{lease.vehiclePlate}</td>
+                    <td className="px-3 py-2 text-slate-400">{lease.primaryDriverName ?? '—'}</td>
+                    <td className="px-3 py-2"><Badge tone="amber">Expected</Badge></td>
+                    <td className="px-3 py-2 text-slate-400">Scheduled return date</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </Card>
+
+          {/* Full Activity Log */}
+          <Card className="p-4">
+            <SectionHdr>Activity Log</SectionHdr>
+            <div className="overflow-hidden rounded-lg border border-slate-200">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-100 text-slate-600">
+                  <tr>
+                    <th className="px-3 py-2 text-start font-medium">Timestamp</th>
+                    <th className="px-3 py-2 text-start font-medium">Event</th>
+                    <th className="px-3 py-2 text-start font-medium">Status</th>
+                    <th className="px-3 py-2 text-start font-medium">Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { ts: lease.createdAtUtc, event: 'Lease Agreement Created', status: 'Draft', detail: `LA ${lease.leaseNumber} created for ${lease.customerDisplayName}` },
+                    ...(lease.issuedAtUtc ? [{ ts: lease.issuedAtUtc, event: 'Vehicle Checkout (Activated)', status: 'Active', detail: `${lease.vehiclePlate} checked out to ${lease.primaryDriverName ?? 'driver'}` }] : []),
+                    ...(lease.suspendedAtUtc ? [{ ts: lease.suspendedAtUtc, event: 'Lease Suspended', status: 'Suspended', detail: 'Operations suspended by operator' }] : []),
+                    ...(lease.resumedAtUtc ? [{ ts: lease.resumedAtUtc, event: 'Lease Resumed', status: 'Active', detail: 'Operations resumed' }] : []),
+                    ...(lease.closedAtUtc ? [{ ts: lease.closedAtUtc, event: 'Vehicle Check-in (Closed)', status: 'Closed', detail: `${lease.vehiclePlate} returned by ${lease.primaryDriverName ?? 'driver'}` }] : []),
+                    ...(lease.cancelledAtUtc ? [{ ts: lease.cancelledAtUtc, event: 'Lease Cancelled', status: 'Cancelled', detail: 'Lease agreement cancelled' }] : []),
+                  ].map((ev, i) => (
+                    <tr key={i} className="border-t border-slate-100">
+                      <td className="px-3 py-2 font-mono text-slate-500">{new Date(ev.ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                      <td className="px-3 py-2 font-medium text-slate-800">{ev.event}</td>
+                      <td className="px-3 py-2"><Badge tone={STATUS_TONES[ev.status] ?? 'slate'}>{ev.status}</Badge></td>
+                      <td className="px-3 py-2 text-slate-600">{ev.detail}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   )

@@ -27,6 +27,7 @@ using AutoLeaseNet.Bff.Middleware;
 using AutoLeaseNet.Bff.Tenancy;
 using AutoLeaseNet.Infrastructure;
 using AutoLeaseNet.Infrastructure.Outbox;
+using AutoLeaseNet.Infrastructure.Persistence;
 using AutoLeaseNet.Infrastructure.Reconciliation;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
@@ -121,6 +122,10 @@ var app = builder.Build();
 // Plans/workstreams/2026-05-29-day-9-rls-tenant-isolation/plan.md.
 if (app.Environment.IsDevelopment())
 {
+    using var schemaScope = app.Services.CreateScope();
+    var db = schemaScope.ServiceProvider.GetRequiredService<AutoLeaseNetDbContext>();
+    await db.Database.EnsureCreatedAsync();
+
     using var seedScope = app.Services.CreateScope();
     var seeder = seedScope.ServiceProvider.GetRequiredService<IDataSeeder>();
     using var systemScope = SystemTenancyScope.For(seeder.TenantId);
@@ -165,10 +170,12 @@ v1.MapLookupEndpoints();
 v1.MapInspectionEndpoints();
 v1.MapIncidentEndpoints();
 v1.MapLeaseEndpoints();
+v1.MapContractEndpoints();
 v1.MapQuotationEndpoints();
 v1.MapPricingSetupEndpoints();
 v1.MapQuotationPricingSetupEndpoints();
 v1.MapInvoiceEndpoints();
+v1.MapPaymentEndpoints();
 v1.MapZatcaStatusEndpoints();
 v1.MapMeEndpoints();
 v1.MapTajeerWebhookEndpoints();
@@ -176,6 +183,9 @@ v1.MapCustomerEndpoints();
 v1.MapVehicleEndpoints();
 v1.MapDriverEndpoints();
 v1.MapBranchEndpoints();
+v1.MapRfqEndpoints();
+v1.MapApprovalEndpoints();
+v1.MapNotificationEndpoints();
 
 if (app.Environment.IsDevelopment())
 {

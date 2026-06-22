@@ -1,23 +1,43 @@
 using AutoLeaseNet.Application.Leases;
+using AutoLeaseNet.Application.Ports.Tenancy;
 using AutoLeaseNet.Domain.Operations;
+using AutoLeaseNet.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 
 namespace AutoLeaseNet.Bff.Endpoints;
 
 /// <summary>
-/// Day-19 check-in saga endpoint. Wraps <see cref="CheckInLeaseCommand"/> behind a
-/// dev-JWT-stub-authenticated POST that requires <c>Idempotency-Key</c> (CLAUDE.md §8).
-/// The handler calls Tajeer <c>CalculatePayment</c> + <c>CloseContract</c> before
-/// the local commit; the money preview comes back in the response <c>payment</c> block.
+/// Lease endpoints: list + operations (check-in, extend, suspend).
 /// </summary>
 public static class LeaseEndpoints
 {
     public static IEndpointRouteBuilder MapLeaseEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/leases").WithTags("leases");
+
+        group.MapGet("", ListLeasesAsync)
+            .WithName("ListLeases")
+            .RequireAuthorization();
+
+        group.MapGet("/{id:guid}", GetLeaseByIdAsync)
+            .WithName("GetLeaseById")
+            .RequireAuthorization();
+
+        group.MapGet("/{id:guid}/damages", (Guid id) => Results.Ok(Array.Empty<object>()))
+            .WithName("GetLeaseDamages")
+            .RequireAuthorization();
+
+        group.MapGet("/{id:guid}/violations", (Guid id) => Results.Ok(Array.Empty<object>()))
+            .WithName("GetLeaseViolations")
+            .RequireAuthorization();
+
+        group.MapGet("/{id:guid}/payments", GetLeasePaymentsAsync)
+            .WithName("GetLeasePayments")
+            .RequireAuthorization();
 
         group.MapPost("/{id:guid}/check-in", CheckInAsync)
             .WithName("CheckInLease")
@@ -31,7 +51,240 @@ public static class LeaseEndpoints
             .WithName("SuspendLease")
             .RequireAuthorization();
 
+        group.MapPost("/{id:guid}/activate", ActivateAsync)
+            .WithName("ActivateLease")
+            .RequireAuthorization();
+
+        group.MapPost("/{id:guid}/switch-vehicle", SwitchVehicleAsync)
+            .WithName("SwitchLeaseVehicle")
+            .RequireAuthorization();
+
         return group;
+    }
+
+    private static async Task<IResult> ListLeasesAsync(
+        AutoLeaseNetDbContext db,
+        ITenantContext tenant,
+        CancellationToken ct,
+        int page = 1,
+        int pageSize = 20,
+        string? search = null,
+        string? status = null)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var query = db.Leases.AsNoTracking().Where(l => l.TenantId == tenantId);
+
+        if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<Domain.Leases.LeaseStatus>(status, true, out var st))
+            query = query.Where(l => l.Status == st);
+
+        var total = await query.CountAsync(ct);
+        var leases = await query
+            .OrderByDescending(l => l.CreatedAtUtc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        var customerIds = leases.Where(l => l.CustomerId.HasValue).Select(l => l.CustomerId!.Value).Distinct().ToList();
+        var vehicleIds = leases.Where(l => l.VehicleId.HasValue).Select(l => l.VehicleId!.Value).Distinct().ToList();
+        var driverIds = leases.Where(l => l.PrimaryDriverId.HasValue).Select(l => l.PrimaryDriverId!.Value).Distinct().ToList();
+        var branchIds = leases.Where(l => l.WorkingBranchId.HasValue).Select(l => l.WorkingBranchId!.Value).Distinct().ToList();
+
+        var customers = await db.Customers.AsNoTracking().Where(c => customerIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id, ct);
+        var vehicles = await db.Vehicles.AsNoTracking().Where(v => vehicleIds.Contains(v.Id)).ToDictionaryAsync(v => v.Id, ct);
+        var drivers = await db.Drivers.AsNoTracking().Where(d => driverIds.Contains(d.Id)).ToDictionaryAsync(d => d.Id, ct);
+        var branches = await db.Branches.AsNoTracking().Where(b => branchIds.Contains(b.Id)).ToDictionaryAsync(b => b.Id, ct);
+
+        var items = leases.Select(l =>
+        {
+            var cust = l.CustomerId.HasValue && customers.TryGetValue(l.CustomerId.Value, out var c) ? c : null;
+            var veh = l.VehicleId.HasValue && vehicles.TryGetValue(l.VehicleId.Value, out var v) ? v : null;
+            var drv = l.PrimaryDriverId.HasValue && drivers.TryGetValue(l.PrimaryDriverId.Value, out var d) ? d : null;
+            var br = l.WorkingBranchId.HasValue && branches.TryGetValue(l.WorkingBranchId.Value, out var b) ? b : null;
+            return new
+            {
+                l.Id,
+                l.DisplayId,
+                LeaseNumber = "LA-" + l.DisplayId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ContractId = l.ContractId ?? Guid.Empty,
+                CustomerDisplayName = cust?.DisplayName ?? "—",
+                VehicleMakeModel = veh != null ? veh.Make + " " + veh.Model : "—",
+                VehiclePlate = veh?.PlateNumber ?? "—",
+                Status = l.Status.ToString(),
+                l.ContractStartUtc,
+                l.ContractEndUtc,
+                ContractTypeCode = l.ContractTypeCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                RentAmountSar = l.RentAmount,
+                PrimaryDriverName = drv?.PersonNameEn,
+                WorkingBranchName = br?.NameEn,
+            };
+        }).ToList();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var filtered = items.Where(x =>
+                (x.CustomerDisplayName.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+                (x.VehicleMakeModel.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+                (x.VehiclePlate.Contains(search, StringComparison.OrdinalIgnoreCase))).ToList();
+            return Results.Ok(new { items = filtered, page, pageSize, totalCount = filtered.Count });
+        }
+
+        return Results.Ok(new { items, page, pageSize, totalCount = total });
+    }
+
+    private static async Task<IResult> GetLeaseByIdAsync(
+        Guid id,
+        AutoLeaseNetDbContext db,
+        ITenantContext tenant,
+        CancellationToken ct)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var lease = await db.Leases.AsNoTracking()
+            .Where(l => l.TenantId == tenantId && l.Id == id)
+            .FirstOrDefaultAsync(ct);
+
+        if (lease is null) return Results.NotFound();
+
+        var cust = lease.CustomerId.HasValue
+            ? await db.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == lease.CustomerId.Value, ct)
+            : null;
+        var veh = lease.VehicleId.HasValue
+            ? await db.Vehicles.AsNoTracking().FirstOrDefaultAsync(v => v.Id == lease.VehicleId.Value, ct)
+            : null;
+        var drv = lease.PrimaryDriverId.HasValue
+            ? await db.Drivers.AsNoTracking().FirstOrDefaultAsync(d => d.Id == lease.PrimaryDriverId.Value, ct)
+            : null;
+        var br = lease.WorkingBranchId.HasValue
+            ? await db.Branches.AsNoTracking().FirstOrDefaultAsync(b => b.Id == lease.WorkingBranchId.Value, ct)
+            : null;
+
+        return Results.Ok(new
+        {
+            lease.Id,
+            lease.DisplayId,
+            LeaseNumber = "LA-" + lease.DisplayId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ContractId = lease.ContractId ?? Guid.Empty,
+            CustomerId = lease.CustomerId ?? Guid.Empty,
+            CustomerDisplayName = cust?.DisplayName ?? "—",
+            VehicleId = lease.VehicleId ?? Guid.Empty,
+            VehiclePlate = veh?.PlateNumber ?? "—",
+            VehicleMakeModel = veh != null ? veh.Make + " " + veh.Model : "—",
+            PrimaryDriverId = lease.PrimaryDriverId,
+            PrimaryDriverName = drv?.PersonNameEn,
+            Status = lease.Status.ToString(),
+            ContractTypeCode = lease.ContractTypeCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            lease.ContractStartUtc,
+            lease.ContractEndUtc,
+            RentAmountSar = lease.RentAmount,
+            WorkingBranchCode = br?.Code ?? "—",
+            WorkingBranchName = br?.NameEn ?? "—",
+            lease.CreatedAtUtc,
+            RentPolicyId = lease.RentPolicyId ?? Guid.Empty,
+            PaidAmountSar = lease.PaidAmount,
+            VatAmountSar = lease.VatAmount,
+            TotalAmountSar = lease.TotalAmount,
+            RemainingAmountSar = lease.RemainingAmount,
+            AllowedKmPerDay = lease.AllowedKmPerDay,
+            PaymentMethodCode = lease.PaymentMethodCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            IssuedAtUtc = (string?)null,
+            SuspendedAtUtc = (string?)null,
+            ResumedAtUtc = (string?)null,
+            ClosedAtUtc = (string?)null,
+            CancelledAtUtc = (string?)null,
+            ZatcaSubmissionStatus = (string?)null,
+            ZatcaInvoiceNumber = (string?)null,
+            Inspections = Array.Empty<object>(),
+            Incidents = Array.Empty<object>(),
+        });
+    }
+
+    private static async Task<IResult> GetLeasePaymentsAsync(
+        Guid id,
+        AutoLeaseNetDbContext db,
+        ITenantContext tenant,
+        CancellationToken ct)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var lease = await db.Leases.AsNoTracking()
+            .Where(l => l.TenantId == tenantId && l.Id == id)
+            .FirstOrDefaultAsync(ct);
+        if (lease is null) return Results.NotFound();
+
+        var leaseInvoiceIds = await db.Invoices.AsNoTracking()
+            .Where(i => i.LeaseId == id && i.TenantId == tenantId)
+            .Select(i => i.Id)
+            .ToListAsync(ct);
+
+        var allocPaymentIds = await db.PaymentAllocations.AsNoTracking()
+            .Where(a => leaseInvoiceIds.Contains(a.InvoiceId))
+            .Select(a => a.AdvancePaymentId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var customerPaymentIds = lease.CustomerId.HasValue
+            ? await db.AdvancePayments.AsNoTracking()
+                .Where(p => p.CustomerId == lease.CustomerId.Value && p.TenantId == tenantId)
+                .Select(p => p.Id)
+                .ToListAsync(ct)
+            : new List<Guid>();
+
+        var paymentIds = allocPaymentIds.Union(customerPaymentIds).Distinct().ToList();
+
+        var payments = await db.AdvancePayments.AsNoTracking()
+            .Where(p => paymentIds.Contains(p.Id))
+            .Join(db.Customers.AsNoTracking(), p => p.CustomerId, c => c.Id, (p, c) => new { p, c })
+            .Select(x => new
+            {
+                x.p.Id,
+                x.p.DisplayId,
+                x.p.CustomerId,
+                CustomerDisplayName = x.c.DisplayName,
+                x.p.Amount,
+                x.p.PaymentMethod,
+                x.p.ReceivedDate,
+                x.p.ReferenceNumber,
+                x.p.Notes,
+                x.p.RemainingBalance,
+                x.p.CreatedAtUtc,
+            })
+            .OrderByDescending(p => p.ReceivedDate)
+            .ToListAsync(ct);
+
+        var allAllocs = await db.PaymentAllocations.AsNoTracking()
+            .Where(a => paymentIds.Contains(a.AdvancePaymentId))
+            .Select(a => new
+            {
+                a.Id,
+                a.AdvancePaymentId,
+                a.InvoiceId,
+                a.InvoiceNumber,
+                a.AllocatedAmountSar,
+                a.AllocatedAtUtc,
+            })
+            .ToListAsync(ct);
+
+        var items = payments.Select(p => new
+        {
+            p.Id,
+            p.DisplayId,
+            p.CustomerId,
+            p.CustomerDisplayName,
+            p.Amount,
+            p.PaymentMethod,
+            p.ReceivedDate,
+            p.ReferenceNumber,
+            p.Notes,
+            p.RemainingBalance,
+            Allocations = allAllocs.Where(a => a.AdvancePaymentId == p.Id).ToList(),
+            p.CreatedAtUtc,
+        }).ToList();
+
+        return Results.Ok(items);
     }
 
     private static async Task<IResult> ExtendAsync(
@@ -231,6 +484,131 @@ public static class LeaseEndpoints
             },
         });
     }
+
+    private static async Task<IResult> ActivateAsync(
+        Guid id,
+        AutoLeaseNetDbContext db,
+        ITenantContext tenant,
+        CancellationToken ct)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var lease = await db.Leases
+            .Where(l => l.TenantId == tenantId && l.Id == id)
+            .FirstOrDefaultAsync(ct);
+
+        if (lease is null) return Results.NotFound();
+
+        if (lease.Status == Domain.Leases.LeaseStatus.PendingIssuance)
+        {
+            // Use the domain method for the canonical PendingIssuance -> Active transition
+            lease.MarkIssued(startKm: null, startFuelLevelCode: null, conditionNotes: null, DateTimeOffset.UtcNow);
+        }
+        else if (lease.Status == Domain.Leases.LeaseStatus.Draft)
+        {
+            // Draft has no domain method — use EF Entry to set properties directly
+            var now = DateTimeOffset.UtcNow;
+            db.Entry(lease).Property("Status").CurrentValue = Domain.Leases.LeaseStatus.Active;
+            db.Entry(lease).Property("IssuedAtUtc").CurrentValue = (DateTimeOffset?)now;
+            db.Entry(lease).Property("UpdatedAtUtc").CurrentValue = now;
+        }
+        else
+        {
+            return Results.Problem(
+                title: "lease.invalid_status",
+                detail: $"Cannot activate lease from status '{lease.Status}'. Lease must be in Draft or PendingIssuance status.",
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        return Results.Ok(new
+        {
+            leaseId = lease.Id,
+            status = "Active",
+            issuedAtUtc = lease.IssuedAtUtc,
+        });
+    }
+
+    private static async Task<IResult> SwitchVehicleAsync(
+        HttpContext ctx,
+        Guid id,
+        SwitchVehicleRequest body,
+        AutoLeaseNetDbContext db,
+        ITenantContext tenant,
+        CancellationToken ct)
+    {
+        var idempotencyKey = ctx.Request.Headers["Idempotency-Key"].ToString();
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            return Results.Problem(
+                title: "Missing Idempotency-Key",
+                detail: "POST /leases/{id}/switch-vehicle requires an 'Idempotency-Key' header.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+        if (body is null)
+        {
+            return Results.Problem(
+                title: "Missing request body",
+                detail: "POST /leases/{id}/switch-vehicle requires a JSON body with newVehicleId, reason, and odometer.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var lease = await db.Leases
+            .Where(l => l.TenantId == tenantId && l.Id == id)
+            .FirstOrDefaultAsync(ct);
+
+        if (lease is null) return Results.NotFound();
+
+        if (lease.Status == Domain.Leases.LeaseStatus.Closed || lease.Status == Domain.Leases.LeaseStatus.Cancelled)
+        {
+            return Results.Problem(
+                title: "lease.invalid_status",
+                detail: $"Cannot switch vehicle on lease with status '{lease.Status}'.",
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
+
+        // Look up previous vehicle plate before switching
+        var previousVehiclePlate = "—";
+        if (lease.VehicleId.HasValue)
+        {
+            var prevVeh = await db.Vehicles.AsNoTracking()
+                .Where(v => v.Id == lease.VehicleId.Value)
+                .FirstOrDefaultAsync(ct);
+            if (prevVeh is not null) previousVehiclePlate = prevVeh.PlateNumber;
+        }
+
+        // Look up the new vehicle to confirm it exists and get its plate
+        var newVehicle = await db.Vehicles.AsNoTracking()
+            .Where(v => v.Id == body.NewVehicleId && v.TenantId == tenantId)
+            .FirstOrDefaultAsync(ct);
+
+        if (newVehicle is null)
+        {
+            return Results.Problem(
+                title: "vehicle.not_found",
+                detail: $"Vehicle {body.NewVehicleId} not found for tenant.",
+                statusCode: StatusCodes.Status404NotFound);
+        }
+
+        // Update VehicleId via EF Entry (private setter)
+        db.Entry(lease).Property("VehicleId").CurrentValue = (Guid?)body.NewVehicleId;
+        db.Entry(lease).Property("UpdatedAtUtc").CurrentValue = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+
+        return Results.Ok(new
+        {
+            success = true,
+            leaseId = lease.Id,
+            newVehiclePlate = newVehicle.PlateNumber,
+            previousVehiclePlate,
+        });
+    }
 }
 
 public sealed record CheckInLeaseRequest
@@ -278,5 +656,13 @@ public sealed record ExtendLeaseRequest
 public sealed record SuspendLeaseRequest
 {
     public required int SuspensionReasonCode { get; init; }
+    public string? Notes { get; init; }
+}
+
+public sealed record SwitchVehicleRequest
+{
+    public required Guid NewVehicleId { get; init; }
+    public required string Reason { get; init; }
+    public required int Odometer { get; init; }
     public string? Notes { get; init; }
 }

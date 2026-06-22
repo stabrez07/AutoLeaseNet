@@ -7,6 +7,7 @@ namespace AutoLeaseNet.Domain.Shared;
 public abstract class Entity
 {
     public Guid Id { get; protected set; } = Guid.NewGuid();
+    public int DisplayId { get; protected set; }
     public Guid TenantId { get; protected set; }
     public DateTimeOffset CreatedAtUtc { get; protected set; } = DateTimeOffset.UtcNow;
     public Guid? CreatedBy { get; protected set; }

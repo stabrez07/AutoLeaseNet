@@ -36,6 +36,16 @@ public sealed class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         builder.Property(c => c.NationalityCode).HasMaxLength(8);
         builder.Property(c => c.KycVerifiedBy).HasMaxLength(128);
 
+        // CRM / account management
+        builder.Property(c => c.CrmAccountId).HasMaxLength(64);
+        builder.Property(c => c.CustomerCode).HasMaxLength(16);
+        builder.Property(c => c.Industry).HasMaxLength(128);
+        builder.Property(c => c.CurrentExposureSar).HasColumnType("decimal(18,2)");
+
+        builder.HasIndex(c => new { c.TenantId, c.CustomerCode })
+            .IsUnique()
+            .HasFilter("[CustomerCode] IS NOT NULL");
+
         builder.Property(c => c.CreatedAtUtc).IsRequired();
         builder.Property(c => c.UpdatedAtUtc).IsRequired();
         builder.Property(c => c.RowVersion).IsRowVersion();

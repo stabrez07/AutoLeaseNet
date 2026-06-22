@@ -1,60 +1,110 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { bff, type Invoice, type InvoiceStatus, type PagedResult } from '../../lib/bff-client'
 import {
-  Badge, Card, DataTable, DataTableMeta, ErrorBox, PageHeader, PrimaryButton,
-  SearchInput, SecondaryButton, Spinner, TableCell, TableHeadCell,
-  Toolbar, ToolbarGroup,
-} from '../../components/ui'
+  Column,
+  DataGrid,
+  DateCell,
+  DetailPanel,
+  DetailRow,
+  DetailSection,
+  FilterBar,
+  FilterPill,
+  MoneyCell,
+  PageShell,
+  SearchBox,
+  StatusBadge,
+  type BadgeTone,
+} from '../../components/data-grid'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 30
 
-const STATUSES: InvoiceStatus[] = ['Draft', 'Issued', 'PartiallyPaid', 'Paid', 'Overdue', 'Cancelled']
+const STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: 'Draft', label: 'Draft' },
+  { value: 'Submitted', label: 'Submitted' },
+  { value: 'Cleared', label: 'Cleared' },
+  { value: 'Finalized', label: 'Finalized' },
+  { value: 'SubmissionFailed', label: 'Failed' },
+  { value: 'Voided', label: 'Voided' },
+]
 
-const STATUS_TONES: Record<InvoiceStatus, 'green' | 'amber' | 'blue' | 'slate' | 'red'> = {
-  Paid: 'green',
-  PartiallyPaid: 'amber',
-  Issued: 'blue',
+const STATUS_TONES: Record<string, BadgeTone> = {
   Draft: 'slate',
-  Overdue: 'red',
-  Cancelled: 'slate',
+  Submitted: 'amber',
+  Cleared: 'green',
+  Finalized: 'blue',
+  SubmissionFailed: 'red',
+  ClearanceFailed: 'red',
+  Voided: 'red',
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Columns ─────────────────────────────────────────────────────────────────
 
-function fmt(n: number) {
-  return `SAR ${n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
-function matchesSearch(inv: Invoice, term: string): boolean {
-  const hay = `${inv.invoiceNumber} ${inv.customerDisplayName} ${inv.vehiclePlate} ${inv.vehicleMakeModel}`.toLowerCase()
-  return hay.includes(term.toLowerCase())
-}
-
-function matchesCustomer(inv: Invoice, term: string): boolean {
-  return inv.customerDisplayName.toLowerCase().includes(term.toLowerCase())
-}
-
-function matchesVehicle(inv: Invoice, term: string): boolean {
-  const hay = `${inv.vehiclePlate} ${inv.vehicleMakeModel}`.toLowerCase()
-  return hay.includes(term.toLowerCase())
-}
-
-function inDateRange(inv: Invoice, from: string, to: string): boolean {
-  if (from && inv.issuedDate < from) return false
-  if (to && inv.issuedDate > to) return false
-  return true
-}
+const COLUMNS: Column<Invoice>[] = [
+  {
+    key: 'invoiceNumber',
+    header: 'Invoice #',
+    width: '110px',
+    render: (r) => <span className="font-mono text-xs font-semibold">{r.invoiceNumber}</span>,
+  },
+  {
+    key: 'customer',
+    header: 'Customer',
+    render: (r) => <span className="font-medium text-slate-800">{r.customerDisplayName}</span>,
+  },
+  {
+    key: 'vehicle',
+    header: 'Vehicle',
+    render: (r) => <span className="text-slate-700">{r.vehicleMakeModel}</span>,
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    width: '100px',
+    render: (r) => <StatusBadge tone={STATUS_TONES[r.status] ?? 'slate'}>{r.status}</StatusBadge>,
+  },
+  {
+    key: 'issuedDate',
+    header: 'Issue Date',
+    width: '100px',
+    render: (r) => <DateCell date={r.issuedDate} />,
+  },
+  {
+    key: 'dueDate',
+    header: 'Due Date',
+    width: '100px',
+    render: (r) => <DateCell date={r.dueDate} />,
+  },
+  {
+    key: 'subTotal',
+    header: 'Base Amount',
+    width: '120px',
+    align: 'right',
+    render: (r) => <MoneyCell amount={r.subTotalSar} />,
+  },
+  {
+    key: 'vat',
+    header: 'VAT',
+    width: '100px',
+    align: 'right',
+    render: (r) => <MoneyCell amount={r.vatAmountSar} />,
+  },
+  {
+    key: 'total',
+    header: 'Total',
+    width: '120px',
+    align: 'right',
+    render: (r) => <MoneyCell amount={r.totalSar} />,
+  },
+]
 
 // ─── Page component ──────────────────────────────────────────────────────────
 
 export default function InvoicesPage() {
-  const router = useRouter()
-
   // Data state
   const [data, setData] = useState<PagedResult<Invoice> | null>(null)
   const [loading, setLoading] = useState(false)
@@ -63,14 +113,10 @@ export default function InvoicesPage() {
 
   // Filter state
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<InvoiceStatus | ''>('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [customerFilter, setCustomerFilter] = useState('')
-  const [vehicleFilter, setVehicleFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
 
   // Detail panel state
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
+  const [selected, setSelected] = useState<Invoice | null>(null)
 
   // ─── Data loading ────────────────────────────────────────────────────────
 
@@ -78,7 +124,7 @@ export default function InvoicesPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await bff.getInvoices(page, PAGE_SIZE, undefined, undefined, statusFilter || undefined)
+      const res = await bff.getInvoices(page, PAGE_SIZE, undefined, undefined, (statusFilter || undefined) as InvoiceStatus | undefined)
       setData(res)
     } catch (e) {
       setError((e as Error).message)
@@ -92,344 +138,128 @@ export default function InvoicesPage() {
     return () => clearTimeout(h)
   }, [load])
 
-  // ─── Client-side filtering ──────────────────────────────────────────────
+  // ─── Client-side search filter ─────────────────────────────────────────
 
   const filteredItems = useMemo(() => {
     if (!data) return []
+    if (!search) return data.items
+    const term = search.toLowerCase()
     return data.items.filter((inv) => {
-      if (search && !matchesSearch(inv, search)) return false
-      if (customerFilter && !matchesCustomer(inv, customerFilter)) return false
-      if (vehicleFilter && !matchesVehicle(inv, vehicleFilter)) return false
-      if ((dateFrom || dateTo) && !inDateRange(inv, dateFrom, dateTo)) return false
-      return true
+      const hay = `${inv.invoiceNumber} ${inv.customerDisplayName}`.toLowerCase()
+      return hay.includes(term)
     })
-  }, [data, search, customerFilter, vehicleFilter, dateFrom, dateTo])
+  }, [data, search])
 
-  // ─── Summary totals ────────────────────────────────────────────────────
-
-  const totals = useMemo(() => {
-    const count = filteredItems.length
-    const totalAmount = filteredItems.reduce((s, i) => s + i.totalSar, 0)
-    const totalPaid = filteredItems.reduce((s, i) => s + i.paidAmountSar, 0)
-    const outstanding = filteredItems.reduce((s, i) => s + i.balanceSar, 0)
-    return { count, totalAmount, totalPaid, outstanding }
-  }, [filteredItems])
-
-  const totalPages = data?.totalPages ?? 1
-
-  // ─── CSV export ─────────────────────────────────────────────────────────
-
-  function downloadCsv() {
-    if (filteredItems.length === 0) return
-    const headers = [
-      'Invoice #', 'Customer', 'Vehicle', 'Plate', 'Period Start', 'Period End',
-      'Issued', 'Due', 'Status', 'Sub-Total', 'VAT', 'Total', 'Paid', 'Balance',
-    ]
-    const rows = filteredItems.map((inv) => [
-      inv.invoiceNumber,
-      inv.customerDisplayName,
-      inv.vehicleMakeModel,
-      inv.vehiclePlate,
-      inv.billingPeriodStart,
-      inv.billingPeriodEnd,
-      inv.issuedDate,
-      inv.dueDate,
-      inv.status,
-      String(inv.subTotalSar),
-      String(inv.vatAmountSar),
-      String(inv.totalSar),
-      String(inv.paidAmountSar),
-      String(inv.balanceSar),
-    ])
-
-    const csvContent = [headers, ...rows]
-      .map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(','))
-      .join('\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `invoices-${new Date().toISOString().substring(0, 10)}.csv`
-    a.click()
-  }
-
-  // ─── Row click handler ──────────────────────────────────────────────────
-
-  function handleRowClick(inv: Invoice) {
-    setSelectedInvoice((prev) => (prev?.id === inv.id ? null : inv))
-  }
-
-  // ─── Render ─────────────────────────────────────────────────────────────
+  // ─── Render ────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Invoices"
-        subtitle="Monthly rental invoices -- generate, track and collect."
-        action={
-          <div className="flex gap-2">
-            <SecondaryButton onClick={downloadCsv}>Export CSV</SecondaryButton>
-            <SecondaryButton onClick={() => router.push('/invoices/generate')}>Generate Invoices</SecondaryButton>
-            <PrimaryButton onClick={() => router.push('/leases')}>View Contracts</PrimaryButton>
-          </div>
-        }
-      />
+    <PageShell
+      title="Invoices"
+      subtitle="Monthly rental invoices -- generate, track and collect."
+    >
+      <FilterBar>
+        <SearchBox
+          value={search}
+          onChange={(v) => { setPage(1); setSearch(v) }}
+          placeholder="Invoice #, customer..."
+        />
+        <FilterPill
+          value={statusFilter}
+          onChange={(v) => { setPage(1); setStatusFilter(v) }}
+          options={STATUS_OPTIONS}
+          placeholder="All statuses"
+        />
+      </FilterBar>
 
-      {/* ── Filters ─────────────────────────────────────────────────────────── */}
-      <Toolbar>
-        <ToolbarGroup>
-          <SearchInput
-            value={search}
-            onChange={(v) => { setPage(1); setSearch(v) }}
-            placeholder="Invoice #, customer, plate..."
-          />
-          <select
-            value={statusFilter}
-            onChange={(e) => { setPage(1); setStatusFilter(e.target.value as InvoiceStatus | '') }}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm"
-          >
-            <option value="">All statuses</option>
-            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => { setPage(1); setDateFrom(e.target.value) }}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm"
-            title="From date"
-          />
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => { setPage(1); setDateTo(e.target.value) }}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm"
-            title="To date"
-          />
-        </ToolbarGroup>
-        <ToolbarGroup>
-          <input
-            type="text"
-            value={customerFilter}
-            onChange={(e) => { setPage(1); setCustomerFilter(e.target.value) }}
-            placeholder="Customer name..."
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm"
-          />
-          <input
-            type="text"
-            value={vehicleFilter}
-            onChange={(e) => { setPage(1); setVehicleFilter(e.target.value) }}
-            placeholder="Vehicle / plate..."
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm"
-          />
-        </ToolbarGroup>
-      </Toolbar>
-
-      {/* ── Summary bar ─────────────────────────────────────────────────────── */}
-      {data && (
-        <Card className="px-4 py-3">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-            <div className="text-slate-600">
-              <span className="font-medium text-slate-900">Total Invoices:</span>{' '}
-              {totals.count}
-            </div>
-            <div className="text-slate-600">
-              <span className="font-medium text-slate-900">Total Amount:</span>{' '}
-              {fmt(totals.totalAmount)}
-            </div>
-            <div className="text-slate-600">
-              <span className="font-medium text-slate-900">Total Paid:</span>{' '}
-              {fmt(totals.totalPaid)}
-            </div>
-            <div className={totals.outstanding > 0 ? 'font-semibold text-red-700' : 'text-slate-600'}>
-              <span className={totals.outstanding > 0 ? 'font-bold text-red-800' : 'font-medium text-slate-900'}>Outstanding:</span>{' '}
-              {fmt(totals.outstanding)}
-            </div>
-          </div>
-        </Card>
+      {error && (
+        <div className="border-b border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+          {error}
+          <button type="button" onClick={load} className="ml-2 underline">Retry</button>
+        </div>
       )}
 
-      {/* ── Error / loading ──────────────────────────────────────────────────── */}
-      {error && <ErrorBox message={error} onRetry={load} retryLabel="Retry" />}
-      {loading && <Spinner label="Loading invoices..." />}
+      <div className="flex">
+        <div className={`flex-1 ${selected ? 'max-w-[calc(100%-400px)]' : ''}`}>
+          <DataGrid<Invoice>
+            columns={COLUMNS}
+            rows={filteredItems}
+            totalCount={data?.totalCount ?? 0}
+            page={page}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+            onRowClick={(row) => setSelected((prev) => (prev?.id === row.id ? null : row))}
+            selectedId={selected?.id ?? null}
+            emptyMessage="No invoices found."
+            loading={loading}
+          />
+        </div>
 
-      {/* ── Data table ───────────────────────────────────────────────────────── */}
-      {!loading && data && (
-        <>
-          <DataTable>
-            <DataTableMeta>
-              Page {page} of {totalPages} ({data.totalCount} total records)
-            </DataTableMeta>
-            <table className="w-full text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50/80">
-                <tr>
-                  <TableHeadCell>Invoice #</TableHeadCell>
-                  <TableHeadCell>Customer</TableHeadCell>
-                  <TableHeadCell>Vehicle</TableHeadCell>
-                  <TableHeadCell>Plate</TableHeadCell>
-                  <TableHeadCell>Period</TableHeadCell>
-                  <TableHeadCell>Issued</TableHeadCell>
-                  <TableHeadCell>Due</TableHeadCell>
-                  <TableHeadCell align="end">Total (SAR)</TableHeadCell>
-                  <TableHeadCell align="end">Paid (SAR)</TableHeadCell>
-                  <TableHeadCell align="end">Balance (SAR)</TableHeadCell>
-                  <TableHeadCell>Status</TableHeadCell>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredItems.length === 0 && (
-                  <tr>
-                    <td colSpan={11} className="px-3 py-10 text-center text-slate-400">
-                      No invoices found.
-                    </td>
-                  </tr>
-                )}
-                {filteredItems.map((inv) => (
-                  <tr
-                    key={inv.id}
-                    className={`cursor-pointer border-t border-slate-100 transition hover:bg-brand-50/50 ${
-                      selectedInvoice?.id === inv.id ? 'bg-brand-50' : ''
-                    }`}
-                    onClick={() => handleRowClick(inv)}
-                  >
-                    <TableCell className="font-mono text-xs font-bold">{inv.invoiceNumber}</TableCell>
-                    <TableCell className="text-slate-800">{inv.customerDisplayName}</TableCell>
-                    <TableCell className="text-xs text-slate-600">{inv.vehicleMakeModel}</TableCell>
-                    <TableCell className="font-mono text-xs">{inv.vehiclePlate}</TableCell>
-                    <TableCell className="text-xs text-slate-600">{inv.billingPeriodStart} - {inv.billingPeriodEnd}</TableCell>
-                    <TableCell className="text-xs text-slate-600">{inv.issuedDate}</TableCell>
-                    <TableCell className="text-xs text-slate-600">{inv.dueDate}</TableCell>
-                    <TableCell align="end" className="font-mono text-xs">{fmt(inv.totalSar)}</TableCell>
-                    <TableCell align="end" className="font-mono text-xs text-green-700">
-                      {inv.paidAmountSar > 0 ? fmt(inv.paidAmountSar) : '--'}
-                    </TableCell>
-                    <TableCell
-                      align="end"
-                      className={`font-mono text-xs font-semibold ${inv.balanceSar > 0 ? 'text-red-700' : 'text-slate-400'}`}
-                    >
-                      {inv.balanceSar > 0 ? fmt(inv.balanceSar) : '--'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge tone={STATUS_TONES[inv.status]}>{inv.status}</Badge>
-                    </TableCell>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </DataTable>
-
-          {/* ── Pagination ──────────────────────────────────────────────────── */}
-          <div className="flex items-center justify-between text-xs text-slate-600">
-            <span>
-              Showing {filteredItems.length} of {data.totalCount} invoices
-            </span>
-            <div className="flex gap-2">
-              <SecondaryButton
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="px-2 py-1 text-xs"
-              >
-                Previous
-              </SecondaryButton>
-              <SecondaryButton
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="px-2 py-1 text-xs"
-              >
-                Next
-              </SecondaryButton>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* ── Detail panel ─────────────────────────────────────────────────────── */}
-      {selectedInvoice && (
-        <Card className="p-5">
-          <div className="mb-4 flex items-start justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900">
-                {selectedInvoice.invoiceNumber}
-              </h3>
-              <div className="mt-1">
-                <Badge tone={STATUS_TONES[selectedInvoice.status]}>{selectedInvoice.status}</Badge>
-              </div>
-            </div>
-            <SecondaryButton onClick={() => setSelectedInvoice(null)} className="px-2 py-1 text-xs">
-              Close
-            </SecondaryButton>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Customer</div>
-              <div className="mt-0.5 text-slate-800">{selectedInvoice.customerDisplayName}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Vehicle</div>
-              <div className="mt-0.5 text-slate-800">{selectedInvoice.vehicleMakeModel}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Plate (EN / AR)</div>
-              <div className="mt-0.5 text-slate-800">
-                {selectedInvoice.vehiclePlate} / {selectedInvoice.vehiclePlateAr}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Billing Period</div>
-              <div className="mt-0.5 text-slate-800">
-                {selectedInvoice.billingPeriodStart} - {selectedInvoice.billingPeriodEnd}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Issued</div>
-              <div className="mt-0.5 text-slate-800">{selectedInvoice.issuedDate}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Due</div>
-              <div className="mt-0.5 text-slate-800">{selectedInvoice.dueDate}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Sub-Total</div>
-              <div className="mt-0.5 font-mono text-slate-800">{fmt(selectedInvoice.subTotalSar)}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">VAT</div>
-              <div className="mt-0.5 font-mono text-slate-800">{fmt(selectedInvoice.vatAmountSar)}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Total</div>
-              <div className="mt-0.5 font-mono font-semibold text-slate-900">{fmt(selectedInvoice.totalSar)}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Paid</div>
-              <div className="mt-0.5 font-mono text-green-700">{fmt(selectedInvoice.paidAmountSar)}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Balance</div>
-              <div className={`mt-0.5 font-mono font-semibold ${selectedInvoice.balanceSar > 0 ? 'text-red-700' : 'text-slate-400'}`}>
-                {fmt(selectedInvoice.balanceSar)}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-5 flex gap-2 border-t border-slate-200 pt-4">
-            <PrimaryButton onClick={() => router.push(`/invoices/${selectedInvoice.id}`)}>
-              Open Full Invoice
-            </PrimaryButton>
-            <SecondaryButton
-              onClick={() => {
-                const w = window.open(`/invoices/${selectedInvoice.id}`, '_blank')
-                if (w) {
-                  w.addEventListener('afterprint', () => w.close())
-                  w.addEventListener('load', () => setTimeout(() => w.print(), 500))
-                }
-              }}
-            >
-              Print
-            </SecondaryButton>
-          </div>
-        </Card>
-      )}
-    </div>
+        <DetailPanel
+          open={!!selected}
+          onClose={() => setSelected(null)}
+          title={selected?.invoiceNumber ?? ''}
+          {...(selected?.customerDisplayName ? { subtitle: selected.customerDisplayName } : {})}
+          {...(selected ? { badge: <StatusBadge tone={STATUS_TONES[selected.status] ?? 'slate'}>{selected.status}</StatusBadge> } : {})}
+        >
+          {selected && (
+            <>
+              <DetailSection title="Invoice">
+                <DetailRow label="Invoice #" value={selected.invoiceNumber} />
+                <DetailRow label="Status" value={<StatusBadge tone={STATUS_TONES[selected.status] ?? 'slate'}>{selected.status}</StatusBadge>} />
+                <DetailRow label="Issue Date" value={<DateCell date={selected.issuedDate} />} />
+                <DetailRow label="Due Date" value={<DateCell date={selected.dueDate} />} />
+              </DetailSection>
+              <DetailSection title="Customer & Vehicle">
+                <DetailRow label="Customer" value={selected.customerDisplayName} />
+                <DetailRow label="Vehicle" value={selected.vehicleMakeModel} />
+                <DetailRow label="Plate (EN)" value={selected.vehiclePlate} />
+                <DetailRow label="Plate (AR)" value={selected.vehiclePlateAr} />
+              </DetailSection>
+              <DetailSection title="Amounts">
+                <DetailRow label="Sub-Total" value={<MoneyCell amount={selected.subTotalSar} />} />
+                <DetailRow label="VAT" value={<MoneyCell amount={selected.vatAmountSar} />} />
+                <DetailRow label="Total" value={<MoneyCell amount={selected.totalSar} />} />
+                <DetailRow label="Paid" value={<MoneyCell amount={selected.paidAmountSar} />} />
+                <DetailRow
+                  label="Balance"
+                  value={
+                    <span className={selected.balanceSar > 0 ? 'font-semibold text-red-700' : ''}>
+                      <MoneyCell amount={selected.balanceSar} />
+                    </span>
+                  }
+                />
+              </DetailSection>
+              {(selected.allocations?.length ?? 0) > 0 && (
+                <DetailSection title={`Payments Applied (${selected.allocations!.length})`}>
+                  <div className="space-y-1">
+                    {selected.allocations!.map((a, i) => (
+                      <div key={i} className="flex items-center justify-between rounded border border-slate-200 px-2 py-1.5 text-[11px]">
+                        <span className="font-mono font-medium text-slate-700">{a.referenceNumber}</span>
+                        <span className="font-mono tabular-nums"><MoneyCell amount={a.amount} /></span>
+                      </div>
+                    ))}
+                  </div>
+                </DetailSection>
+              )}
+              {selected.notes && (
+                <DetailSection title="Notes">
+                  <p className="text-xs text-slate-600">{selected.notes}</p>
+                </DetailSection>
+              )}
+              <DetailSection title="Actions">
+                <div className="flex flex-col gap-2">
+                  <Link href={`/invoices/${selected.id}`} className="block w-full rounded-md bg-brand-700 px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-brand-800">
+                    Open Full View
+                  </Link>
+                  <Link href={`/leases/${selected.leaseId}`} className="block w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-center text-xs font-medium text-slate-700 hover:bg-slate-50">
+                    View Contract
+                  </Link>
+                </div>
+              </DetailSection>
+            </>
+          )}
+        </DetailPanel>
+      </div>
+    </PageShell>
   )
 }

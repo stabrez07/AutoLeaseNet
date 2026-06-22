@@ -24,6 +24,7 @@ public sealed class LeaseConfiguration : IEntityTypeConfiguration<Lease>
 
         // References (nullable until Day D wires domain lookups in SaveContract)
         builder.Property(l => l.CustomerId);
+        builder.Property(l => l.ContractId);
         builder.Property(l => l.VehicleId);
         builder.Property(l => l.PrimaryDriverId);
         builder.Property(l => l.ExtraDriverId);

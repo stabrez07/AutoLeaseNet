@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useLocale } from '../../../lib/locale-provider'
 import { bff, type QuotationDetail } from '../../../lib/bff-client'
 import { Badge, Card, ErrorBox, PageHeader, Spinner } from '../../../components/ui'
+import { CompanyLogo } from '../../../components/company-logo'
 
 const STATUS_TONES: Record<string, 'green' | 'amber' | 'blue' | 'slate' | 'red'> = {
   Draft: 'slate',
@@ -111,8 +112,13 @@ export default function QuotationDetailPage() {
       <style dangerouslySetInnerHTML={{ __html: printStyles }} />
       {/* Print-only letterhead */}
       <div className="print-only hidden border-b-2 border-slate-800 pb-3 mb-4">
-        <h1 className="text-xl font-bold">AutoLeaseNet — Vehicle Lease Quotation</h1>
-        <p className="text-sm text-slate-600">{quote.quoteNumber} | {quote.quoteDate} | {quote.contractType}</p>
+        <div className="flex items-center justify-between">
+          <CompanyLogo width={180} height={54} />
+          <div className="text-right">
+            <h1 className="text-xl font-bold">Vehicle Lease Quotation</h1>
+            <p className="text-sm text-slate-600">{quote.quoteNumber} | {quote.quoteDate} | {quote.contractType}</p>
+          </div>
+        </div>
       </div>
       <PageHeader
         title={`${d.title} — ${quote.quoteNumber}`}
@@ -160,45 +166,68 @@ export default function QuotationDetailPage() {
           </Card>
 
           {/* Line items */}
-          <Card className="overflow-hidden">
-            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-              <h2 className="text-sm font-semibold text-slate-800">{d.lines}</h2>
-            </div>
-            <table className="w-full text-xs">
-              <thead className="bg-slate-100 text-slate-600">
-                <tr>
-                  <th className="px-3 py-2 text-start font-medium">#</th>
-                  <th className="px-3 py-2 text-start font-medium">Type</th>
-                  <th className="px-3 py-2 text-start font-medium">Description</th>
-                  <th className="px-3 py-2 text-end font-medium">Qty</th>
-                  <th className="px-3 py-2 text-end font-medium">Unit Price</th>
-                  <th className="px-3 py-2 text-end font-medium">Disc %</th>
-                  <th className="px-3 py-2 text-end font-medium">Line Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {quote.lines.length === 0 && (
-                  <tr><td colSpan={7} className="px-3 py-4 text-center text-slate-400">No lines yet.</td></tr>
-                )}
-                {quote.lines.map(line => (
-                  <tr key={line.id} className="border-t border-slate-100">
-                    <td className="px-3 py-2 text-slate-500">{line.lineNumber}</td>
-                    <td className="px-3 py-2">
-                      <Badge tone="slate">{line.itemType}</Badge>
-                    </td>
-                    <td className="px-3 py-2">
-                      <div>{line.description}</div>
-                      {line.vehicleSpecRef && <div className="text-slate-400">{line.vehicleSpecRef}</div>}
-                    </td>
-                    <td className="px-3 py-2 text-end">{line.quantity}</td>
-                    <td className="px-3 py-2 text-end font-mono">{line.unitPriceSar.toLocaleString('en-SA', { minimumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-2 text-end">{line.discountPercent}%</td>
-                    <td className="px-3 py-2 text-end font-mono font-medium">{line.lineTotalSar.toLocaleString('en-SA', { minimumFractionDigits: 2 })}</td>
+          {quote.lines.length === 0 && status === 'Draft' ? (
+            <Card className="p-8 text-center">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50">
+                <svg className="h-7 w-7 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                </svg>
+              </div>
+              <h3 className="text-sm font-semibold text-slate-800">No line items yet</h3>
+              <p className="mx-auto mt-1 max-w-sm text-xs text-slate-500">
+                This quotation has no line items. Add vehicle lease items to build your quote — select Make, Model, Year, Quantity, and Unit Price for each line.
+              </p>
+              <button
+                onClick={() => router.push(`/quotations/new?edit=${id}`)}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-800"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Add Line Items
+              </button>
+            </Card>
+          ) : (
+            <Card className="overflow-hidden">
+              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <h2 className="text-sm font-semibold text-slate-800">{d.lines}</h2>
+              </div>
+              <table className="w-full text-xs">
+                <thead className="bg-slate-100 text-slate-600">
+                  <tr>
+                    <th className="px-3 py-2 text-start font-medium">#</th>
+                    <th className="px-3 py-2 text-start font-medium">Type</th>
+                    <th className="px-3 py-2 text-start font-medium">Description</th>
+                    <th className="px-3 py-2 text-end font-medium">Qty</th>
+                    <th className="px-3 py-2 text-end font-medium">Unit Price</th>
+                    <th className="px-3 py-2 text-end font-medium">Disc %</th>
+                    <th className="px-3 py-2 text-end font-medium">Line Total</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
+                </thead>
+                <tbody>
+                  {quote.lines.length === 0 && (
+                    <tr><td colSpan={7} className="px-3 py-4 text-center text-slate-400">No lines yet.</td></tr>
+                  )}
+                  {quote.lines.map(line => (
+                    <tr key={line.id} className="border-t border-slate-100">
+                      <td className="px-3 py-2 text-slate-500">{line.lineNumber}</td>
+                      <td className="px-3 py-2">
+                        <Badge tone="slate">{line.itemType}</Badge>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div>{line.description}</div>
+                        {line.vehicleSpecRef && <div className="text-slate-400">{line.vehicleSpecRef}</div>}
+                      </td>
+                      <td className="px-3 py-2 text-end">{line.quantity}</td>
+                      <td className="px-3 py-2 text-end font-mono">{line.unitPriceSar.toLocaleString('en-SA', { minimumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 text-end">{line.discountPercent}%</td>
+                      <td className="px-3 py-2 text-end font-mono font-medium">{line.lineTotalSar.toLocaleString('en-SA', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
 
           {/* Pricing */}
           <Card className="p-5">
@@ -265,9 +294,13 @@ export default function QuotationDetailPage() {
               {status === 'Draft' && (
                 <button
                   onClick={() => router.push(`/quotations/new?edit=${id}`)}
-                  className="w-full rounded-md border border-brand-600 px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50"
+                  className={`w-full rounded-md px-3 py-2 text-sm font-medium ${
+                    quote.lines.length === 0
+                      ? 'bg-brand-700 text-white hover:bg-brand-800'
+                      : 'border border-brand-600 text-brand-700 hover:bg-brand-50'
+                  }`}
                 >
-                  Edit Quotation / Add Lines
+                  {quote.lines.length === 0 ? 'Add Line Items' : 'Edit Quotation / Add Lines'}
                 </button>
               )}
 

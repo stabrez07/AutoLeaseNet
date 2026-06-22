@@ -45,6 +45,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IInspectionRepository, EfInspectionRepository>();
         services.AddScoped<IIncidentRepository, EfIncidentRepository>();
         services.AddScoped<IQuotationRepository, EfQuotationRepository>();
+        services.AddScoped<IRfqRepository, EfRfqRepository>();
         services.AddScoped<IApprovalTierRepository, EfApprovalTierRepository>();
         services.AddScoped<IPricingVersionRepository, EfPricingVersionRepository>();
         services.AddScoped<IPricingFormulaDefinitionRepository, EfPricingFormulaDefinitionRepository>();

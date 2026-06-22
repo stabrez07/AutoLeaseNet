@@ -35,6 +35,12 @@ function pricingVersionGuid(i) { return guid('e1e1e1e1-0001', i); }
 function pricingDiscountGuid(i) { return guid('e2e2e2e2-0001', i); }
 function pricingFormulaGuid(i) { return guid('e3e3e3e3-0001', i); }
 function accountManagerGuid(i) { return guid('f1f1f1f1-0001', i); }
+function paymentGuid(i) { return guid('f2f2f2f2-0001', i); }
+function rfqGuid(i) { return guid('f4f4f4f4-0001', i); }
+function rfqHistoryGuid(ri, hi) { return guid(`f5f5f5f5-${ri.toString(16).padStart(4, '0')}`, hi); }
+function paymentAllocationGuid(pi, ai) { return guid(`f3f3f3f3-${pi.toString(16).padStart(4, '0')}`, ai); }
+function contractGuid(i) { return guid('a5a5a5a5-0001', i); }
+function contractLineGuid(ci, li) { return guid(`a6a6a6a6-${ci.toString(16).padStart(4, '0')}`, li); }
 
 // ─── SQL escape helper ────────────────────────────────────────────────────────
 function esc(val) {
@@ -332,10 +338,10 @@ function generateVehicles(branches) {
     const monthsOwned = 6 + (i % 24);
     const bookValue = purchasePrice - (depreciationPerMonth * monthsOwned);
 
-    // status: first 80 available, next 30 leased, last 10 maintenance
-    let status = 0; // Available
-    if (i > 80 && i <= 110) status = 1; // Leased
-    if (i > 110) status = 2; // Maintenance
+    // status: Available=1, Reserved=2, OnRent=3, InService=4
+    let status = 1; // Available
+    if (i > 80 && i <= 110) status = 3; // OnRent
+    if (i > 110) status = 4; // InService
 
     vehicles.push({
       id: vehicleGuid(i),
@@ -384,7 +390,7 @@ function generateDrivers(customers) {
 
     drivers.push({
       id: driverGuid(i),
-      status: i <= 180 ? 0 : i <= 195 ? 1 : 2,
+      status: i <= 180 ? 1 : i <= 195 ? 2 : 3, // Active=1, Suspended=2, Banned=3
       customerId: customerGuid(custIdx),
       personNameEn: `${firstEn} ${lastEn}`,
       personNameAr: `${firstAr} ${lastAr}`,
@@ -666,6 +672,83 @@ function generateQuotationApprovals(quotations) {
   return approvals;
 }
 
+function generateRfqs(customers) {
+  const rfqs = [];
+  const rfqHistories = [];
+  const stages = ['Draft', 'Qualified', 'Proposal', 'Negotiation', 'Won', 'Lost'];
+  const stageNums = { Draft: 1, Qualified: 2, Proposal: 3, Negotiation: 4, Won: 5, Lost: 6 };
+  const sourceNums = { Direct: 1, CrmSync: 2, Website: 3, Referral: 4 };
+  const sources = ['Direct', 'CrmSync', 'Website', 'Referral'];
+  const categories = ['Sedan', 'SUV', 'Pickup', 'Van', 'Bus'];
+
+  for (let i = 1; i <= 25; i++) {
+    const custIdx = ((i - 1) % customers.length) + 1;
+    const stage = stages[(i - 1) % 6];
+    const source = sources[(i - 1) % 4];
+    const vehicleQty = 1 + (i % 20);
+    const tenure = [12, 24, 36, 48, 60][(i - 1) % 5];
+    const prob = stage === 'Won' ? 100 : stage === 'Lost' ? 0 : 10 + (i * 3) % 80;
+    const month = 1 + ((i - 1) % 6);
+    const closeMonth = Math.min(month + 2, 12);
+
+    rfqs.push({
+      id: rfqGuid(i),
+      rfqNumber: `RFQ-2026-${i.toString().padStart(6, '0')}`,
+      customerId: customerGuid(custIdx),
+      crmOpportunityId: source === 'CrmSync' ? `OPP-${(10000 + i).toString()}` : null,
+      source: sourceNums[source],
+      stage: stageNums[stage],
+      probability: prob,
+      vehicleCategories: JSON.stringify([categories[(i - 1) % 5]]),
+      vehicleQty,
+      tenureMonths: tenure,
+      annualMileageCapKm: 20000 + (i * 1000) % 30000,
+      services: JSON.stringify(['Maintenance', 'Insurance'].slice(0, 1 + (i % 2))),
+      expectedCloseDate: `2026-${closeMonth.toString().padStart(2, '0')}-15`,
+      ownerUserId: accountManagerGuid(1),
+      lostReason: stage === 'Lost' ? 'Price too high' : null,
+      notes: i % 3 === 0 ? 'Priority fleet deal' : null,
+      quotationId: null,
+    });
+
+    // Stage history: always has initial "Created" entry
+    rfqHistories.push({
+      id: rfqHistoryGuid(i, 1),
+      rfqId: rfqGuid(i),
+      fromStage: null,
+      toStage: stageNums.Draft,
+      changedByUserId: accountManagerGuid(1),
+      comment: 'Created',
+    });
+
+    // Add transition history for non-Draft stages
+    const stageOrder = ['Draft', 'Qualified', 'Proposal', 'Negotiation', 'Won', 'Lost'];
+    const currentIdx = stageOrder.indexOf(stage);
+    if (stage === 'Lost') {
+      rfqHistories.push({
+        id: rfqHistoryGuid(i, 2),
+        rfqId: rfqGuid(i),
+        fromStage: stageNums.Draft,
+        toStage: stageNums.Lost,
+        changedByUserId: accountManagerGuid(1),
+        comment: 'Price too high',
+      });
+    } else {
+      for (let s = 1; s <= Math.min(currentIdx, 4); s++) {
+        rfqHistories.push({
+          id: rfqHistoryGuid(i, s + 1),
+          rfqId: rfqGuid(i),
+          fromStage: stageNums[stageOrder[s - 1]],
+          toStage: stageNums[stageOrder[s]],
+          changedByUserId: accountManagerGuid(1),
+          comment: `Moved to ${stageOrder[s]}`,
+        });
+      }
+    }
+  }
+  return { rfqs, rfqHistories };
+}
+
 function generateInvoices(leases) {
   const invoices = [];
   // 40 invoices linked to leases
@@ -679,11 +762,11 @@ function generateInvoices(leases) {
     const vatSar = Math.round(baseAmount * 0.15 * 100) / 100;
     const totalSar = baseAmount + vatSar;
 
-    // status mix: 15 Paid, 15 Issued, 5 Overdue, 5 Draft
+    // status mix: Draft=0, Submitted=1, Cleared=2, Finalized=3
     let status;
-    if (i <= 15) status = 2; // Paid
-    else if (i <= 30) status = 1; // Issued
-    else if (i <= 35) status = 3; // Overdue
+    if (i <= 10) status = 3; // Finalized
+    else if (i <= 20) status = 2; // Cleared
+    else if (i <= 30) status = 1; // Submitted
     else status = 0; // Draft
 
     invoices.push({
@@ -701,6 +784,155 @@ function generateInvoices(leases) {
     });
   }
   return invoices;
+}
+
+function generatePayments(customers, invoices) {
+  const payments = [];
+  const allocations = [];
+  const methods = ['Cash', 'CreditCard', 'BankTransfer', 'Cheque', 'OnlineTransfer'];
+
+  // 35 payments from various customers
+  const uniqueCustomerIds = [...new Set(invoices.map(inv => inv.customerId))];
+  for (let i = 1; i <= 35; i++) {
+    const custId = uniqueCustomerIds[(i - 1) % uniqueCustomerIds.length];
+    const amount = 1500 + (i * 137) % 4000;
+    const method = methods[(i - 1) % methods.length];
+    const month = 1 + ((i - 1) % 6);
+    const day = 1 + ((i * 3) % 25);
+    const receivedDate = `2026-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+    const refNum = `REF-${(20260000 + i * 17).toString()}`;
+
+    // Some payments fully allocated, some partially, some unallocated
+    let remaining = amount;
+    const payAllocations = [];
+    if (i <= 20) {
+      // Allocate against invoices for this customer
+      const custInvoices = invoices.filter(inv => inv.customerId === custId);
+      if (custInvoices.length > 0) {
+        const inv = custInvoices[(i - 1) % custInvoices.length];
+        const allocAmount = Math.min(remaining, inv.totalSar);
+        payAllocations.push({
+          id: paymentAllocationGuid(i, 1),
+          advancePaymentId: paymentGuid(i),
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          allocatedAmountSar: allocAmount,
+        });
+        remaining -= allocAmount;
+      }
+    }
+
+    payments.push({
+      id: paymentGuid(i),
+      customerId: custId,
+      amount,
+      paymentMethod: method,
+      receivedDate,
+      referenceNumber: refNum,
+      notes: i % 5 === 0 ? 'Advance payment for fleet' : null,
+      remainingBalance: Math.max(0, Math.round(remaining * 100) / 100),
+    });
+
+    allocations.push(...payAllocations);
+  }
+  return { payments, allocations };
+}
+
+function generateContracts(quotations, quotationLines, leases) {
+  const contracts = [];
+  const contractLines = [];
+  // Create contracts from Accepted and some Approved quotations
+  const eligibleQuotations = quotations.filter(q =>
+    q.status === 'Accepted' || q.status === 'Approved' || q.status === 'SentToCustomer'
+  );
+
+  for (let ci = 0; ci < eligibleQuotations.length; ci++) {
+    const q = eligibleQuotations[ci];
+    const i = ci + 1;
+    const isAccepted = q.status === 'Accepted';
+    const status = isAccepted ? 2 : 1; // Active or Draft
+    const startDate = `2026-${(4 + (ci % 4)).toString().padStart(2, '0')}-01T08:00:00+03:00`;
+    const endMonth = 4 + (ci % 4) + q.estimatedDurationMonths;
+    const endYear = 2026 + Math.floor((endMonth - 1) / 12);
+    const endMo = ((endMonth - 1) % 12) + 1;
+    const endDate = `${endYear}-${endMo.toString().padStart(2, '0')}-01T08:00:00+03:00`;
+
+    const contractNumber = `CNT-2026-${i.toString().padStart(5, '0')}`;
+
+    // Get quotation lines for this quote to build contract lines
+    const qLines = quotationLines.filter(l => l.quotationId === q.id);
+    let totalVehicles = 0;
+    let monthlyRent = 0;
+
+    for (let li = 0; li < qLines.length; li++) {
+      const ql = qLines[li];
+      // Only vehicle rental lines become contract lines
+      if (ql.itemType === 'VehicleRental' && ql.vehicleSpecRef) {
+        const parts = ql.vehicleSpecRef.split('/');
+        const make = parts[0] || 'Toyota';
+        const model = parts[1] || 'Camry';
+        const year = parseInt(parts[2] || '2025', 10);
+        const lineTotal = ql.lineTotalSar;
+        contractLines.push({
+          id: contractLineGuid(i, li + 1),
+          contractId: contractGuid(i),
+          make, model, year,
+          description: `${make} ${model} ${year}`,
+          quantity: ql.quantity,
+          unitPriceSar: ql.unitPriceSar,
+          lineTotalSar: lineTotal,
+        });
+        totalVehicles += ql.quantity;
+        monthlyRent += lineTotal;
+      }
+    }
+    // If no vehicle lines found, create a default line
+    if (totalVehicles === 0) {
+      const vm = VEHICLE_MODELS[ci % VEHICLE_MODELS.length];
+      const qty = 2 + (ci % 3);
+      const unitPrice = 3000 + (ci * 200);
+      const lineTotal = qty * unitPrice;
+      contractLines.push({
+        id: contractLineGuid(i, 1),
+        contractId: contractGuid(i),
+        make: vm.make, model: vm.model, year: 2025,
+        description: `${vm.make} ${vm.model} 2025`,
+        quantity: qty, unitPriceSar: unitPrice, lineTotalSar: lineTotal,
+      });
+      totalVehicles = qty;
+      monthlyRent = lineTotal;
+    }
+
+    const totalContractValue = monthlyRent * q.estimatedDurationMonths;
+
+    contracts.push({
+      id: contractGuid(i),
+      contractNumber,
+      customerId: q.customerId,
+      quotationId: q.id,
+      status,
+      contractTypeCode: 1,
+      startDate, endDate,
+      durationMonths: q.estimatedDurationMonths,
+      totalVehicles,
+      monthlyRentSar: monthlyRent,
+      totalContractValueSar: totalContractValue,
+      paymentTermsDays: 30,
+      notes: null,
+    });
+  }
+
+  // Assign first N leases to contracts (3 leases per contract)
+  for (let ci = 0; ci < contracts.length; ci++) {
+    const c = contracts[ci];
+    if (c.status !== 2) continue; // Only active contracts get lease assignments
+    const startIdx = ci * 3;
+    for (let j = 0; j < 3 && startIdx + j < leases.length; j++) {
+      leases[startIdx + j].contractId = c.id;
+    }
+  }
+
+  return { contracts, contractLines };
 }
 
 function generatePricingVersions() {
@@ -756,15 +988,16 @@ GO
 }
 
 function batchHeader() {
-  return `DECLARE @TenantId UNIQUEIDENTIFIER = '${TENANT_ID}';
+  return `SET QUOTED_IDENTIFIER ON;
+DECLARE @TenantId UNIQUEIDENTIFIER = '${TENANT_ID}';
 DECLARE @Now DATETIMEOFFSET = '${NOW}';
 `;
 }
 
 function insertBranches(branches) {
-  let sql = `-- ═══════════════════════════════════════════════════════════════════════════════
+  let sql = `-- =============================================================================
 -- BRANCHES (${branches.length} rows)
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 ${batchHeader()}
 `;
   for (const b of branches) {
@@ -777,9 +1010,9 @@ VALUES ('${b.id}', ${esc(b.code)}, ${esc(b.nameEn)}, ${esc(b.nameAr)}, ${esc(b.c
 }
 
 function insertCustomers(customers) {
-  let sql = `-- ═══════════════════════════════════════════════════════════════════════════════
+  let sql = `-- =============================================================================
 -- CUSTOMERS (${customers.length} rows)
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 ${batchHeader()}
 `;
   for (const c of customers) {
@@ -792,9 +1025,9 @@ VALUES ('${c.id}', ${c.type}, ${c.status}, ${esc(c.displayName)}, ${esc(c.displa
 }
 
 function insertVehicles(vehicles) {
-  let sql = `-- ═══════════════════════════════════════════════════════════════════════════════
+  let sql = `-- =============================================================================
 -- VEHICLES (${vehicles.length} rows)
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 ${batchHeader()}
 `;
   for (const v of vehicles) {
@@ -807,9 +1040,9 @@ VALUES ('${v.id}', ${v.status}, ${esc(v.plateNumber)}, ${esc(v.plateLetters)}, $
 }
 
 function insertDrivers(drivers) {
-  let sql = `-- ═══════════════════════════════════════════════════════════════════════════════
+  let sql = `-- =============================================================================
 -- DRIVERS (${drivers.length} rows)
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 ${batchHeader()}
 `;
   for (const d of drivers) {
@@ -822,9 +1055,9 @@ VALUES ('${d.id}', ${d.status}, ${d.customerId ? `'${d.customerId}'` : 'NULL'}, 
 }
 
 function insertRentPolicies(policies) {
-  let sql = `-- ═══════════════════════════════════════════════════════════════════════════════
+  let sql = `-- =============================================================================
 -- RENT POLICIES (${policies.length} rows)
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 ${batchHeader()}
 `;
   for (const p of policies) {
@@ -837,9 +1070,9 @@ VALUES ('${p.id}', ${esc(p.code)}, ${esc(p.nameEn)}, ${esc(p.nameAr)}, ${esc(p.d
 }
 
 function insertExtendedCoverages(coverages) {
-  let sql = `-- ═══════════════════════════════════════════════════════════════════════════════
+  let sql = `-- =============================================================================
 -- EXTENDED COVERAGES (${coverages.length} rows)
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 ${batchHeader()}
 `;
   for (const c of coverages) {
@@ -851,10 +1084,41 @@ VALUES ('${c.id}', ${esc(c.code)}, ${esc(c.nameEn)}, ${esc(c.nameAr)}, ${esc(c.d
   return sql;
 }
 
+function insertRfqs(rfqs) {
+  let sql = `-- =============================================================================
+-- RFQS (${rfqs.length} rows)
+-- =============================================================================
+${batchHeader()}
+`;
+  for (const r of rfqs) {
+    sql += `INSERT INTO Rfqs (Id, RfqNumber, CustomerId, CrmOpportunityId, Source, Stage, Probability, VehicleCategories, VehicleQty, TenureMonths, AnnualMileageCapKm, Services, ExpectedCloseDate, OwnerUserId, LostReason, Notes, QuotationId, TenantId, CreatedAtUtc, UpdatedAtUtc)
+VALUES ('${r.id}', ${esc(r.rfqNumber)}, '${r.customerId}', ${esc(r.crmOpportunityId)}, ${r.source}, ${r.stage}, ${r.probability}, ${esc(r.vehicleCategories)}, ${r.vehicleQty}, ${r.tenureMonths}, ${r.annualMileageCapKm !== null ? r.annualMileageCapKm : 'NULL'}, ${esc(r.services)}, ${r.expectedCloseDate ? `'${r.expectedCloseDate}'` : 'NULL'}, '${r.ownerUserId}', ${esc(r.lostReason)}, ${esc(r.notes)}, ${r.quotationId ? `'${r.quotationId}'` : 'NULL'}, @TenantId, @Now, @Now);
+`;
+  }
+  sql += '\nGO\n\n';
+  return sql;
+}
+
+function insertRfqStageHistories(histories) {
+  if (histories.length === 0) return '';
+  let sql = `-- =============================================================================
+-- RFQ STAGE HISTORIES (${histories.length} rows)
+-- =============================================================================
+${batchHeader()}
+`;
+  for (const h of histories) {
+    sql += `INSERT INTO RfqStageHistories (Id, RfqId, FromStage, ToStage, ChangedByUserId, Comment, TenantId, CreatedAtUtc, UpdatedAtUtc)
+VALUES ('${h.id}', '${h.rfqId}', ${h.fromStage !== null ? h.fromStage : 'NULL'}, ${h.toStage}, '${h.changedByUserId}', ${esc(h.comment)}, @TenantId, @Now, @Now);
+`;
+  }
+  sql += '\nGO\n\n';
+  return sql;
+}
+
 function insertApprovalTiers(tiers) {
-  let sql = `-- ═══════════════════════════════════════════════════════════════════════════════
+  let sql = `-- =============================================================================
 -- APPROVAL TIERS (${tiers.length} rows)
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 ${batchHeader()}
 `;
   for (const t of tiers) {
@@ -867,14 +1131,45 @@ VALUES ('${t.id}', ${t.tierLevel}, ${esc(t.requiredRoleCode)}, ${t.minAmountSar}
 }
 
 function insertLeases(leases) {
-  let sql = `-- ═══════════════════════════════════════════════════════════════════════════════
+  let sql = `-- =============================================================================
 -- LEASES (${leases.length} rows)
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 ${batchHeader()}
 `;
   for (const l of leases) {
-    sql += `INSERT INTO Leases (Id, CustomerId, VehicleId, PrimaryDriverId, RentPolicyId, ExtendedCoverageId, WorkingBranchId, ReceiveBranchId, ReturnBranchId, TajeerContractNumber, Status, ContractStartUtc, ContractEndUtc, ContractTypeCode, AllowedKmPerDay, AllowedKmPerHour, AllowedLateHours, UnlimitedKm, RentAmount, PaidAmount, RemainingAmount, TotalAmount, VatAmount, PaymentMethodCode, ExtensionCount, PiiOptedOut, TenantId, CreatedAtUtc, UpdatedAtUtc, SavedAtUtc)
-VALUES ('${l.id}', '${l.customerId}', '${l.vehicleId}', '${l.primaryDriverId}', '${l.rentPolicyId}', ${l.extendedCoverageId ? `'${l.extendedCoverageId}'` : 'NULL'}, '${l.workingBranchId}', '${l.receiveBranchId}', '${l.returnBranchId}', ${l.tajeerContractNumber}, ${l.status}, '${l.contractStartUtc}', '${l.contractEndUtc}', ${l.contractTypeCode}, ${l.allowedKmPerDay}, ${l.allowedKmPerHour}, ${l.allowedLateHours}, ${bit(l.unlimitedKm)}, ${l.rentAmount}, ${l.paidAmount}, ${l.remainingAmount}, ${l.totalAmount}, ${l.vatAmount}, ${l.paymentMethodCode}, ${l.extensionCount}, ${bit(l.piiOptedOut)}, @TenantId, @Now, @Now, @Now);
+    sql += `INSERT INTO Leases (Id, ContractId, CustomerId, VehicleId, PrimaryDriverId, RentPolicyId, ExtendedCoverageId, WorkingBranchId, ReceiveBranchId, ReturnBranchId, TajeerContractNumber, Status, ContractStartUtc, ContractEndUtc, ContractTypeCode, AllowedKmPerDay, AllowedKmPerHour, AllowedLateHours, UnlimitedKm, RentAmount, PaidAmount, RemainingAmount, TotalAmount, VatAmount, PaymentMethodCode, ExtensionCount, PiiOptedOut, TenantId, CreatedAtUtc, UpdatedAtUtc, SavedAtUtc)
+VALUES ('${l.id}', ${l.contractId ? `'${l.contractId}'` : 'NULL'}, '${l.customerId}', '${l.vehicleId}', '${l.primaryDriverId}', '${l.rentPolicyId}', ${l.extendedCoverageId ? `'${l.extendedCoverageId}'` : 'NULL'}, '${l.workingBranchId}', '${l.receiveBranchId}', '${l.returnBranchId}', ${l.tajeerContractNumber}, ${l.status}, '${l.contractStartUtc}', '${l.contractEndUtc}', ${l.contractTypeCode}, ${l.allowedKmPerDay}, ${l.allowedKmPerHour}, ${l.allowedLateHours}, ${bit(l.unlimitedKm)}, ${l.rentAmount}, ${l.paidAmount}, ${l.remainingAmount}, ${l.totalAmount}, ${l.vatAmount}, ${l.paymentMethodCode}, ${l.extensionCount}, ${bit(l.piiOptedOut)}, @TenantId, @Now, @Now, @Now);
+`;
+  }
+  sql += '\nGO\n\n';
+  return sql;
+}
+
+function insertContracts(contracts) {
+  let sql = `-- =============================================================================
+-- CONTRACTS (${contracts.length} rows)
+-- =============================================================================
+${batchHeader()}
+`;
+  for (const c of contracts) {
+    sql += `INSERT INTO Contracts (Id, ContractNumber, CustomerId, QuotationId, Status, ContractTypeCode, StartDate, EndDate, DurationMonths, TotalVehicles, MonthlyRentSar, TotalContractValueSar, PaymentTermsDays, Notes, TenantId, CreatedAtUtc, UpdatedAtUtc)
+VALUES ('${c.id}', ${esc(c.contractNumber)}, '${c.customerId}', ${c.quotationId ? `'${c.quotationId}'` : 'NULL'}, ${esc(c.status === 2 ? 'Active' : c.status === 3 ? 'Suspended' : c.status === 4 ? 'Closed' : 'Draft')}, ${c.contractTypeCode}, '${c.startDate}', '${c.endDate}', ${c.durationMonths}, ${c.totalVehicles}, ${c.monthlyRentSar}, ${c.totalContractValueSar}, ${c.paymentTermsDays}, ${esc(c.notes)}, @TenantId, @Now, @Now);
+`;
+  }
+  sql += '\nGO\n\n';
+  return sql;
+}
+
+function insertContractLines(lines) {
+  if (lines.length === 0) return '';
+  let sql = `-- =============================================================================
+-- CONTRACT LINES (${lines.length} rows)
+-- =============================================================================
+${batchHeader()}
+`;
+  for (const l of lines) {
+    sql += `INSERT INTO ContractLines (Id, ContractId, Make, Model, Year, Description, Quantity, UnitPriceSar, LineTotalSar, TenantId, CreatedAtUtc, UpdatedAtUtc)
+VALUES ('${l.id}', '${l.contractId}', ${esc(l.make)}, ${esc(l.model)}, ${l.year}, ${esc(l.description)}, ${l.quantity}, ${l.unitPriceSar}, ${l.lineTotalSar}, @TenantId, @Now, @Now);
 `;
   }
   sql += '\nGO\n\n';
@@ -882,9 +1177,9 @@ VALUES ('${l.id}', '${l.customerId}', '${l.vehicleId}', '${l.primaryDriverId}', 
 }
 
 function insertQuotations(quotations) {
-  let sql = `-- ═══════════════════════════════════════════════════════════════════════════════
+  let sql = `-- =============================================================================
 -- QUOTATIONS (${quotations.length} rows)
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 ${batchHeader()}
 `;
   for (const q of quotations) {
@@ -897,9 +1192,9 @@ VALUES ('${q.id}', ${esc(q.quoteNumber)}, '${q.customerId}', '${q.accountManager
 }
 
 function insertQuotationLines(lines) {
-  let sql = `-- ═══════════════════════════════════════════════════════════════════════════════
+  let sql = `-- =============================================================================
 -- QUOTATION LINES (${lines.length} rows)
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 ${batchHeader()}
 `;
   for (const l of lines) {
@@ -912,9 +1207,9 @@ VALUES ('${l.id}', '${l.quotationId}', ${l.lineNumber}, ${esc(l.itemType)}, ${es
 }
 
 function insertQuotationApprovals(approvals) {
-  let sql = `-- ═══════════════════════════════════════════════════════════════════════════════
+  let sql = `-- =============================================================================
 -- QUOTATION APPROVALS (${approvals.length} rows)
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 ${batchHeader()}
 `;
   for (const a of approvals) {
@@ -927,9 +1222,9 @@ VALUES ('${a.id}', '${a.quotationId}', ${a.tierLevel}, ${esc(a.requiredRoleCode)
 }
 
 function insertInvoices(invoices) {
-  let sql = `-- ═══════════════════════════════════════════════════════════════════════════════
+  let sql = `-- =============================================================================
 -- INVOICES (${invoices.length} rows)
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 ${batchHeader()}
 `;
   for (const inv of invoices) {
@@ -941,10 +1236,41 @@ VALUES ('${inv.id}', ${esc(inv.invoiceNumber)}, '${inv.leaseId}', '${inv.custome
   return sql;
 }
 
+function insertPayments(payments) {
+  let sql = `-- =============================================================================
+-- ADVANCE PAYMENTS (${payments.length} rows)
+-- =============================================================================
+${batchHeader()}
+`;
+  for (const p of payments) {
+    sql += `INSERT INTO AdvancePayments (Id, CustomerId, Amount, PaymentMethod, ReceivedDate, ReferenceNumber, Notes, RemainingBalance, TenantId, CreatedAtUtc, UpdatedAtUtc)
+VALUES ('${p.id}', '${p.customerId}', ${p.amount}, ${esc(p.paymentMethod)}, '${p.receivedDate}', ${esc(p.referenceNumber)}, ${esc(p.notes)}, ${p.remainingBalance}, @TenantId, @Now, @Now);
+`;
+  }
+  sql += '\nGO\n\n';
+  return sql;
+}
+
+function insertPaymentAllocations(allocations) {
+  if (allocations.length === 0) return '';
+  let sql = `-- =============================================================================
+-- PAYMENT ALLOCATIONS (${allocations.length} rows)
+-- =============================================================================
+${batchHeader()}
+`;
+  for (const a of allocations) {
+    sql += `INSERT INTO PaymentAllocations (Id, AdvancePaymentId, InvoiceId, InvoiceNumber, AllocatedAmountSar, AllocatedAtUtc, TenantId, CreatedAtUtc, UpdatedAtUtc)
+VALUES ('${a.id}', '${a.advancePaymentId}', '${a.invoiceId}', ${esc(a.invoiceNumber)}, ${a.allocatedAmountSar}, @Now, @TenantId, @Now, @Now);
+`;
+  }
+  sql += '\nGO\n\n';
+  return sql;
+}
+
 function insertPricingVersions(versions) {
-  let sql = `-- ═══════════════════════════════════════════════════════════════════════════════
+  let sql = `-- =============================================================================
 -- PRICING VERSIONS (${versions.length} rows)
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 ${batchHeader()}
 `;
   for (const v of versions) {
@@ -957,9 +1283,9 @@ VALUES ('${v.id}', ${esc(v.name)}, ${esc(v.status)}, '${v.effectiveFrom}', ${v.e
 }
 
 function insertPricingDiscountPolicies(policies) {
-  let sql = `-- ═══════════════════════════════════════════════════════════════════════════════
+  let sql = `-- =============================================================================
 -- PRICING DISCOUNT POLICIES (${policies.length} rows)
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 ${batchHeader()}
 `;
   for (const p of policies) {
@@ -972,9 +1298,9 @@ VALUES ('${p.id}', ${p.maxDiscountPercent}, ${esc(p.allowedPresetsCsv)}, @Tenant
 }
 
 function insertPricingFormulas(formulas) {
-  let sql = `-- ═══════════════════════════════════════════════════════════════════════════════
+  let sql = `-- =============================================================================
 -- PRICING FORMULA DEFINITIONS (${formulas.length} rows)
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 ${batchHeader()}
 `;
   for (const f of formulas) {
@@ -1002,7 +1328,9 @@ function main() {
   const quotations = generateQuotations(customers);
   const quotationLines = generateQuotationLines(quotations);
   const quotationApprovals = generateQuotationApprovals(quotations);
+  const { contracts, contractLines } = generateContracts(quotations, quotationLines, leases);
   const invoices = generateInvoices(leases);
+  const { rfqs, rfqHistories } = generateRfqs(customers);
   const pricingVersions = generatePricingVersions();
   const pricingDiscountPolicies = generatePricingDiscountPolicies();
   const pricingFormulas = generatePricingFormulas();
@@ -1015,18 +1343,25 @@ function main() {
   sql += insertRentPolicies(rentPolicies);
   sql += insertExtendedCoverages(extCoverages);
   sql += insertApprovalTiers(approvalTiers);
+  sql += insertContracts(contracts);
+  sql += insertContractLines(contractLines);
   sql += insertLeases(leases);
   sql += insertQuotations(quotations);
   sql += insertQuotationLines(quotationLines);
   sql += insertQuotationApprovals(quotationApprovals);
   sql += insertInvoices(invoices);
+  sql += insertRfqs(rfqs);
+  sql += insertRfqStageHistories(rfqHistories);
+  const { payments, allocations: payAllocations } = generatePayments(customers, invoices);
+  sql += insertPayments(payments);
+  sql += insertPaymentAllocations(payAllocations);
   sql += insertPricingVersions(pricingVersions);
   sql += insertPricingDiscountPolicies(pricingDiscountPolicies);
   sql += insertPricingFormulas(pricingFormulas);
 
-  sql += `-- ═══════════════════════════════════════════════════════════════════════════════
+  sql += `-- =============================================================================
 -- SEED COMPLETE
--- ═══════════════════════════════════════════════════════════════════════════════
+-- =============================================================================
 PRINT 'Seed data inserted successfully.';
 GO
 `;
@@ -1042,11 +1377,17 @@ GO
   console.log(`  RentPolicies:      ${rentPolicies.length}`);
   console.log(`  ExtendedCoverages: ${extCoverages.length}`);
   console.log(`  ApprovalTiers:     ${approvalTiers.length}`);
-  console.log(`  Leases:            ${leases.length}`);
+  console.log(`  Contracts:         ${contracts.length}`);
+  console.log(`  ContractLines:     ${contractLines.length}`);
+  console.log(`  Leases:            ${leases.length} (${leases.filter(l => l.contractId).length} linked to contracts)`);
   console.log(`  Quotations:        ${quotations.length}`);
   console.log(`  QuotationLines:    ${quotationLines.length}`);
   console.log(`  QuotationApprovals:${quotationApprovals.length}`);
   console.log(`  Invoices:          ${invoices.length}`);
+  console.log(`  RFQs:              ${rfqs.length}`);
+  console.log(`  RFQ Histories:     ${rfqHistories.length}`);
+  console.log(`  Payments:          ${payments.length}`);
+  console.log(`  PaymentAllocations:${payAllocations.length}`);
   console.log(`  PricingVersions:   ${pricingVersions.length}`);
   console.log(`  PricingDiscounts:  ${pricingDiscountPolicies.length}`);
   console.log(`  PricingFormulas:   ${pricingFormulas.length}`);

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useLocale } from '../../../lib/locale-provider'
-import { bff, type CustomerDetail, type LeaseSummary, type VehicleSummary, type DriverSummary, type AuditEvent } from '../../../lib/bff-client'
+import { bff, type ContractSummary, type CustomerDetail, type CustomerInvoiceSummary, type CustomerPaymentSummary, type LeaseSummary, type VehicleSummary, type DriverSummary, type AuditEvent } from '../../../lib/bff-client'
 import { Badge, Card, ErrorBox, PageHeader, PrimaryButton, SecondaryButton, Spinner } from '../../../components/ui'
 
 function Field({ label, value }: { label: string; value: string | number | boolean | null | undefined }) {
@@ -37,7 +37,7 @@ const AUDIT_TONES: Record<string, 'green' | 'amber' | 'blue' | 'slate' | 'red'> 
   Created: 'green', Updated: 'blue', StatusChanged: 'amber', Deleted: 'red', Viewed: 'slate', Exported: 'slate',
 }
 
-type Tab = 'details' | 'leases' | 'vehicles' | 'drivers' | 'audit'
+type Tab = 'details' | 'contracts' | 'leases' | 'vehicles' | 'drivers' | 'invoices' | 'payments' | 'audit'
 
 export default function CustomerDetailPage() {
   const { t } = useLocale()
@@ -46,9 +46,12 @@ export default function CustomerDetailPage() {
   const c = t.crudCustomers
 
   const [data, setData] = useState<CustomerDetail | null>(null)
+  const [contracts, setContracts] = useState<ContractSummary[] | null>(null)
   const [leases, setLeases] = useState<LeaseSummary[] | null>(null)
   const [vehicles, setVehicles] = useState<VehicleSummary[] | null>(null)
   const [drivers, setDrivers] = useState<DriverSummary[] | null>(null)
+  const [invoices, setInvoices] = useState<CustomerInvoiceSummary[] | null>(null)
+  const [payments, setPayments] = useState<CustomerPaymentSummary[] | null>(null)
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -60,14 +63,17 @@ export default function CustomerDetailPage() {
   async function load() {
     setLoading(true); setError(null)
     try {
-      const [cust, ls, vs, ds, events] = await Promise.all([
+      const [cust, cnts, ls, vs, ds, inv, pay, events] = await Promise.all([
         bff.getCustomerById(id),
+        bff.getCustomerContracts(id).catch(() => [] as ContractSummary[]),
         bff.getCustomerLeases(id),
         bff.getCustomerVehicles(id),
         bff.getCustomerDrivers(id),
+        bff.getCustomerInvoices(id).catch(() => [] as CustomerInvoiceSummary[]),
+        bff.getCustomerPayments(id).catch(() => [] as CustomerPaymentSummary[]),
         bff.getAuditEvents('Customer', id).catch(() => [] as AuditEvent[]),
       ])
-      setData(cust); setLeases(ls); setVehicles(vs); setDrivers(ds); setAuditEvents(events)
+      setData(cust); setContracts(cnts); setLeases(ls); setVehicles(vs); setDrivers(ds); setInvoices(inv); setPayments(pay); setAuditEvents(events)
     } catch (e) { setError((e as Error).message) }
     finally { setLoading(false) }
   }
@@ -97,9 +103,12 @@ export default function CustomerDetailPage() {
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'details', label: t.common.details },
-    { key: 'leases', label: t.common.leases, ...(leases != null ? { count: leases.length } : {}) },
+    { key: 'contracts', label: 'Contracts', ...(contracts != null ? { count: contracts.length } : {}) },
+    { key: 'leases', label: 'Lease Agreements', ...(leases != null ? { count: leases.length } : {}) },
+    { key: 'invoices', label: 'Invoices', ...(invoices != null ? { count: invoices.length } : {}) },
     { key: 'vehicles', label: t.common.vehicles, ...(vehicles != null ? { count: vehicles.length } : {}) },
     { key: 'drivers', label: t.common.drivers, ...(drivers != null ? { count: drivers.length } : {}) },
+    { key: 'payments', label: 'Payments', ...(payments != null ? { count: payments.length } : {}) },
     { key: 'audit', label: 'Audit Log' },
   ]
 
@@ -240,6 +249,47 @@ export default function CustomerDetailPage() {
         </>
       )}
 
+      {/* Contracts tab */}
+      {tab === 'contracts' && (
+        <Card className="overflow-hidden">
+          {!contracts || contracts.length === 0 ? (
+            <p className="p-6 text-sm text-slate-500">{t.common.noRecords}</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-left">
+                <tr>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Contract #</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Status</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase text-end">Vehicles</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase text-end">Monthly Rent</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Duration</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase text-end">Total Value</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase text-end">Lease Agmts</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Period</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contracts.map((cnt) => {
+                  const statusTone = cnt.status === 'Active' ? 'green' : cnt.status === 'Draft' ? 'slate' : cnt.status === 'Suspended' ? 'amber' : 'slate'
+                  return (
+                    <tr key={cnt.id} className="cursor-pointer border-t border-slate-100 hover:bg-brand-50/40" onClick={() => router.push(`/contracts/${cnt.id}`)}>
+                      <td className="px-3 py-2 font-mono text-xs font-semibold text-brand-700">{cnt.contractNumber}</td>
+                      <td className="px-3 py-2"><Badge tone={statusTone as 'green' | 'amber' | 'slate'}>{cnt.status}</Badge></td>
+                      <td className="px-3 py-2 text-end text-xs font-medium text-slate-900">{cnt.totalVehicles}</td>
+                      <td className="px-3 py-2 text-end font-mono text-xs">SAR {cnt.monthlyRentSar.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600">{cnt.durationMonths} months</td>
+                      <td className="px-3 py-2 text-end font-mono text-xs font-semibold">SAR {cnt.totalContractValueSar.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 text-end text-xs font-medium text-brand-700">{cnt.leaseAgreementCount}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600">{cnt.startDate?.substring(0, 10)} → {cnt.endDate?.substring(0, 10)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      )}
+
       {/* Leases tab */}
       {tab === 'leases' && (
         <Card className="overflow-hidden">
@@ -300,7 +350,7 @@ export default function CustomerDetailPage() {
                     <div><span className="text-xs text-slate-500">Period</span><p className="text-xs text-slate-900">{selectedLease.contractStartUtc.substring(0,10)} → {selectedLease.contractEndUtc.substring(0,10)}</p></div>
                     <div><span className="text-xs text-slate-500">Rent</span><p className="font-mono text-xs text-slate-900">SAR {selectedLease.rentAmountSar.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
                     <div><span className="text-xs text-slate-500">Branch</span><p className="text-xs text-slate-900">{selectedLease.workingBranchName}</p></div>
-                    {selectedLease.tajeerContractNumber && <div><span className="text-xs text-slate-500">Tajeer #</span><p className="font-mono text-xs text-slate-900">{selectedLease.tajeerContractNumber}</p></div>}
+                    <div><span className="text-xs text-slate-500">Contract #</span><p className="font-mono text-xs text-slate-900">{selectedLease.leaseNumber}</p></div>
                   </div>
                 </div>
               )}
@@ -370,6 +420,93 @@ export default function CustomerDetailPage() {
                     </tr>
                   )
                 })}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      )}
+
+      {/* Invoices tab */}
+      {tab === 'invoices' && (
+        <Card className="overflow-hidden">
+          {!invoices || invoices.length === 0 ? (
+            <p className="p-6 text-sm text-slate-500">{t.common.noRecords}</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-left">
+                <tr>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Invoice #</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Contract</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Status</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Issue Date</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Due Date</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase text-end">Total (SAR)</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase text-end">Paid (SAR)</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase text-end">Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((inv) => {
+                  const balance = inv.totalAmountSar - inv.paidAmountSar
+                  const statusTone = inv.status === 'Cleared' || inv.status === 'Finalized' ? 'green' : inv.status === 'Draft' ? 'slate' : inv.status === 'Submitted' ? 'blue' : 'amber'
+                  return (
+                    <tr key={inv.id} className="cursor-pointer border-t border-slate-100 hover:bg-brand-50/40" onClick={() => router.push(`/invoices/${inv.id}`)}>
+                      <td className="px-3 py-2 font-mono text-xs font-semibold text-brand-700">{inv.invoiceNumber}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-slate-600">{inv.leaseNumber}</td>
+                      <td className="px-3 py-2"><Badge tone={statusTone as 'green' | 'amber' | 'blue' | 'slate'}>{inv.status}</Badge></td>
+                      <td className="px-3 py-2 text-xs text-slate-600">{inv.issueDateUtc?.substring(0, 10)}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600">{inv.dueDateUtc?.substring(0, 10)}</td>
+                      <td className="px-3 py-2 text-end font-mono text-xs">{inv.totalAmountSar.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 text-end font-mono text-xs text-green-700">{inv.paidAmountSar.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className={`px-3 py-2 text-end font-mono text-xs font-semibold ${balance > 0 ? 'text-red-600' : 'text-green-700'}`}>
+                        {balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      )}
+
+      {/* Payments tab */}
+      {tab === 'payments' && (
+        <Card className="overflow-hidden">
+          {!payments || payments.length === 0 ? (
+            <p className="p-6 text-sm text-slate-500">{t.common.noRecords}</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-left">
+                <tr>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">ID</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Date</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Method</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Reference</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase text-end">Amount (SAR)</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase text-end">Remaining</th>
+                  <th className="px-3 py-2 text-xs font-medium text-slate-500 uppercase">Allocated To</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((p) => (
+                  <tr key={p.id} className="cursor-pointer border-t border-slate-100 hover:bg-brand-50/40" onClick={() => router.push(`/payments/${p.id}`)}>
+                    <td className="px-3 py-2 font-mono text-xs font-semibold text-brand-700">PAY-{p.displayId}</td>
+                    <td className="px-3 py-2 text-xs text-slate-600">{p.receivedDate?.substring(0, 10)}</td>
+                    <td className="px-3 py-2 text-xs text-slate-700">{p.paymentMethod}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-slate-600">{p.referenceNumber ?? '—'}</td>
+                    <td className="px-3 py-2 text-end font-mono text-xs font-semibold">{p.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    <td className={`px-3 py-2 text-end font-mono text-xs ${p.remainingBalance > 0 ? 'text-amber-600' : 'text-green-700'}`}>
+                      {p.remainingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-500">
+                      {p.allocations.length > 0
+                        ? p.allocations.map((a) => a.invoiceNumber).join(', ')
+                        : <span className="text-slate-400">Unallocated</span>
+                      }
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}

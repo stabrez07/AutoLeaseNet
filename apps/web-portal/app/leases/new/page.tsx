@@ -8,11 +8,25 @@ import {
   type BranchDto,
   type CustomerSummary,
   type DriverSummary,
+  type QuotationDetail,
   type RentPolicyDto,
   type SaveContractRequest,
   type SaveContractResponse,
   type VehicleSummary,
 } from '../../../lib/bff-client'
+
+const CONTRACT_TYPES: { code: number; label: string }[] = [
+  { code: 1, label: 'Long Term Lease' },
+  { code: 2, label: 'Short Term Rental' },
+  { code: 3, label: 'Daily Rental' },
+]
+
+const PAYMENT_METHODS: { code: number; label: string }[] = [
+  { code: 1, label: 'Cash' },
+  { code: 2, label: 'Bank Transfer' },
+  { code: 3, label: 'Credit Card' },
+  { code: 4, label: 'Cheque' },
+]
 import { Card, ErrorBox, PageHeader, Spinner } from '../../../components/ui'
 
 function toLocalDatetime(d: Date): string {
@@ -24,6 +38,7 @@ function toLocalDatetime(d: Date): string {
 export default function NewLeasePage() {
   const { t, locale } = useLocale()
   const searchParams = useSearchParams()
+  const fromQuoteId = searchParams?.get('fromQuote') ?? null
   const fromQuoteCustomerId = searchParams?.get('customerId') ?? null
   const fromQuoteDuration = Number(searchParams?.get('duration') ?? 0)
   const [customers, setCustomers] = useState<CustomerSummary[]>([])
@@ -33,6 +48,8 @@ export default function NewLeasePage() {
   const [branches, setBranches] = useState<BranchDto[]>([])
   const [bootError, setBootError] = useState<string | null>(null)
   const [booting, setBooting] = useState(true)
+  const [sourceQuote, setSourceQuote] = useState<QuotationDetail | null>(null)
+  const [rentFromQuote, setRentFromQuote] = useState(false)
 
   const now = useMemo(() => new Date(), [])
   const twoDays = useMemo(() => {
@@ -77,15 +94,34 @@ export default function NewLeasePage() {
         setDrivers(d.items)
         setPolicies(p)
         setBranches(b)
-        // pre-pick first values for instant happy-path submit
+
         const preCustomer = fromQuoteCustomerId || c.items[0]?.id || ''
         const preDriver = d.items[0]?.id || ''
         let endLocal = toLocalDatetime(twoDays)
-        if (fromQuoteDuration > 0) {
+        let computedRent = 200
+        let isFromQuote = false
+
+        if (fromQuoteId) {
+          try {
+            const quote = await bff.getQuotation(fromQuoteId)
+            setSourceQuote(quote)
+            if (quote.estimatedDurationMonths > 0) {
+              computedRent = Math.round((quote.totalSar / quote.estimatedDurationMonths) * 100) / 100
+            }
+            if (quote.estimatedDurationMonths > 0) {
+              const end = new Date()
+              end.setMonth(end.getMonth() + quote.estimatedDurationMonths)
+              endLocal = toLocalDatetime(end)
+            }
+            isFromQuote = true
+            setRentFromQuote(true)
+          } catch { /* quote fetch failed — continue with manual entry */ }
+        } else if (fromQuoteDuration > 0) {
           const end = new Date()
           end.setMonth(end.getMonth() + fromQuoteDuration)
           endLocal = toLocalDatetime(end)
         }
+
         setForm((prev) => ({
           ...prev,
           customerId: preCustomer,
@@ -96,6 +132,7 @@ export default function NewLeasePage() {
           receiveBranchId: prev.receiveBranchId || b[0]?.id || '',
           returnBranchId: prev.returnBranchId || b[0]?.id || '',
           contractEndLocal: endLocal,
+          ...(isFromQuote ? { rentAmount: computedRent, contractTypeCode: 1 } : {}),
         }))
       } catch (e) {
         setBootError((e as Error).message)
@@ -103,7 +140,7 @@ export default function NewLeasePage() {
         setBooting(false)
       }
     })()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -145,9 +182,24 @@ export default function NewLeasePage() {
     <div className="space-y-4">
       <PageHeader title={t.newLease.title} subtitle={t.newLease.subtitle} />
 
-      <Card className="border-brand-200 bg-brand-50 p-3">
-        <p className="text-xs text-brand-900">{t.newLease.devHint}</p>
-      </Card>
+      {sourceQuote && (
+        <Card className="border-green-200 bg-green-50 p-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-green-800">Creating contract from Quotation {sourceQuote.quoteNumber}</span>
+            <span className="rounded-full bg-green-200 px-2 py-0.5 text-[10px] font-medium text-green-800">
+              {sourceQuote.estimatedDurationMonths} months &middot; SAR {sourceQuote.totalSar.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-green-700">
+            Rent amount and duration are pre-filled from the quotation. Select vehicle, driver, and branch to complete the contract.
+          </p>
+        </Card>
+      )}
+      {!sourceQuote && (
+        <Card className="border-brand-200 bg-brand-50 p-3">
+          <p className="text-xs text-brand-900">{t.newLease.devHint}</p>
+        </Card>
+      )}
 
       {bootError && <ErrorBox message={bootError} />}
       {booting && <Spinner label={t.common.loading} />}
@@ -282,57 +334,86 @@ export default function NewLeasePage() {
                 />
               </div>
               <div>
-                <label className={labelClass}>{t.newLease.fields.contractType}</label>
-                <input
-                  type="number"
-                  min={1}
+                <label className={labelClass}>Contract Type</label>
+                <select
                   className={inputClass}
                   value={form.contractTypeCode}
                   onChange={(e) => setForm({ ...form, contractTypeCode: Number(e.target.value) })}
-                />
+                >
+                  {CONTRACT_TYPES.map((ct) => (
+                    <option key={ct.code} value={ct.code}>{ct.label}</option>
+                  ))}
+                </select>
               </div>
+              {form.contractTypeCode !== 1 && (
+                <div>
+                  <label className={labelClass}>Allowed km / day</label>
+                  <input
+                    type="number"
+                    min={0}
+                    className={inputClass}
+                    value={form.allowedKmPerDay}
+                    onChange={(e) => setForm({ ...form, allowedKmPerDay: Number(e.target.value) })}
+                  />
+                </div>
+              )}
               <div>
-                <label className={labelClass}>{t.newLease.fields.allowedKmPerDay}</label>
-                <input
-                  type="number"
-                  min={0}
-                  className={inputClass}
-                  value={form.allowedKmPerDay}
-                  onChange={(e) => setForm({ ...form, allowedKmPerDay: Number(e.target.value) })}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>{t.newLease.fields.paymentMethod}</label>
-                <input
-                  type="number"
-                  min={1}
+                <label className={labelClass}>Payment Method</label>
+                <select
                   className={inputClass}
                   value={form.paymentMethodCode}
                   onChange={(e) => setForm({ ...form, paymentMethodCode: Number(e.target.value) })}
-                />
+                >
+                  {PAYMENT_METHODS.map((pm) => (
+                    <option key={pm.code} value={pm.code}>{pm.label}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label className={labelClass}>{t.newLease.fields.rentAmount}</label>
-                <input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  className={inputClass}
-                  value={form.rentAmount}
-                  onChange={(e) => setForm({ ...form, rentAmount: Number(e.target.value) })}
-                />
+                <label className={labelClass}>Monthly Rent (SAR)</label>
+                {rentFromQuote ? (
+                  <div className="relative">
+                    <input
+                      type="number"
+                      className={`${inputClass} bg-slate-50 text-slate-700`}
+                      value={form.rentAmount}
+                      readOnly
+                    />
+                    <span className="mt-1 block text-[10px] text-brand-600">
+                      Calculated from Quotation {sourceQuote?.quoteNumber ?? ''}
+                    </span>
+                  </div>
+                ) : (
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className={inputClass}
+                    value={form.rentAmount}
+                    onChange={(e) => setForm({ ...form, rentAmount: Number(e.target.value) })}
+                  />
+                )}
               </div>
-              <div>
-                <label className={labelClass}>{t.newLease.fields.paidAmount}</label>
-                <input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  className={inputClass}
-                  value={form.paidAmount}
-                  onChange={(e) => setForm({ ...form, paidAmount: Number(e.target.value) })}
-                />
-              </div>
+              {form.contractTypeCode !== 1 && (
+                <div>
+                  <label className={labelClass}>Paid Amount (SAR)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className={inputClass}
+                    value={form.paidAmount}
+                    onChange={(e) => setForm({ ...form, paidAmount: Number(e.target.value) })}
+                  />
+                </div>
+              )}
+              {form.contractTypeCode === 1 && (
+                <div className="col-span-full">
+                  <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                    Long-term lease — monthly billing at end of each month per contract terms. No upfront payment required.
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
 
@@ -341,29 +422,15 @@ export default function NewLeasePage() {
           {result && (
             <Card className="border-green-200 bg-green-50 p-4">
               <h3 className="font-semibold text-green-900">{t.newLease.successTitle}</h3>
-              <dl className="mt-2 space-y-1 text-sm text-green-900">
-                <div className="flex gap-2">
-                  <dt className="font-medium">{t.newLease.successLeaseId}:</dt>
-                  <dd className="break-all font-mono">{result.leaseId}</dd>
-                </div>
-                <div className="flex gap-2">
-                  <dt className="font-medium">{t.newLease.successContractNumber}:</dt>
-                  <dd className="font-mono">{result.tajeerContractNumber}</dd>
-                </div>
-                <div className="flex gap-2">
-                  <dt className="font-medium">{t.newLease.successIssuanceUrl}:</dt>
-                  <dd className="break-all font-mono">
-                    <a
-                      href={result.issuanceUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="underline"
-                    >
-                      {result.issuanceUrl}
-                    </a>
-                  </dd>
-                </div>
-              </dl>
+              <p className="mt-1 text-sm text-green-800">Contract <span className="font-mono font-semibold">{result.leaseNumber}</span> has been created successfully.</p>
+              <div className="mt-3 flex gap-2">
+                <a href="/leases" className="rounded-md bg-green-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-green-800">
+                  View All Contracts
+                </a>
+                <a href={`/leases/${result.leaseId}`} className="rounded-md border border-green-600 px-4 py-1.5 text-xs font-medium text-green-800 hover:bg-green-100">
+                  Open Contract
+                </a>
+              </div>
             </Card>
           )}
 

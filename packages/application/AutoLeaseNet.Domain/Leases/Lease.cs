@@ -29,6 +29,9 @@ public sealed class Lease : Entity
     /// <summary>Optional — populated for B2B leases tied to a Customer (Fleet account).</summary>
     public Guid? CustomerId { get; private set; }
 
+    /// <summary>Parent contract this lease agreement belongs to.</summary>
+    public Guid? ContractId { get; private set; }
+
     /// <summary>Local Vehicle aggregate the lease is for. Nullable until Day D wires lookups.</summary>
     public Guid? VehicleId { get; private set; }
 

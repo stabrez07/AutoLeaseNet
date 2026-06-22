@@ -21,6 +21,7 @@ export interface PagedResult<T> {
 
 export interface CustomerSummary {
   id: string
+  displayId: number
   displayName: string
   type: number // 1 = B2B, 2 = B2C
   mobile?: string | null
@@ -35,6 +36,7 @@ export interface CustomerSummary {
 
 export interface VehicleSummary {
   id: string
+  displayId: number
   plateNumber: string
   make: string
   model: string
@@ -51,6 +53,7 @@ export interface VehicleSummary {
 
 export interface DriverSummary {
   id: string
+  displayId: number
   personNameEn?: string
   personNameAr?: string
   driverLicenseNumber: string
@@ -102,7 +105,7 @@ export interface SaveContractRequest {
 
 export interface SaveContractResponse {
   leaseId: string
-  tajeerContractNumber: number
+  leaseNumber: string
   issuanceUrl: string
 }
 
@@ -356,7 +359,7 @@ export interface CreateTrafficViolationRequest {
 
 // ─── Invoices ─────────────────────────────────────────────────────────────────
 
-export type InvoiceStatus = 'Draft' | 'Issued' | 'PartiallyPaid' | 'Paid' | 'Overdue' | 'Cancelled'
+export type InvoiceStatus = 'Draft' | 'Submitted' | 'Cleared' | 'Finalized' | 'SubmissionFailed' | 'ClearanceFailed' | 'Voided'
 
 export interface InvoiceLine {
   id: string
@@ -373,6 +376,7 @@ export interface InvoiceLine {
 
 export interface Invoice {
   id: string
+  displayId: number
   invoiceNumber: string
   leaseId: string
   leaseNumber: string
@@ -399,7 +403,17 @@ export interface Invoice {
   balanceSar: number
   zatcaInvoiceNumber: string | null
   notes: string | null
+  allocations?: InvoicePaymentAllocation[]
   createdAtUtc: string
+}
+
+export interface InvoicePaymentAllocation {
+  paymentId: string
+  paymentDisplayId: number
+  referenceNumber: string
+  amount: number
+  date: string
+  paymentMethod: string
 }
 
 export interface GenerateInvoiceRequest {
@@ -416,6 +430,36 @@ export interface BulkGenerateResult {
   invoiceIds: string[]
 }
 
+// ─── Customer Tab Summaries ──────────────────────────────────────────────────
+
+export interface CustomerInvoiceSummary {
+  id: string
+  displayId: number
+  invoiceNumber: string
+  leaseId: string
+  leaseNumber: string
+  status: string
+  issueDateUtc: string
+  dueDateUtc: string
+  baseAmountSar: number
+  vatAmountSar: number
+  totalAmountSar: number
+  paidAmountSar: number
+}
+
+export interface CustomerPaymentSummary {
+  id: string
+  displayId: number
+  amount: number
+  paymentMethod: string
+  receivedDate: string
+  referenceNumber: string | null
+  notes: string | null
+  remainingBalance: number
+  createdAtUtc: string
+  allocations: { invoiceId: string; invoiceNumber: string; allocatedAmountSar: number }[]
+}
+
 // ─── Advance Payments & FIFO ──────────────────────────────────────────────────
 
 export type PaymentMethod = 'Cash' | 'CreditCard' | 'BankTransfer' | 'Cheque' | 'OnlineTransfer'
@@ -430,6 +474,7 @@ export interface PaymentAllocation {
 
 export interface AdvancePayment {
   id: string
+  displayId: number
   customerId: string
   customerDisplayName: string
   amount: number
@@ -475,6 +520,98 @@ export interface StatementOfAccount {
   totalInvoiced: number
   totalPaid: number
   generatedAtUtc: string
+}
+
+// ─── Approval Inbox types ────────────────────────────────────────────────────
+
+export interface PendingApprovalItem {
+  quotationId: string
+  displayId: number
+  quoteNumber: string
+  customerId: string
+  customerDisplayName: string
+  status: string
+  totalSar: number
+  discountPercent: number
+  estimatedDurationMonths: number
+  submittedAtUtc: string | null
+  createdAtUtc: string
+  lineCount: number
+  approvals: { tierLevel: number; requiredRoleCode: string; status: string; comment: string | null; decisionAtUtc: string | null }[]
+}
+
+export interface NotificationItem {
+  id: string
+  type: string
+  title: string
+  body: string | null
+  linkedEntityType: string | null
+  linkedEntityId: string | null
+  isRead: boolean
+  createdAtUtc: string
+}
+
+// ─── RFQ Pipeline types ───────────────────────────────────────────────────────
+
+export interface RfqSummary {
+  id: string
+  displayId: number
+  rfqNumber: string
+  customerId: string
+  customerDisplayName: string
+  source: string
+  stage: string // Draft, Qualified, Proposal, Negotiation, Won, Lost
+  probability: number
+  vehicleQty: number
+  tenureMonths: number
+  expectedCloseDate: string | null
+  notes: string | null
+  createdAtUtc: string
+}
+
+export interface RfqStageHistoryItem {
+  id: string
+  fromStage: string | null
+  toStage: string
+  changedByUserId: string
+  comment: string | null
+  createdAtUtc: string
+}
+
+export interface RfqDetail extends RfqSummary {
+  crmOpportunityId: string | null
+  vehicleCategories: string | null
+  annualMileageCapKm: number | null
+  services: string | null
+  ownerUserId: string
+  lostReason: string | null
+  quotationId: string | null
+  stageHistory: RfqStageHistoryItem[]
+  attachments: { id: string; fileName: string; fileUrl: string; createdAtUtc: string }[]
+}
+
+export interface RfqPipelineStage {
+  stage: string
+  count: number
+  items: RfqSummary[]
+}
+
+export interface CreateRfqRequest {
+  customerId: string
+  source: string
+  vehicleQty: number
+  tenureMonths: number
+  vehicleCategories?: string
+  services?: string
+  annualMileageCapKm?: number
+  expectedCloseDate?: string
+  notes?: string
+}
+
+export interface RfqCommandResult {
+  success: boolean
+  rfqId?: string
+  quotationId?: string
 }
 
 class BffClient {
@@ -828,6 +965,21 @@ class BffClient {
     )
   }
 
+  // ─── Contracts ──────────────────────────────────────────────────────────────
+
+  getContracts(page = 1, pageSize = 20, search?: string, status?: string) {
+    const q = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+    if (search) q.set('search', search)
+    if (status) q.set('status', status)
+    return this.getJson<PagedResult<ContractSummary>>(`/api/v1/contracts?${q.toString()}`)
+  }
+  getContractById(id: string) {
+    return this.getJson<ContractDetail>(`/api/v1/contracts/${id}`)
+  }
+  getContractLeaseAgreements(contractId: string) {
+    return this.getJson<ContractLeaseAgreement[]>(`/api/v1/contracts/${contractId}/lease-agreements`)
+  }
+
   // ─── Leases ────────────────────────────────────────────────────────────────
 
   getLeases(page = 1, pageSize = 20, search?: string, status?: string) {
@@ -839,6 +991,9 @@ class BffClient {
   getLeaseById(id: string) {
     return this.getJson<LeaseDetail>(`/api/v1/leases/${id}`)
   }
+  getLeasePayments(leaseId: string) {
+    return this.getJson<AdvancePayment[]>(`/api/v1/leases/${leaseId}/payments`)
+  }
   getCustomerLeases(customerId: string) {
     return this.getJson<LeaseSummary[]>(`/api/v1/customers/${customerId}/leases`)
   }
@@ -848,6 +1003,18 @@ class BffClient {
   getCustomerDrivers(customerId: string) {
     return this.getJson<DriverSummary[]>(`/api/v1/customers/${customerId}/drivers`)
   }
+  async getCustomerInvoices(customerId: string) {
+    const res = await this.getJson<{ items: CustomerInvoiceSummary[] }>(`/api/v1/customers/${customerId}/invoices`)
+    return res.items
+  }
+  async getCustomerPayments(customerId: string) {
+    const res = await this.getJson<{ items: CustomerPaymentSummary[] }>(`/api/v1/customers/${customerId}/payments`)
+    return res.items
+  }
+  async getCustomerContracts(customerId: string) {
+    const res = await bff.getContracts(1, 50)
+    return res.items.filter(c => c.customerId === customerId)
+  }
   getVehicleCurrentLease(vehicleId: string) {
     return this.getJson<LeaseSummary | null>(`/api/v1/vehicles/${vehicleId}/current-lease`)
   }
@@ -856,6 +1023,13 @@ class BffClient {
   }
 
   // ─── Vehicle Switch ─────────────────────────────────────────────────────────
+  activateLease(leaseId: string, idempotencyKey: string) {
+    return this.postJson<{ leaseId: string; status: string; issuedAtUtc: string }, Record<string, never>>(
+      `/api/v1/leases/${leaseId}/activate`,
+      {},
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
   switchLeaseVehicle(leaseId: string, body: SwitchVehicleRequest, idempotencyKey: string) {
     return this.postJson<SwitchVehicleResult, SwitchVehicleRequest>(
       `/api/v1/leases/${leaseId}/switch-vehicle`,
@@ -865,6 +1039,49 @@ class BffClient {
   }
   getDriverCurrentLease(driverId: string) {
     return this.getJson<LeaseSummary | null>(`/api/v1/drivers/${driverId}/current-lease`)
+  }
+
+  // ─── RFQs ────────────────────────────────────────────────────────────────────
+
+  getRfqs(page = 1, pageSize = 20, search?: string, stage?: string) {
+    const q = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+    if (search) q.set('search', search)
+    if (stage) q.set('stage', stage)
+    return this.getJson<PagedResult<RfqSummary>>(`/api/v1/rfqs?${q}`)
+  }
+  getRfqById(id: string) {
+    return this.getJson<RfqDetail>(`/api/v1/rfqs/${id}`)
+  }
+  async getRfqPipeline() {
+    const res = await this.getJson<{ stages: RfqPipelineStage[] }>(`/api/v1/rfqs/pipeline`)
+    return res.stages
+  }
+  createRfq(body: CreateRfqRequest, idempotencyKey: string) {
+    return this.postJson<RfqCommandResult, CreateRfqRequest>('/api/v1/rfqs', body, {
+      'Idempotency-Key': idempotencyKey,
+    })
+  }
+  updateRfqStage(
+    id: string,
+    toStage: string,
+    comment: string | undefined,
+    idempotencyKey: string,
+  ) {
+    return this.postJson<
+      RfqCommandResult,
+      { toStage: string; comment?: string | undefined }
+    >(
+      `/api/v1/rfqs/${id}/stage`,
+      { toStage, ...(comment ? { comment } : {}) },
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+  convertRfqToQuotation(id: string, idempotencyKey: string) {
+    return this.postJson<RfqCommandResult, Record<string, never>>(
+      `/api/v1/rfqs/${id}/convert`,
+      {},
+      { 'Idempotency-Key': idempotencyKey },
+    )
   }
 
   // ─── Delete operations ─────────────────────────────────────────────────────
@@ -1003,10 +1220,32 @@ class BffClient {
       `/api/v1/payments?page=${page}&pageSize=${pageSize}`,
     )
   }
+  getPaymentById(id: string) {
+    return this.getJson<AdvancePayment>(`/api/v1/payments/${id}`)
+  }
 
   // ─── Audit ──────────────────────────────────────────────────────────────────
   getAuditEvents(entityType: string, entityId: string) {
     return this.getJson<AuditEvent[]>(`/api/v1/audit/${entityType}/${entityId}`)
+  }
+
+  // ─── Approvals ─────────────────────────────────────────────────────────────
+  getPendingApprovals() {
+    return this.getJson<{ items: PendingApprovalItem[]; totalCount: number }>('/api/v1/approvals/pending')
+  }
+
+  // ─── Notifications ─────────────────────────────────────────────────────────
+  getNotifications(page = 1, pageSize = 20) {
+    return this.getJson<PagedResult<NotificationItem>>(`/api/v1/notifications?page=${page}&pageSize=${pageSize}`)
+  }
+  getUnreadNotificationCount() {
+    return this.getJson<{ unreadCount: number }>('/api/v1/notifications/unread-count')
+  }
+  markNotificationRead(id: string) {
+    return this.postJson<void, Record<string, never>>(`/api/v1/notifications/${id}/read`, {})
+  }
+  markAllNotificationsRead() {
+    return this.postJson<{ markedRead: number }, Record<string, never>>('/api/v1/notifications/mark-all-read', {})
   }
 }
 
@@ -1014,6 +1253,7 @@ class BffClient {
 
 export interface CustomerDetail {
   id: string
+  displayId: number
   tenantId: string
   type: string
   status: string
@@ -1083,6 +1323,7 @@ export interface CreateCustomerB2CRequest {
 
 export interface VehicleDetail {
   id: string
+  displayId: number
   tenantId: string
   status: string
   plateNumber: string
@@ -1216,6 +1457,7 @@ export interface CreateVehicleRequest {
 
 export interface DriverDetail {
   id: string
+  displayId: number
   tenantId: string
   status: string
   customerId?: string | null
@@ -1333,9 +1575,88 @@ export interface LeaseIncident {
   resolved: boolean
 }
 
+// ─── Contracts ───────────────────────────────────────────────────────────────
+
+export interface ContractSummary {
+  id: string
+  displayId: number
+  contractNumber: string
+  customerId: string
+  customerDisplayName: string
+  status: string
+  contractTypeCode: string
+  startDate: string
+  endDate: string
+  durationMonths: number
+  totalVehicles: number
+  monthlyRentSar: number
+  totalContractValueSar: number
+  leaseAgreementCount: number
+  quotationId: string
+  createdAtUtc: string
+}
+
+export interface ContractLine {
+  id: string
+  make: string
+  model: string
+  year: number
+  description: string
+  quantity: number
+  unitPriceSar: number
+  lineTotalSar: number
+}
+
+export interface ContractLeaseAgreement {
+  id: string
+  displayId: number
+  leaseNumber: string
+  vehicleMakeModel: string
+  vehiclePlate: string
+  primaryDriverName: string
+  status: string
+  contractStartUtc: string
+  contractEndUtc: string
+  rentAmountSar: number
+}
+
+export interface QuoteLine {
+  lineNumber: number
+  itemType: string
+  description: string
+  vehicleSpecRef: string | null
+  quantity: number
+  unitPriceSar: number
+  discountPercent: number
+  lineTotalSar: number
+}
+
+export interface ContractDetail extends ContractSummary {
+  paymentTermsDays: number
+  notes: string | null
+  quoteNumber: string | null
+  quoteDate: string | null
+  quoteValidUntil: string | null
+  quoteStatus: string | null
+  quoteTotalSar: string | null
+  quoteSubTotalSar: string | null
+  quoteVatSar: string | null
+  quoteDiscountPercent: string | null
+  termsAndConditions: string | null
+  contractType: string | null
+  estimatedDurationMonths: number | null
+  quoteLines: QuoteLine[] | null
+  lines: ContractLine[]
+  leaseAgreements: ContractLeaseAgreement[]
+}
+
+// ─── Lease Agreements (existing) ─────────────────────────────────────────────
+
 export interface LeaseSummary {
   id: string
+  displayId: number
   leaseNumber: string
+  contractId: string
   customerId: string
   customerDisplayName: string
   vehicleId: string
@@ -1347,7 +1668,6 @@ export interface LeaseSummary {
   contractTypeCode: string // Daily | Monthly | Annual
   contractStartUtc: string
   contractEndUtc: string
-  tajeerContractNumber: number | null
   rentAmountSar: number
   workingBranchCode: string
   workingBranchName: string
@@ -1367,8 +1687,6 @@ export interface LeaseDetail extends LeaseSummary {
   resumedAtUtc: string | null
   closedAtUtc: string | null
   cancelledAtUtc: string | null
-  tajeerStatus: string | null
-  tajeerIssuanceUrl: string | null
   zatcaSubmissionStatus: string | null
   zatcaInvoiceNumber: string | null
   inspections: LeaseInspection[]
@@ -1440,6 +1758,7 @@ type MockState = {
   violations: TrafficViolation[]
   invoices: Invoice[]
   advancePayments: AdvancePayment[]
+  rfqs: RfqDetail[]
 }
 
 function mockId(prefix: string, n: number) {
@@ -1852,6 +2171,7 @@ function buildMockState(): MockState {
     const branch = branches[i % branches.length]!
     return {
       id: mockId('customer', i + 1),
+      displayId: i + 1,
       tenantId: DEV_TENANT_ID,
       type: isB2B ? 'B2B' : 'B2C',
       status,
@@ -1931,6 +2251,7 @@ function buildMockState(): MockState {
     const vehicleId = mockId('vehicle', i + 1)
     return {
       id: vehicleId,
+      displayId: i + 1,
       tenantId: DEV_TENANT_ID,
       status: st,
       plateNumber: `${1000 + i}`,
@@ -1974,6 +2295,7 @@ function buildMockState(): MockState {
 
   const drivers: DriverDetail[] = Array.from({ length: 800 }).map((_, i) => ({
     id: mockId('driver', i + 1),
+    displayId: i + 1,
     tenantId: DEV_TENANT_ID,
     status: pick(['Active', 'Suspended', 'Retired'], i),
     customerId: pick(customers, i).id,
@@ -2087,7 +2409,9 @@ function buildMockState(): MockState {
 
     return {
       id: mockId('lease', i + 1),
-      leaseNumber: `LC-${(i + 1).toString().padStart(6, '0')}`,
+      displayId: i + 1,
+      leaseNumber: `LA-${i + 1}`,
+      contractId: '',
       customerId: customer.id,
       customerDisplayName: customer.displayName,
       vehicleId: vehicle.id,
@@ -2099,7 +2423,6 @@ function buildMockState(): MockState {
       contractTypeCode: pick(CONTRACT_TYPES_L, i),
       contractStartUtc: contractStart.toISOString(),
       contractEndUtc: contractEnd.toISOString(),
-      tajeerContractNumber: lsStatus === 'Draft' ? null : 9000000000 + i + 1,
       rentAmountSar: rentSar,
       workingBranchCode: pick(branches, i).code,
       workingBranchName: pick(branches, i).nameEn,
@@ -2122,12 +2445,6 @@ function buildMockState(): MockState {
       cancelledAtUtc:
         lsStatus === 'Cancelled'
           ? new Date(contractStart.getTime() + 5 * 86400000).toISOString()
-          : null,
-      tajeerStatus:
-        lsStatus === 'Draft' ? null : lsStatus === 'PendingIssuance' ? 'Pending' : 'Confirmed',
-      tajeerIssuanceUrl:
-        lsStatus !== 'Draft' && lsStatus !== 'PendingIssuance'
-          ? `https://rabet.staging/contract/${9000000000 + i}`
           : null,
       zatcaSubmissionStatus: isClosed ? 'Cleared' : isActive ? 'Pending' : null,
       zatcaInvoiceNumber: isClosed ? `INV-${(1000 + i).toString().padStart(6, '0')}` : null,
@@ -2401,15 +2718,16 @@ function buildMockState(): MockState {
 
       const invStatuses: InvoiceStatus[] =
         l.status === 'Closed'
-          ? ['Paid']
+          ? ['Finalized']
           : m < months - 1
-            ? ['Paid', 'Paid', 'Paid', 'PartiallyPaid']
-            : ['Issued', 'Issued', 'Overdue', 'Draft']
+            ? ['Finalized', 'Cleared', 'Cleared', 'Submitted']
+            : ['Submitted', 'Draft', 'Draft', 'Draft']
       const st = pick(invStatuses, i + m)
       const paid =
-        st === 'Paid' ? total : st === 'PartiallyPaid' ? Math.round(total * 0.5 * 100) / 100 : 0
+        st === 'Finalized' ? total : st === 'Cleared' ? Math.round(total * 0.5 * 100) / 100 : 0
       return {
         id: mockId('inv', i * 8 + m + 1),
+        displayId: i * 8 + m + 1,
         invoiceNumber: `INV-${String(i * 8 + m + 1).padStart(7, '0')}`,
         leaseId: l.id,
         leaseNumber: l.leaseNumber,
@@ -2436,7 +2754,7 @@ function buildMockState(): MockState {
         paidAmountSar: paid,
         balanceSar: Math.round((total - paid) * 100) / 100,
         zatcaInvoiceNumber:
-          st === 'Paid' ? `ZATCA-${String(i * 8 + m + 1).padStart(7, '0')}` : null,
+          st === 'Finalized' ? `ZATCA-${String(i * 8 + m + 1).padStart(7, '0')}` : null,
         notes: null,
         createdAtUtc: periodStart.toISOString(),
       }
@@ -2475,6 +2793,7 @@ function buildMockState(): MockState {
         .filter((a) => a.allocatedAmountSar > 0)
       return {
         id: mockId('pmt', i * 3 + j + 1),
+        displayId: i * 3 + j + 1,
         customerId: c.id,
         customerDisplayName: c.displayName,
         amount,
@@ -2491,6 +2810,108 @@ function buildMockState(): MockState {
     })
   })
 
+  // ─── RFQ seed data ────────────────────────────────────────────────────────
+  const RFQ_STAGES = ['Draft', 'Qualified', 'Proposal', 'Negotiation', 'Won', 'Lost'] as const
+  const RFQ_SOURCES = ['Direct', 'CRM Sync', 'Website', 'Referral'] as const
+  const RFQ_CATEGORIES = ['Sedan', 'SUV', 'Pickup', 'Van', 'Bus'] as const
+  const RFQ_SERVICES = ['Maintenance', 'Insurance', 'Replacement Vehicle', 'GPS Tracking'] as const
+
+  const rfqs: RfqDetail[] = customers.slice(0, 12).map((c, i) => {
+    const stage = RFQ_STAGES[i % RFQ_STAGES.length]!
+    const daysAgo = 60 - i * 4
+    const createdAt = new Date(now.getTime() - daysAgo * 86400000)
+    const historyItems: RfqStageHistoryItem[] = [
+      {
+        id: mockId('rfqh', i * 10 + 1),
+        fromStage: null,
+        toStage: 'Draft',
+        changedByUserId: 'f1f1f1f1-0001-0000-0000-000000000001',
+        comment: 'RFQ created',
+        createdAtUtc: createdAt.toISOString(),
+      },
+    ]
+    const stageIdx = RFQ_STAGES.indexOf(stage)
+    if (stageIdx >= 1) {
+      historyItems.push({
+        id: mockId('rfqh', i * 10 + 2),
+        fromStage: 'Draft',
+        toStage: 'Qualified',
+        changedByUserId: 'f1f1f1f1-0001-0000-0000-000000000001',
+        comment: 'Customer requirements verified',
+        createdAtUtc: new Date(createdAt.getTime() + 3 * 86400000).toISOString(),
+      })
+    }
+    if (stageIdx >= 2) {
+      historyItems.push({
+        id: mockId('rfqh', i * 10 + 3),
+        fromStage: 'Qualified',
+        toStage: 'Proposal',
+        changedByUserId: 'f1f1f1f1-0001-0000-0000-000000000001',
+        comment: 'Quotation prepared and sent',
+        createdAtUtc: new Date(createdAt.getTime() + 7 * 86400000).toISOString(),
+      })
+    }
+    if (stageIdx >= 3) {
+      historyItems.push({
+        id: mockId('rfqh', i * 10 + 4),
+        fromStage: 'Proposal',
+        toStage: 'Negotiation',
+        changedByUserId: 'f1f1f1f1-0001-0000-0000-000000000001',
+        comment: 'Customer negotiating terms',
+        createdAtUtc: new Date(createdAt.getTime() + 14 * 86400000).toISOString(),
+      })
+    }
+    if (stageIdx >= 4) {
+      historyItems.push({
+        id: mockId('rfqh', i * 10 + 5),
+        fromStage: 'Negotiation',
+        toStage: stage,
+        changedByUserId: 'f1f1f1f1-0001-0000-0000-000000000001',
+        comment: stage === 'Won' ? 'Contract signed' : 'Customer chose competitor',
+        createdAtUtc: new Date(createdAt.getTime() + 21 * 86400000).toISOString(),
+      })
+    }
+    const qty = (2 + i * 3) % 50 + 1
+    const tenure = pick([12, 24, 36, 48, 60], i)
+    const probability = stage === 'Draft' ? 10 : stage === 'Qualified' ? 30 : stage === 'Proposal' ? 50 : stage === 'Negotiation' ? 70 : stage === 'Won' ? 100 : 0
+    const selectedCategories = RFQ_CATEGORIES.filter((_, ci) => (i + ci) % 3 === 0)
+    const selectedServices = RFQ_SERVICES.filter((_, si) => (i + si) % 2 === 0)
+    const wonQuotation = stage === 'Won' ? quotations[i % quotations.length] : undefined
+    return {
+      id: mockId('rfq', i + 1),
+      displayId: 1000 + i + 1,
+      rfqNumber: `RFQ-${String(i + 1).padStart(6, '0')}`,
+      customerId: c.id,
+      customerDisplayName: c.displayName,
+      source: RFQ_SOURCES[i % RFQ_SOURCES.length]!,
+      stage,
+      probability,
+      vehicleQty: qty,
+      tenureMonths: tenure,
+      expectedCloseDate: new Date(now.getTime() + (30 + i * 10) * 86400000).toISOString().substring(0, 10),
+      notes: i % 3 === 0 ? `Fleet expansion for ${c.displayName}. Priority account.` : null,
+      createdAtUtc: createdAt.toISOString(),
+      crmOpportunityId: i % 4 === 0 ? `CRM-OPP-${100 + i}` : null,
+      vehicleCategories: selectedCategories.join(', '),
+      annualMileageCapKm: pick([20000, 30000, 40000, 50000, null], i),
+      services: selectedServices.join(', '),
+      ownerUserId: 'f1f1f1f1-0001-0000-0000-000000000001',
+      lostReason: stage === 'Lost' ? 'Customer chose a competitor offer with lower pricing.' : null,
+      quotationId: wonQuotation?.id ?? null,
+      stageHistory: historyItems,
+      attachments: i % 4 === 0
+        ? [
+            {
+              id: mockId('rfqatt', i + 1),
+              fileName: `RFQ-Requirements-${c.displayName.replace(/ /g, '-')}.pdf`,
+              fileUrl: '#',
+              createdAtUtc: createdAt.toISOString(),
+            },
+          ]
+        : [],
+    }
+  })
+
   return {
     customers,
     vehicles,
@@ -2502,6 +2923,7 @@ function buildMockState(): MockState {
     violations,
     invoices,
     advancePayments,
+    rfqs,
   }
 }
 
@@ -2541,6 +2963,7 @@ class MockBffClient {
     )
     const items: CustomerSummary[] = filtered.map((c) => ({
       id: c.id,
+      displayId: 0,
       displayName: c.displayName,
       type: c.type === 'B2B' ? 1 : 2,
       mobile: c.mobile ?? null,
@@ -2605,6 +3028,7 @@ class MockBffClient {
   getDrivers(page = 1, pageSize = 20, search?: string) {
     const mapped: DriverSummary[] = this.state.drivers.map((d) => ({
       id: d.id,
+      displayId: 0,
       personNameEn: d.personNameEn,
       ...(d.personNameAr ? { personNameAr: d.personNameAr } : {}),
       driverLicenseNumber: d.driverLicenseNumber,
@@ -2624,7 +3048,7 @@ class MockBffClient {
   saveContract(_body: SaveContractRequest, _idempotencyKey: string) {
     return Promise.resolve({
       leaseId: mockId('lease', Date.now()),
-      tajeerContractNumber: 9000000001,
+      leaseNumber: `LA-${Date.now() % 10000}`,
       issuanceUrl: 'https://demo.local/issuance',
     })
   }
@@ -2779,6 +3203,7 @@ class MockBffClient {
     const id = mockId('customer', this.state.customers.length + 1)
     this.state.customers.unshift({
       id,
+      displayId: this.state.customers.length + 1,
       tenantId: DEV_TENANT_ID,
       type: 'B2B',
       status: 'Active',
@@ -2813,6 +3238,7 @@ class MockBffClient {
     const id = mockId('customer', this.state.customers.length + 1)
     this.state.customers.unshift({
       id,
+      displayId: this.state.customers.length + 1,
       tenantId: DEV_TENANT_ID,
       type: 'B2C',
       status: 'Active',
@@ -2860,6 +3286,7 @@ class MockBffClient {
     const id = mockId('vehicle', this.state.vehicles.length + 1)
     this.state.vehicles.unshift({
       id,
+      displayId: this.state.vehicles.length + 1,
       tenantId: DEV_TENANT_ID,
       status: 'Available',
       plateNumber: body.plateNumber,
@@ -2901,6 +3328,7 @@ class MockBffClient {
     const id = mockId('driver', this.state.drivers.length + 1)
     this.state.drivers.unshift({
       id,
+      displayId: this.state.drivers.length + 1,
       tenantId: DEV_TENANT_ID,
       status: 'Active',
       customerId: body.customerId ?? null,
@@ -2961,6 +3389,18 @@ class MockBffClient {
     return Promise.resolve({ success: true, branchId: id })
   }
 
+  // ─── Contracts ──────────────────────────────────────────────────────────────
+
+  getContracts(_page = 1, _pageSize = 20): Promise<PagedResult<ContractSummary>> {
+    return Promise.resolve({ items: [], page: 1, pageSize: 20, totalCount: 0, totalPages: 0 })
+  }
+  getContractById(_id: string): Promise<ContractDetail> {
+    return Promise.reject(new Error('Not found'))
+  }
+  getContractLeaseAgreements(_id: string): Promise<ContractLeaseAgreement[]> {
+    return Promise.resolve([])
+  }
+
   // ─── Leases ────────────────────────────────────────────────────────────────
 
   getLeases(page = 1, pageSize = 20, search?: string, status?: string) {
@@ -2988,8 +3428,6 @@ class MockBffClient {
         resumedAtUtc,
         closedAtUtc,
         cancelledAtUtc,
-        tajeerStatus,
-        tajeerIssuanceUrl,
         zatcaSubmissionStatus,
         zatcaInvoiceNumber,
         ...s
@@ -3021,8 +3459,6 @@ class MockBffClient {
           resumedAtUtc,
           closedAtUtc,
           cancelledAtUtc,
-          tajeerStatus,
-          tajeerIssuanceUrl,
           zatcaSubmissionStatus,
           zatcaInvoiceNumber,
           ...s
@@ -3039,6 +3475,7 @@ class MockBffClient {
         .filter((v) => vehicleIds.has(v.id))
         .map((v) => ({
           id: v.id,
+          displayId: 0,
           plateNumber: v.plateNumber,
           make: v.make,
           model: v.model,
@@ -3063,6 +3500,7 @@ class MockBffClient {
         .filter((d) => d.customerId === customerId)
         .map((d) => ({
           id: d.id,
+          displayId: 0,
           personNameEn: d.personNameEn,
           ...(d.personNameAr ? { personNameAr: d.personNameAr } : {}),
           driverLicenseNumber: d.driverLicenseNumber,
@@ -3070,6 +3508,15 @@ class MockBffClient {
           status: d.status === 'Active' ? 1 : d.status === 'Suspended' ? 2 : 3,
         })),
     )
+  }
+  getCustomerInvoices(_customerId: string): Promise<CustomerInvoiceSummary[]> {
+    return Promise.resolve([])
+  }
+  getCustomerPayments(_customerId: string): Promise<CustomerPaymentSummary[]> {
+    return Promise.resolve([])
+  }
+  getCustomerContracts(_customerId: string): Promise<ContractSummary[]> {
+    return Promise.resolve([])
   }
   getVehicleCurrentLease(vehicleId: string): Promise<LeaseSummary | null> {
     const lease = this.state.leases.find(
@@ -3091,8 +3538,6 @@ class MockBffClient {
       resumedAtUtc,
       closedAtUtc,
       cancelledAtUtc,
-      tajeerStatus,
-      tajeerIssuanceUrl,
       zatcaSubmissionStatus,
       zatcaInvoiceNumber,
       ...s
@@ -3119,8 +3564,6 @@ class MockBffClient {
       resumedAtUtc,
       closedAtUtc,
       cancelledAtUtc,
-      tajeerStatus,
-      tajeerIssuanceUrl,
       zatcaSubmissionStatus,
       zatcaInvoiceNumber,
       ...s
@@ -3146,14 +3589,16 @@ class MockBffClient {
           resumedAtUtc,
           closedAtUtc,
           cancelledAtUtc,
-          tajeerStatus,
-          tajeerIssuanceUrl,
           zatcaSubmissionStatus,
           zatcaInvoiceNumber,
           ...s
         }) => s,
       )
     return Promise.resolve(result)
+  }
+
+  activateLease(_leaseId: string, _idempotencyKey: string): Promise<{ leaseId: string; status: string; issuedAtUtc: string }> {
+    return Promise.resolve({ leaseId: _leaseId, status: 'Active', issuedAtUtc: new Date().toISOString() })
   }
 
   switchLeaseVehicle(
@@ -3530,6 +3975,7 @@ class MockBffClient {
     const total = subTotal + vatTotal
     const inv: Invoice = {
       id: mockId('inv', this.state.invoices.length + 1),
+      displayId: this.state.invoices.length + 1,
       invoiceNumber: `INV-${String(this.state.invoices.length + 1).padStart(7, '0')}`,
       leaseId: lease.id,
       leaseNumber: lease.leaseNumber,
@@ -3547,7 +3993,7 @@ class MockBffClient {
       billingPeriodEnd: body.billingPeriodEnd,
       issuedDate: new Date().toISOString().substring(0, 10),
       dueDate: new Date(Date.now() + 10 * 86400000).toISOString().substring(0, 10),
-      status: 'Issued',
+      status: 'Submitted',
       lines,
       subTotalSar: subTotal,
       vatAmountSar: vatTotal,
@@ -3650,6 +4096,7 @@ class MockBffClient {
       const total = subTotal + vatTotal
       const inv: Invoice = {
         id: mockId('inv', this.state.invoices.length + ids.length + 1),
+        displayId: this.state.invoices.length + ids.length + 1,
         invoiceNumber: `INV-${String(this.state.invoices.length + ids.length + 1).padStart(7, '0')}`,
         leaseId: l.id,
         leaseNumber: l.leaseNumber,
@@ -3667,7 +4114,7 @@ class MockBffClient {
         billingPeriodEnd,
         issuedDate: new Date().toISOString().substring(0, 10),
         dueDate: new Date(Date.now() + 10 * 86400000).toISOString().substring(0, 10),
-        status: 'Issued',
+        status: 'Submitted',
         lines,
         subTotalSar: subTotal,
         vatAmountSar: vatTotal,
@@ -3688,7 +4135,7 @@ class MockBffClient {
     if (!inv) throw new Error('Invoice not found')
     inv.paidAmountSar = Math.min(paidAmount, inv.totalSar)
     inv.balanceSar = Math.max(0, inv.totalSar - inv.paidAmountSar)
-    inv.status = inv.balanceSar === 0 ? 'Paid' : 'PartiallyPaid'
+    inv.status = inv.balanceSar === 0 ? 'Finalized' : 'Cleared'
     return Promise.resolve(inv)
   }
 
@@ -3718,7 +4165,7 @@ class MockBffClient {
         remaining = Math.round((remaining - allocAmt) * 100) / 100
         inv.paidAmountSar += allocAmt
         inv.balanceSar = Math.round((inv.balanceSar - allocAmt) * 100) / 100
-        inv.status = inv.balanceSar === 0 ? 'Paid' : 'PartiallyPaid'
+        inv.status = inv.balanceSar === 0 ? 'Finalized' : 'Cleared'
         allocs.push({
           id: mockId('alloc', allocs.length + 1),
           invoiceId: inv.id,
@@ -3730,6 +4177,7 @@ class MockBffClient {
     }
     const pmt: AdvancePayment = {
       id: mockId('pmt', this.state.advancePayments.length + 1),
+      displayId: this.state.advancePayments.length + 1,
       customerId: body.customerId,
       customerDisplayName: customer?.displayName ?? '',
       amount: body.amount,
@@ -3763,7 +4211,7 @@ class MockBffClient {
         pmt.remainingBalance -= allocAmt
         inv.balanceSar -= allocAmt
         inv.paidAmountSar += allocAmt
-        inv.status = inv.balanceSar === 0 ? 'Paid' : 'PartiallyPaid'
+        inv.status = inv.balanceSar === 0 ? 'Finalized' : 'Cleared'
         pmt.allocations.push({
           id: mockId('alloc', allocCount + 1),
           invoiceId: inv.id,
@@ -3860,6 +4308,7 @@ class MockBffClient {
           const id = mockId('vehicle', this.state.vehicles.length + created + 1)
           this.state.vehicles.unshift({
             id,
+            displayId: this.state.vehicles.length + created + 1,
             tenantId: DEV_TENANT_ID,
             status: 'Available',
             plateNumber: cols[0]!.trim(),
@@ -3936,6 +4385,227 @@ class MockBffClient {
           : null,
     }))
     return Promise.resolve(events)
+  }
+
+  // ─── RFQs ────────────────────────────────────────────────────────────────────
+
+  getRfqs(page = 1, pageSize = 20, search?: string, stage?: string) {
+    const filtered = this.state.rfqs.filter(
+      (r) =>
+        (!search ||
+          `${r.rfqNumber} ${r.customerDisplayName}`
+            .toLowerCase()
+            .includes(search.toLowerCase())) &&
+        (!stage || r.stage === stage),
+    )
+    const summaries: RfqSummary[] = filtered.map(
+      ({ crmOpportunityId, vehicleCategories, annualMileageCapKm, services, ownerUserId, lostReason, quotationId, stageHistory, attachments, ...s }) => s,
+    )
+    return Promise.resolve(paginate(summaries, page, pageSize))
+  }
+
+  getRfqById(id: string) {
+    const r = this.state.rfqs.find((x) => x.id === id)
+    if (!r) throw new Error('RFQ not found')
+    return Promise.resolve(r)
+  }
+
+  getRfqPipeline(): Promise<RfqPipelineStage[]> {
+    const stages = ['Draft', 'Qualified', 'Proposal', 'Negotiation', 'Won', 'Lost']
+    return Promise.resolve(
+      stages.map((stage) => {
+        const items: RfqSummary[] = this.state.rfqs
+          .filter((r) => r.stage === stage)
+          .map(({ crmOpportunityId, vehicleCategories, annualMileageCapKm, services, ownerUserId, lostReason, quotationId, stageHistory, attachments, ...s }) => s)
+        return { stage, count: items.length, items }
+      }),
+    )
+  }
+
+  createRfq(body: CreateRfqRequest, _idempotencyKey: string) {
+    const id = mockId('rfq', this.state.rfqs.length + 1)
+    const customer = this.state.customers.find((c) => c.id === body.customerId)
+    const now = new Date()
+    const detail: RfqDetail = {
+      id,
+      displayId: 1000 + this.state.rfqs.length + 1,
+      rfqNumber: `RFQ-${String(this.state.rfqs.length + 1).padStart(6, '0')}`,
+      customerId: body.customerId,
+      customerDisplayName: customer?.displayName ?? 'Unknown',
+      source: body.source,
+      stage: 'Draft',
+      probability: 10,
+      vehicleQty: body.vehicleQty,
+      tenureMonths: body.tenureMonths,
+      expectedCloseDate: body.expectedCloseDate ?? null,
+      notes: body.notes ?? null,
+      createdAtUtc: now.toISOString(),
+      crmOpportunityId: null,
+      vehicleCategories: body.vehicleCategories ?? null,
+      annualMileageCapKm: body.annualMileageCapKm ?? null,
+      services: body.services ?? null,
+      ownerUserId: 'f1f1f1f1-0001-0000-0000-000000000001',
+      lostReason: null,
+      quotationId: null,
+      stageHistory: [
+        {
+          id: mockId('rfqh', Date.now()),
+          fromStage: null,
+          toStage: 'Draft',
+          changedByUserId: 'f1f1f1f1-0001-0000-0000-000000000001',
+          comment: 'RFQ created',
+          createdAtUtc: now.toISOString(),
+        },
+      ],
+      attachments: [],
+    }
+    this.state.rfqs.unshift(detail)
+    return Promise.resolve({ success: true, rfqId: id })
+  }
+
+  updateRfqStage(id: string, toStage: string, comment: string | undefined, _idempotencyKey: string) {
+    const r = this.state.rfqs.find((x) => x.id === id)
+    if (!r) throw new Error('RFQ not found')
+    const fromStage = r.stage
+    r.stage = toStage
+    if (toStage === 'Lost' && comment) r.lostReason = comment
+    if (toStage === 'Draft') r.lostReason = null
+    const PROBS: Record<string, number> = { Draft: 10, Qualified: 30, Proposal: 50, Negotiation: 70, Won: 100, Lost: 0 }
+    r.probability = PROBS[toStage] ?? 0
+    r.stageHistory.push({
+      id: mockId('rfqh', Date.now()),
+      fromStage,
+      toStage,
+      changedByUserId: 'f1f1f1f1-0001-0000-0000-000000000001',
+      comment: comment ?? null,
+      createdAtUtc: new Date().toISOString(),
+    })
+    return Promise.resolve({ success: true, rfqId: id })
+  }
+
+  convertRfqToQuotation(id: string, _idempotencyKey: string) {
+    const r = this.state.rfqs.find((x) => x.id === id)
+    if (!r) throw new Error('RFQ not found')
+    const quotationId = mockId('quote', this.state.quotations.length + 1)
+    r.quotationId = quotationId
+    r.stage = 'Proposal'
+    r.probability = 50
+    r.stageHistory.push({
+      id: mockId('rfqh', Date.now()),
+      fromStage: 'Qualified',
+      toStage: 'Proposal',
+      changedByUserId: 'f1f1f1f1-0001-0000-0000-000000000001',
+      comment: 'Converted to quotation',
+      createdAtUtc: new Date().toISOString(),
+    })
+    const detail: QuotationDetail = {
+      id: quotationId,
+      quoteNumber: `QT-${String(this.state.quotations.length + 1).padStart(6, '0')}`,
+      customerId: r.customerId,
+      customerDisplayName: r.customerDisplayName,
+      status: 'Draft',
+      contractType: 'LongTermLease',
+      totalSar: 0,
+      subTotalSar: 0,
+      vatSar: 0,
+      discountPercent: 0,
+      quoteDate: new Date().toISOString().substring(0, 10),
+      validUntilDate: new Date(Date.now() + 30 * 86400000).toISOString().substring(0, 10),
+      estimatedDurationMonths: r.tenureMonths,
+      submittedAtUtc: null,
+      approvedAtUtc: null,
+      sentAtUtc: null,
+      acceptedAtUtc: null,
+      lines: [],
+      approvals: [],
+      pdfBlobUri: null,
+      acceptedByCustomerSignature: null,
+    }
+    this.state.quotations.unshift(detail)
+    return Promise.resolve({ success: true, rfqId: id, quotationId })
+  }
+
+  // ─── Approvals ─────────────────────────────────────────────────────────────
+  getPendingApprovals(): Promise<{ items: PendingApprovalItem[]; totalCount: number }> {
+    const pending = this.state.quotations
+      .filter((q) => q.status === 'PendingApproval')
+      .map((q) => ({
+        quotationId: q.id,
+        displayId: this.state.quotations.indexOf(q) + 1,
+        quoteNumber: q.quoteNumber,
+        customerId: q.customerId,
+        customerDisplayName: q.customerDisplayName ?? '',
+        status: q.status,
+        totalSar: q.totalSar,
+        discountPercent: q.discountPercent,
+        estimatedDurationMonths: q.estimatedDurationMonths,
+        submittedAtUtc: q.submittedAtUtc ?? null,
+        createdAtUtc: q.quoteDate,
+        lineCount: q.lines.length,
+        approvals: q.approvals.map((a) => ({
+          tierLevel: a.tierLevel,
+          requiredRoleCode: a.requiredRoleCode,
+          status: a.status,
+          comment: a.comment ?? null,
+          decisionAtUtc: a.decidedAtUtc ?? null,
+        })),
+      }))
+    return Promise.resolve({ items: pending, totalCount: pending.length })
+  }
+
+  // ─── Notifications ─────────────────────────────────────────────────────────
+  private mockNotifications: (NotificationItem & { _read: boolean })[] = (() => {
+    const now = new Date()
+    const TYPES = ['QuotationApproval', 'LeaseStatusChange', 'InvoiceGenerated', 'PaymentReceived', 'VehicleService', 'CustomerAction'] as const
+    return Array.from({ length: 25 }).map((_, i) => ({
+      id: `notif-${String(i + 1).padStart(5, '0')}`,
+      type: TYPES[i % TYPES.length]!,
+      title: [
+        'Quotation QT-000042 requires your approval',
+        'Lease L-15 status changed to Active',
+        'Invoice INV-0000123 generated for Saudi Aramco',
+        'Payment of 25,000 SAR received from SABIC',
+        'Vehicle 1042 overdue for scheduled service',
+        'Customer Al Rajhi Bank credit limit updated',
+        'Quotation QT-000099 approved by Regional Manager',
+        'Lease L-88 extended for 6 months',
+        'Invoice INV-0000456 marked as Finalized',
+        'New advance payment recorded for STC Group',
+        'Vehicle 1100 insurance expiring in 7 days',
+        'Customer Almarai Company KYC verification pending',
+      ][i % 12]!,
+      body: [
+        'Total SAR 45,000 with 5% discount. Tier 1 approval needed.',
+        'Contract issued successfully via Tajeer integration.',
+        'Billing period 2026-05 to 2026-06. Total SAR 12,500.',
+        'Bank transfer received. FIFO allocation applied.',
+        'PMS service overdue by 15 days. Current odometer: 85,000 km.',
+        'Credit limit increased from 100K to 150K SAR.',
+      ][i % 6]!,
+      linkedEntityType: ['Quotation', 'Lease', 'Invoice', 'Payment', 'Vehicle', 'Customer'][i % 6]!,
+      linkedEntityId: `mock-${i + 1}`,
+      isRead: i > 4,
+      createdAtUtc: new Date(now.getTime() - i * 3600000 * (2 + i % 5)).toISOString(),
+      _read: i > 4,
+    }))
+  })()
+
+  getNotifications(page = 1, pageSize = 20): Promise<PagedResult<NotificationItem>> {
+    const items: NotificationItem[] = this.mockNotifications.map(({ _read, ...n }) => ({ ...n, isRead: _read }))
+    return Promise.resolve(paginate(items, page, pageSize))
+  }
+  getUnreadNotificationCount(): Promise<{ unreadCount: number }> {
+    return Promise.resolve({ unreadCount: this.mockNotifications.filter((n) => !n._read).length })
+  }
+  markNotificationRead(id: string): Promise<void> {
+    const n = this.mockNotifications.find((x) => x.id === id)
+    if (n) n._read = true
+    return Promise.resolve()
+  }
+  markAllNotificationsRead(): Promise<{ markedRead: number }> {
+    let count = 0
+    this.mockNotifications.forEach((n) => { if (!n._read) { n._read = true; count++ } })
+    return Promise.resolve({ markedRead: count })
   }
 }
 

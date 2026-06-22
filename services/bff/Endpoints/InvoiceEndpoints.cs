@@ -53,7 +53,9 @@ public static class InvoiceEndpoints
         CancellationToken ct,
         int page = 1,
         int pageSize = 20,
-        string? status = null)
+        string? status = null,
+        Guid? leaseId = null,
+        Guid? customerId = null)
     {
         var tenantId = tenant.TenantId;
         if (tenantId == Guid.Empty) return Results.Unauthorized();
@@ -62,31 +64,95 @@ public static class InvoiceEndpoints
             .AsNoTracking()
             .Where(i => i.TenantId == tenantId);
 
+        if (leaseId.HasValue && leaseId.Value != Guid.Empty)
+            query = query.Where(i => i.LeaseId == leaseId.Value);
+
+        if (customerId.HasValue && customerId.Value != Guid.Empty)
+            query = query.Where(i => i.CustomerId == customerId.Value);
+
         if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<Domain.Billing.InvoiceStatus>(status, true, out var st))
             query = query.Where(i => i.Status == st);
 
         var total = await query.CountAsync(ct);
-        var items = await query
+        var invoices = await query
             .OrderByDescending(i => i.IssueDateUtc)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Join(db.Customers.AsNoTracking(), i => i.CustomerId, c => c.Id, (i, c) => new { i, c })
             .Join(db.Leases.AsNoTracking(), x => x.i.LeaseId, l => l.Id, (x, l) => new { x.i, x.c, l })
+            .Join(db.Vehicles.AsNoTracking(), x => x.l.VehicleId, v => v.Id, (x, v) => new { x.i, x.c, x.l, v })
             .Select(x => new
             {
                 x.i.Id,
-                InvoiceNumber = x.i.InvoiceNumber,
-                LeaseId = x.i.LeaseId,
-                CustomerId = x.i.CustomerId,
+                x.i.DisplayId,
+                x.i.InvoiceNumber,
+                x.i.LeaseId,
+                LeaseDisplayId = x.l.DisplayId,
+                x.i.CustomerId,
                 CustomerDisplayName = x.c.DisplayName,
+                VehicleMakeModel = x.v.Make + " " + x.v.Model,
+                VehiclePlate = x.v.PlateNumber,
+                VehiclePlateAr = x.v.PlateLetters + " " + x.v.PlateNumber,
                 Status = x.i.Status.ToString(),
-                IssueDateUtc = x.i.IssueDateUtc,
-                DueDateUtc = x.i.DueDateUtc,
-                BaseAmountSar = x.i.BaseAmountSar,
-                VatSar = x.i.VatSar,
-                TotalSar = x.i.TotalSar,
+                IssuedDate = x.i.IssueDateUtc,
+                DueDate = x.i.DueDateUtc,
+                SubTotalSar = x.i.BaseAmountSar,
+                VatAmountSar = x.i.VatSar,
+                x.i.TotalSar,
             })
             .ToListAsync(ct);
+
+        var invoiceIds = invoices.Select(inv => inv.Id).ToList();
+        var allocs = await db.PaymentAllocations.AsNoTracking()
+            .Where(a => invoiceIds.Contains(a.InvoiceId))
+            .Join(db.AdvancePayments.AsNoTracking(), a => a.AdvancePaymentId, p => p.Id, (a, p) => new { a, p })
+            .Select(x => new
+            {
+                x.a.InvoiceId,
+                PaymentId = x.p.Id,
+                PaymentDisplayId = x.p.DisplayId,
+                ReferenceNumber = x.p.ReferenceNumber ?? ("P-" + x.p.DisplayId),
+                Amount = x.a.AllocatedAmountSar,
+                Date = x.p.ReceivedDate,
+                x.p.PaymentMethod,
+            })
+            .ToListAsync(ct);
+
+        var items = invoices.Select(inv =>
+        {
+            var ia = allocs.Where(a => a.InvoiceId == inv.Id).ToList();
+            var paid = ia.Sum(a => a.Amount);
+            return new
+            {
+                inv.Id,
+                inv.DisplayId,
+                inv.InvoiceNumber,
+                inv.LeaseId,
+                LeaseNumber = "L-" + inv.LeaseDisplayId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                inv.CustomerId,
+                inv.CustomerDisplayName,
+                inv.VehicleMakeModel,
+                inv.VehiclePlate,
+                inv.VehiclePlateAr,
+                inv.Status,
+                inv.IssuedDate,
+                inv.DueDate,
+                inv.SubTotalSar,
+                inv.VatAmountSar,
+                inv.TotalSar,
+                PaidAmountSar = paid,
+                BalanceSar = inv.TotalSar - paid,
+                Allocations = ia.Select(a => new
+                {
+                    a.PaymentId,
+                    a.PaymentDisplayId,
+                    a.ReferenceNumber,
+                    a.Amount,
+                    a.Date,
+                    a.PaymentMethod,
+                }),
+            };
+        }).ToList();
 
         return Results.Ok(new { items, page, pageSize, totalCount = total });
     }
@@ -104,23 +170,90 @@ public static class InvoiceEndpoints
             .AsNoTracking()
             .Where(i => i.TenantId == tenantId && i.Id == id)
             .Join(db.Customers.AsNoTracking(), i => i.CustomerId, c => c.Id, (i, c) => new { i, c })
+            .Join(db.Leases.AsNoTracking(), x => x.i.LeaseId, l => l.Id, (x, l) => new { x.i, x.c, l })
+            .Join(db.Vehicles.AsNoTracking(), x => x.l.VehicleId, v => v.Id, (x, v) => new { x.i, x.c, x.l, v })
             .Select(x => new
             {
                 x.i.Id,
+                x.i.DisplayId,
                 x.i.InvoiceNumber,
                 x.i.LeaseId,
+                LeaseDisplayId = x.l.DisplayId,
                 x.i.CustomerId,
                 CustomerDisplayName = x.c.DisplayName,
+                VehicleMakeModel = x.v.Make + " " + x.v.Model,
+                VehiclePlate = x.v.PlateNumber,
+                VehiclePlateAr = x.v.PlateLetters + " " + x.v.PlateNumber,
+                SupplierName = "Auto Lead Company",
+                SupplierCrNo = "1010123456",
+                SupplierVatNo = "300012345600003",
+                QuotationNumber = (string?)null,
+                PoNumber = (string?)null,
+                BillingPeriodStart = x.i.IssueDateUtc.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                BillingPeriodEnd = x.i.DueDateUtc.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
                 Status = x.i.Status.ToString(),
-                x.i.IssueDateUtc,
-                x.i.DueDateUtc,
-                x.i.BaseAmountSar,
-                x.i.VatSar,
+                IssuedDate = x.i.IssueDateUtc,
+                DueDate = x.i.DueDateUtc,
+                Lines = new object[0],
+                SubTotalSar = x.i.BaseAmountSar,
+                VatAmountSar = x.i.VatSar,
                 x.i.TotalSar,
+                Notes = (string?)null,
+                x.i.CreatedAtUtc,
             })
             .FirstOrDefaultAsync(ct);
 
-        return inv is null ? Results.NotFound() : Results.Ok(inv);
+        if (inv is null) return Results.NotFound();
+
+        var invAllocs = await db.PaymentAllocations.AsNoTracking()
+            .Where(a => a.InvoiceId == id)
+            .Join(db.AdvancePayments.AsNoTracking(), a => a.AdvancePaymentId, p => p.Id, (a, p) => new { a, p })
+            .Select(x => new
+            {
+                PaymentId = x.p.Id,
+                PaymentDisplayId = x.p.DisplayId,
+                ReferenceNumber = x.p.ReferenceNumber ?? ("P-" + x.p.DisplayId),
+                Amount = x.a.AllocatedAmountSar,
+                Date = x.p.ReceivedDate,
+                x.p.PaymentMethod,
+            })
+            .ToListAsync(ct);
+
+        var paidAmount = invAllocs.Sum(a => a.Amount);
+
+        return Results.Ok(new
+        {
+            inv.Id,
+            inv.DisplayId,
+            inv.InvoiceNumber,
+            inv.LeaseId,
+            LeaseNumber = "L-" + inv.LeaseDisplayId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            inv.CustomerId,
+            inv.CustomerDisplayName,
+            inv.VehicleMakeModel,
+            inv.VehiclePlate,
+            inv.VehiclePlateAr,
+            inv.SupplierName,
+            inv.SupplierCrNo,
+            inv.SupplierVatNo,
+            inv.QuotationNumber,
+            inv.PoNumber,
+            inv.BillingPeriodStart,
+            inv.BillingPeriodEnd,
+            inv.Status,
+            inv.IssuedDate,
+            inv.DueDate,
+            inv.Lines,
+            inv.SubTotalSar,
+            inv.VatAmountSar,
+            inv.TotalSar,
+            PaidAmountSar = paidAmount,
+            BalanceSar = inv.TotalSar - paidAmount,
+            ZatcaInvoiceNumber = (string?)null,
+            inv.Notes,
+            inv.CreatedAtUtc,
+            Allocations = invAllocs,
+        });
     }
 
     private static async Task<IResult> GetByLeaseAsync(

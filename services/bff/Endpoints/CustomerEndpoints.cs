@@ -2,10 +2,12 @@ using AutoLeaseNet.Application.Customers;
 using AutoLeaseNet.Application.Ports.Persistence;
 using AutoLeaseNet.Application.Ports.Tenancy;
 using AutoLeaseNet.Domain.Customers;
+using AutoLeaseNet.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 
 namespace AutoLeaseNet.Bff.Endpoints;
@@ -20,6 +22,22 @@ public static class CustomerEndpoints
         group.MapPost("/b2c", CreateB2CAsync).WithName("CreateCustomerB2C").RequireAuthorization();
         group.MapGet("/{id:guid}", GetByIdAsync).WithName("GetCustomer").RequireAuthorization();
         group.MapPost("/{id:guid}/status", UpdateStatusAsync).WithName("UpdateCustomerStatus").RequireAuthorization();
+
+        // Documents
+        group.MapGet("/{id:guid}/documents", ListDocumentsAsync).WithName("ListCustomerDocuments").RequireAuthorization();
+        group.MapPost("/{id:guid}/documents", CreateDocumentAsync).WithName("CreateCustomerDocument").RequireAuthorization();
+        group.MapPost("/{id:guid}/documents/{docId:guid}/verify", VerifyDocumentAsync).WithName("VerifyCustomerDocument").RequireAuthorization();
+
+        // Timeline / activities
+        group.MapGet("/{id:guid}/timeline", GetTimelineAsync).WithName("GetCustomerTimeline").RequireAuthorization();
+        group.MapPost("/{id:guid}/activities", CreateActivityAsync).WithName("CreateCustomerActivity").RequireAuthorization();
+
+        // RFQs for a customer
+        group.MapGet("/{id:guid}/rfqs", ListCustomerRfqsAsync).WithName("ListCustomerRfqs").RequireAuthorization();
+
+        // Invoices & Payments for a customer
+        group.MapGet("/{id:guid}/invoices", ListCustomerInvoicesAsync).WithName("ListCustomerInvoices").RequireAuthorization();
+        group.MapGet("/{id:guid}/payments", ListCustomerPaymentsAsync).WithName("ListCustomerPayments").RequireAuthorization();
 
         return group;
     }
@@ -107,6 +125,245 @@ public static class CustomerEndpoints
             : Results.Problem(detail: result.ErrorMessage, title: result.ErrorCode, statusCode: 400);
     }
 
+    // ─── Documents ────────────────────────────────────────────────────────
+
+    private static async Task<IResult> ListDocumentsAsync(
+        Guid id, AutoLeaseNetDbContext db, ITenantContext tenant, CancellationToken ct)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var docs = await db.CustomerDocuments
+            .AsNoTracking()
+            .Where(d => d.TenantId == tenantId && d.CustomerId == id)
+            .OrderByDescending(d => d.CreatedAtUtc)
+            .Select(d => new CustomerDocumentDto(
+                d.Id, d.CustomerId, d.DocType, d.FileName, d.FileUrl,
+                d.ExpiryDate, d.VerifiedAtUtc, d.VerifiedByUserId, d.Notes,
+                d.CreatedAtUtc, d.UpdatedAtUtc))
+            .ToListAsync(ct);
+
+        return Results.Ok(docs);
+    }
+
+    private static async Task<IResult> CreateDocumentAsync(
+        Guid id, CreateCustomerDocumentRequest body,
+        AutoLeaseNetDbContext db, ITenantContext tenant, CancellationToken ct)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var customerExists = await db.Customers
+            .AsNoTracking()
+            .AnyAsync(c => c.TenantId == tenantId && c.Id == id, ct);
+        if (!customerExists) return Results.NotFound("Customer not found.");
+
+        var doc = CustomerDocument.Create(
+            tenantId, id, body.DocType, body.FileName, body.FileUrl,
+            body.ExpiryDate, body.Notes);
+
+        db.CustomerDocuments.Add(doc);
+        await db.SaveChangesAsync(ct);
+
+        return Results.Ok(new CustomerDocumentDto(
+            doc.Id, doc.CustomerId, doc.DocType, doc.FileName, doc.FileUrl,
+            doc.ExpiryDate, doc.VerifiedAtUtc, doc.VerifiedByUserId, doc.Notes,
+            doc.CreatedAtUtc, doc.UpdatedAtUtc));
+    }
+
+    private static async Task<IResult> VerifyDocumentAsync(
+        Guid id, Guid docId,
+        AutoLeaseNetDbContext db, ITenantContext tenant, CancellationToken ct)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var doc = await db.CustomerDocuments
+            .FirstOrDefaultAsync(d => d.TenantId == tenantId && d.CustomerId == id && d.Id == docId, ct);
+        if (doc is null) return Results.NotFound("Document not found.");
+
+        // TODO: extract real user ID from auth claims; using a placeholder for now.
+        var userId = Guid.NewGuid();
+        doc.Verify(userId, DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync(ct);
+
+        return Results.Ok(new CustomerDocumentDto(
+            doc.Id, doc.CustomerId, doc.DocType, doc.FileName, doc.FileUrl,
+            doc.ExpiryDate, doc.VerifiedAtUtc, doc.VerifiedByUserId, doc.Notes,
+            doc.CreatedAtUtc, doc.UpdatedAtUtc));
+    }
+
+    // ─── Timeline / Activities ──────────────────────────────────────────
+
+    private static async Task<IResult> GetTimelineAsync(
+        Guid id, AutoLeaseNetDbContext db, ITenantContext tenant, CancellationToken ct,
+        int page = 1, int pageSize = 20)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var query = db.AccountActivities
+            .AsNoTracking()
+            .Where(a => a.TenantId == tenantId && a.CustomerId == id);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(a => a.CreatedAtUtc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(a => new AccountActivityDto(
+                a.Id, a.CustomerId, a.ActivityType, a.Subject, a.Body,
+                a.Direction, a.DurationMinutes, a.PerformedByUserId,
+                a.LinkedEntityType, a.LinkedEntityId, a.CreatedAtUtc))
+            .ToListAsync(ct);
+
+        return Results.Ok(new { total, page, pageSize, items });
+    }
+
+    private static async Task<IResult> CreateActivityAsync(
+        Guid id, CreateAccountActivityRequest body,
+        AutoLeaseNetDbContext db, ITenantContext tenant, CancellationToken ct)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var customerExists = await db.Customers
+            .AsNoTracking()
+            .AnyAsync(c => c.TenantId == tenantId && c.Id == id, ct);
+        if (!customerExists) return Results.NotFound("Customer not found.");
+
+        var activity = AccountActivity.Create(
+            tenantId, id, body.ActivityType, body.Subject, body.Body,
+            body.Direction, body.DurationMinutes, body.PerformedByUserId,
+            body.LinkedEntityType, body.LinkedEntityId);
+
+        db.AccountActivities.Add(activity);
+        await db.SaveChangesAsync(ct);
+
+        return Results.Ok(new AccountActivityDto(
+            activity.Id, activity.CustomerId, activity.ActivityType,
+            activity.Subject, activity.Body, activity.Direction,
+            activity.DurationMinutes, activity.PerformedByUserId,
+            activity.LinkedEntityType, activity.LinkedEntityId,
+            activity.CreatedAtUtc));
+    }
+
+    // ─── Customer RFQs ─────────────────────────────────────────────────
+
+    private static async Task<IResult> ListCustomerRfqsAsync(
+        Guid id, AutoLeaseNetDbContext db, ITenantContext tenant, CancellationToken ct,
+        int page = 1, int pageSize = 20)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var query = db.Rfqs
+            .AsNoTracking()
+            .Where(r => r.TenantId == tenantId && r.CustomerId == id);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(r => r.CreatedAtUtc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(r => new CustomerRfqSummaryDto(
+                r.Id, r.DisplayId, r.RfqNumber, r.Stage.ToString(),
+                r.Probability, r.VehicleQty, r.TenureMonths,
+                r.ExpectedCloseDate, r.CreatedAtUtc))
+            .ToListAsync(ct);
+
+        return Results.Ok(new { total, page, pageSize, items });
+    }
+
+    // ─── Customer Invoices ──────────────────────────────────────────────
+
+    private static async Task<IResult> ListCustomerInvoicesAsync(
+        Guid id, AutoLeaseNetDbContext db, ITenantContext tenant, CancellationToken ct,
+        int page = 1, int pageSize = 20)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var query = db.Invoices
+            .AsNoTracking()
+            .Where(i => i.TenantId == tenantId && i.CustomerId == id);
+
+        var total = await query.CountAsync(ct);
+
+        var items = await query
+            .OrderByDescending(i => i.CreatedAtUtc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Join(
+                db.Leases.AsNoTracking().Where(l => l.TenantId == tenantId),
+                i => i.LeaseId,
+                l => l.Id,
+                (i, l) => new { Invoice = i, Lease = l })
+            .Select(x => new CustomerInvoiceDto(
+                x.Invoice.Id,
+                x.Invoice.DisplayId,
+                x.Invoice.InvoiceNumber,
+                x.Invoice.LeaseId,
+                "L-" + x.Lease.DisplayId.ToString(CultureInfo.InvariantCulture),
+                x.Invoice.Status.ToString(),
+                x.Invoice.IssueDateUtc,
+                x.Invoice.DueDateUtc,
+                x.Invoice.BaseAmountSar,
+                x.Invoice.VatSar,
+                x.Invoice.TotalSar,
+                db.PaymentAllocations
+                    .AsNoTracking()
+                    .Where(pa => pa.InvoiceId == x.Invoice.Id)
+                    .Sum(pa => (decimal?)pa.AllocatedAmountSar) ?? 0m))
+            .ToListAsync(ct);
+
+        return Results.Ok(new { total, page, pageSize, items });
+    }
+
+    // ─── Customer Payments ──────────────────────────────────────────────
+
+    private static async Task<IResult> ListCustomerPaymentsAsync(
+        Guid id, AutoLeaseNetDbContext db, ITenantContext tenant, CancellationToken ct,
+        int page = 1, int pageSize = 20)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var query = db.AdvancePayments
+            .AsNoTracking()
+            .Where(p => p.TenantId == tenantId && p.CustomerId == id);
+
+        var total = await query.CountAsync(ct);
+
+        var payments = await query
+            .OrderByDescending(p => p.CreatedAtUtc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(p => new CustomerPaymentDto(
+                p.Id,
+                p.DisplayId,
+                p.Amount,
+                p.PaymentMethod,
+                p.ReceivedDate,
+                p.ReferenceNumber,
+                p.Notes,
+                p.RemainingBalance,
+                p.CreatedAtUtc,
+                db.PaymentAllocations
+                    .AsNoTracking()
+                    .Where(pa => pa.AdvancePaymentId == p.Id)
+                    .Select(pa => new PaymentAllocationDto(
+                        pa.InvoiceId,
+                        pa.InvoiceNumber,
+                        pa.AllocatedAmountSar))
+                    .ToList()))
+            .ToListAsync(ct);
+
+        return Results.Ok(new { total, page, pageSize, items = payments });
+    }
+
+    // ─── Mappers ────────────────────────────────────────────────────────
+
     private static CustomerDetailDto ToDto(Customer c) => new(
         Id: c.Id,
         TenantId: c.TenantId,
@@ -152,6 +409,30 @@ public sealed record CreateCustomerB2CRequest(
 
 public sealed record UpdateCustomerStatusRequest(string Action);
 
+public sealed record CreateCustomerDocumentRequest(
+    string DocType, string FileName, string FileUrl,
+    DateOnly? ExpiryDate, string? Notes);
+
+public sealed record CreateAccountActivityRequest(
+    string ActivityType, string Subject, string? Body,
+    string? Direction, int? DurationMinutes, Guid PerformedByUserId,
+    string? LinkedEntityType, Guid? LinkedEntityId);
+
+public sealed record CustomerDocumentDto(
+    Guid Id, Guid CustomerId, string DocType, string FileName, string FileUrl,
+    DateOnly? ExpiryDate, DateTimeOffset? VerifiedAtUtc, Guid? VerifiedByUserId,
+    string? Notes, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
+
+public sealed record AccountActivityDto(
+    Guid Id, Guid CustomerId, string ActivityType, string Subject, string? Body,
+    string? Direction, int? DurationMinutes, Guid PerformedByUserId,
+    string? LinkedEntityType, Guid? LinkedEntityId, DateTimeOffset CreatedAtUtc);
+
+public sealed record CustomerRfqSummaryDto(
+    Guid Id, int DisplayId, string RfqNumber, string Stage,
+    int Probability, int VehicleQty, int TenureMonths,
+    DateOnly? ExpectedCloseDate, DateTimeOffset CreatedAtUtc);
+
 public sealed record CustomerDetailDto(
     Guid Id, Guid TenantId,
     string Type, string Status,
@@ -164,3 +445,18 @@ public sealed record CustomerDetailDto(
     int? IdTypeCode, string? PersonIdNumber, string? DateOfBirth, string? NationalityCode,
     bool KycVerified, DateTimeOffset? KycVerifiedAtUtc, string? KycVerifiedBy,
     DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
+
+public sealed record CustomerInvoiceDto(
+    Guid Id, int DisplayId, string InvoiceNumber, Guid LeaseId, string LeaseNumber,
+    string Status, DateOnly IssueDateUtc, DateOnly DueDateUtc,
+    decimal BaseAmountSar, decimal VatAmountSar, decimal TotalAmountSar,
+    decimal PaidAmountSar);
+
+public sealed record CustomerPaymentDto(
+    Guid Id, int DisplayId, decimal Amount, string PaymentMethod,
+    DateOnly ReceivedDate, string? ReferenceNumber, string? Notes,
+    decimal RemainingBalance, DateTimeOffset CreatedAtUtc,
+    List<PaymentAllocationDto> Allocations);
+
+public sealed record PaymentAllocationDto(
+    Guid InvoiceId, string InvoiceNumber, decimal AllocatedAmountSar);

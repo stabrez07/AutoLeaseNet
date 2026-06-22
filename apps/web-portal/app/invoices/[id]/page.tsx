@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { bff, type Invoice, type InvoiceStatus } from '../../../lib/bff-client'
+import { bff, type Invoice } from '../../../lib/bff-client'
 import { Badge, Card, ErrorBox, PageHeader, Spinner } from '../../../components/ui'
+import { CompanyLogo } from '../../../components/company-logo'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const STATUS_TONES: Record<InvoiceStatus, 'green' | 'amber' | 'blue' | 'slate' | 'red'> = {
-  Paid: 'green', PartiallyPaid: 'amber', Issued: 'blue', Draft: 'slate', Overdue: 'red', Cancelled: 'slate',
+const STATUS_TONES: Record<string, 'green' | 'amber' | 'blue' | 'slate' | 'red'> = {
+  Draft: 'slate', Submitted: 'amber', Cleared: 'green', Finalized: 'blue', SubmissionFailed: 'red', ClearanceFailed: 'red', Voided: 'red',
 }
 
 function fmt(n: number) {
@@ -19,50 +20,6 @@ function safeDate(s: string) {
   return new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
 }
 
-// ── Company Logo ─────────────────────────────────────────────────────────────
-
-function CompanyLogo() {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-700 text-white font-bold text-lg">AL</div>
-      <div>
-        <p className="text-xl font-bold text-slate-900 leading-tight">Auto Lead Company</p>
-        <p className="text-xs text-slate-500">Vehicle Leasing Services</p>
-      </div>
-    </div>
-  )
-}
-
-// ── ZATCA QR Placeholder ─────────────────────────────────────────────────────
-
-function ZatcaQr() {
-  return (
-    <div className="flex flex-col items-center">
-      <div className="h-20 w-20 rounded border border-slate-300 bg-white p-1">
-        <svg viewBox="0 0 100 100" className="h-full w-full">
-          {/* Simple QR placeholder pattern */}
-          <rect width="100" height="100" fill="white"/>
-          <rect x="5" y="5" width="25" height="25" fill="#1e293b"/>
-          <rect x="70" y="5" width="25" height="25" fill="#1e293b"/>
-          <rect x="5" y="70" width="25" height="25" fill="#1e293b"/>
-          <rect x="10" y="10" width="15" height="15" fill="white"/>
-          <rect x="75" y="10" width="15" height="15" fill="white"/>
-          <rect x="10" y="75" width="15" height="15" fill="white"/>
-          <rect x="13" y="13" width="9" height="9" fill="#1e293b"/>
-          <rect x="78" y="13" width="9" height="9" fill="#1e293b"/>
-          <rect x="13" y="78" width="9" height="9" fill="#1e293b"/>
-          <rect x="35" y="5" width="5" height="5" fill="#1e293b"/>
-          <rect x="45" y="5" width="5" height="5" fill="#1e293b"/>
-          <rect x="55" y="5" width="5" height="5" fill="#1e293b"/>
-          <rect x="35" y="35" width="30" height="30" fill="#1e293b"/>
-          <rect x="40" y="40" width="20" height="20" fill="white"/>
-          <rect x="45" y="45" width="10" height="10" fill="#1e293b"/>
-        </svg>
-      </div>
-      <p className="mt-1 text-[9px] text-slate-400">ZATCA e-Invoice</p>
-    </div>
-  )
-}
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 
@@ -120,7 +77,6 @@ export default function InvoiceDetailPage() {
       ['Total (SAR)', String(invoice.totalSar)],
       ['Paid (SAR)', String(invoice.paidAmountSar)],
       ['Balance (SAR)', String(invoice.balanceSar)],
-      ...(invoice.zatcaInvoiceNumber ? [['ZATCA Invoice #', invoice.zatcaInvoiceNumber]] : []),
     ]
     const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n')
     const a = document.createElement('a')
@@ -164,22 +120,19 @@ export default function InvoiceDetailPage() {
           <Card className="p-6 print:shadow-none print:border-none print:p-0">
             <div className="flex items-start justify-between gap-4">
               {/* Left: company logo */}
-              <CompanyLogo />
+              <CompanyLogo width={180} height={54} />
 
               {/* Center: title + invoice number + status */}
               <div className="text-center shrink-0">
                 <p className="text-2xl font-bold text-slate-900 tracking-wide">TAX INVOICE</p>
                 <p className="mt-1 font-mono text-sm text-slate-600">{invoice.invoiceNumber}</p>
                 <div className="mt-2 flex justify-center">
-                  <Badge tone={STATUS_TONES[invoice.status]}>{invoice.status}</Badge>
+                  <Badge tone={STATUS_TONES[invoice.status] ?? 'slate'}>{invoice.status}</Badge>
                 </div>
-                {invoice.zatcaInvoiceNumber && (
-                  <p className="mt-1.5 font-mono text-xs text-slate-400">ZATCA: {invoice.zatcaInvoiceNumber}</p>
-                )}
               </div>
 
-              {/* Right: QR code */}
-              <ZatcaQr />
+              {/* Right: placeholder for future QR */}
+              <div className="w-20" />
             </div>
 
             {/* ── Horizontal rule ── */}

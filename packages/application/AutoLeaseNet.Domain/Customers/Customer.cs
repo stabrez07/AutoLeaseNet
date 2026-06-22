@@ -50,6 +50,15 @@ public sealed class Customer : Entity
 
     public bool PiiOptedOut { get; private set; }
 
+    // ─── CRM / account management ──────────────────────────────────────
+    public string? CrmAccountId { get; private set; }
+    /// <summary>Customer code in C-YYYY-NNNN format.</summary>
+    public string? CustomerCode { get; private set; }
+    public string? Industry { get; private set; }
+    public decimal? CurrentExposureSar { get; private set; }
+    public int? PaymentTermsDays { get; private set; }
+    public Guid? OwnerUserId { get; private set; }
+
     private Customer() { }
 
     /// <summary>B2B factory — Fleet account creation.</summary>
@@ -150,6 +159,20 @@ public sealed class Customer : Entity
     {
         PiiOptedOut = true;
         UpdatedAtUtc = nowUtc;
+    }
+
+    public void SetCustomerCode(string code)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(code);
+        CustomerCode = code;
+        UpdatedAtUtc = DateTimeOffset.UtcNow;
+    }
+
+    public void AssignOwner(Guid userId)
+    {
+        if (userId == Guid.Empty) throw new ArgumentException("UserId required.", nameof(userId));
+        OwnerUserId = userId;
+        UpdatedAtUtc = DateTimeOffset.UtcNow;
     }
 }
 

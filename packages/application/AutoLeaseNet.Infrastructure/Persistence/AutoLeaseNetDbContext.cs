@@ -1,5 +1,6 @@
 using AutoLeaseNet.Domain.Billing;
 using AutoLeaseNet.Domain.Branches;
+using AutoLeaseNet.Domain.Contracts;
 using AutoLeaseNet.Domain.Customers;
 using AutoLeaseNet.Domain.Drivers;
 using AutoLeaseNet.Domain.ExtendedCoverages;
@@ -10,6 +11,7 @@ using AutoLeaseNet.Domain.Pricing;
 using AutoLeaseNet.Domain.RentPolicies;
 using AutoLeaseNet.Domain.Sales;
 using AutoLeaseNet.Domain.Vehicles;
+using AutoLeaseNet.Domain.Notifications;
 using AutoLeaseNet.Domain.Webhooks;
 using AutoLeaseNet.Domain.Zatca;
 using Microsoft.EntityFrameworkCore;
@@ -24,6 +26,8 @@ namespace AutoLeaseNet.Infrastructure.Persistence;
 public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> options) : DbContext(options)
 {
     public DbSet<Lease> Leases => Set<Lease>();
+    public DbSet<Contract> Contracts => Set<Contract>();
+    public DbSet<ContractLine> ContractLines => Set<ContractLine>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
     public DbSet<VehicleHistoryEvent> VehicleHistoryEvents => Set<VehicleHistoryEvent>();
@@ -44,16 +48,44 @@ public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> optio
     public DbSet<QuotationLine> QuotationLines => Set<QuotationLine>();
     public DbSet<QuotationApproval> QuotationApprovals => Set<QuotationApproval>();
     public DbSet<ApprovalTier> ApprovalTiers => Set<ApprovalTier>();
+    public DbSet<Rfq> Rfqs => Set<Rfq>();
+    public DbSet<RfqStageHistory> RfqStageHistories => Set<RfqStageHistory>();
+    public DbSet<RfqAttachment> RfqAttachments => Set<RfqAttachment>();
     public DbSet<PricingVersion> PricingVersions => Set<PricingVersion>();
     public DbSet<PricingFormulaDefinition> PricingFormulaDefinitions => Set<PricingFormulaDefinition>();
     public DbSet<PricingDiscountPolicy> PricingDiscountPolicies => Set<PricingDiscountPolicy>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<AdvancePayment> AdvancePayments => Set<AdvancePayment>();
+    public DbSet<PaymentAllocation> PaymentAllocations => Set<PaymentAllocation>();
     public DbSet<ZatcaSubmission> ZatcaSubmissions => Set<ZatcaSubmission>();
+    public DbSet<CustomerDocument> CustomerDocuments => Set<CustomerDocument>();
+    public DbSet<AccountActivity> AccountActivities => Set<AccountActivity>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AutoLeaseNetDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<AdvancePayment>(e =>
+        {
+            e.Property(p => p.Amount).HasColumnType("decimal(18,2)");
+            e.Property(p => p.RemainingBalance).HasColumnType("decimal(18,2)");
+        });
+        modelBuilder.Entity<PaymentAllocation>(e =>
+        {
+            e.Property(p => p.AllocatedAmountSar).HasColumnType("decimal(18,2)");
+        });
+
+        // DisplayId: auto-increment identity column on all entities.
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            var displayIdProp = entityType.FindProperty("DisplayId");
+            if (displayIdProp is not null)
+            {
+                displayIdProp.ValueGenerated = Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.OnAdd;
+            }
+        }
 
         // Azure SQL Edge workaround: disable RowVersion concurrency tokens globally.
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())

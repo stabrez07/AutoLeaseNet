@@ -2,10 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { bff, type NotificationItem } from '../lib/bff-client'
 import { useLocale } from '../lib/locale-provider'
 import { SUPPORTED_LOCALES } from '../lib/i18n'
+import { CompanyLogo } from './company-logo'
 
 /* ---------------------------------------------------------------------------
  * Inline SVG icons (16x16, stroke-current, strokeWidth 1.5)
@@ -93,16 +96,18 @@ const ICONS = {
 
 type NavKey =
   | 'dashboard'
-  | 'leases'
-  | 'newLease'
+  | 'customers'
+  | 'leads'
   | 'quotations'
+  | 'contracts'
+  | 'approvals'
+  | 'leaseAgreements'
   | 'vehicles'
   | 'drivers'
-  | 'branches'
   | 'invoices'
   | 'generateInvoices'
   | 'payments'
-  | 'customers'
+  | 'branches'
   | 'setup'
 
 interface NavItem {
@@ -119,38 +124,40 @@ interface NavGroup {
 
 const NAV_GROUPS: NavGroup[] = [
   {
+    labelEn: 'SALES',
+    labelAr: 'المبيعات',
+    items: [
+      { href: '/customers', key: 'customers', icon: 'building' },
+      { href: '/rfqs', key: 'leads', icon: 'clipboard' },
+      { href: '/quotations', key: 'quotations', icon: 'receipt' },
+      { href: '/contracts', key: 'contracts', icon: 'fileText' },
+      { href: '/approvals', key: 'approvals', icon: 'receipt' },
+    ],
+  },
+  {
     labelEn: 'LEASE OPERATIONS',
     labelAr: 'عمليات الإيجار',
     items: [
       { href: '/', key: 'dashboard', icon: 'grid' },
-      { href: '/leases', key: 'leases', icon: 'fileText' },
-      { href: '/leases/new', key: 'newLease', icon: 'plus' },
-      { href: '/quotations', key: 'quotations', icon: 'clipboard' },
-    ],
-  },
-  {
-    labelEn: 'FLEET',
-    labelAr: 'الأسطول',
-    items: [
+      { href: '/leases', key: 'leaseAgreements', icon: 'fileText' },
       { href: '/vehicles', key: 'vehicles', icon: 'truck' },
       { href: '/drivers', key: 'drivers', icon: 'users' },
-      { href: '/branches', key: 'branches', icon: 'mapPin' },
     ],
   },
   {
-    labelEn: 'FINANCE & ACCOUNTING',
-    labelAr: 'المالية والمحاسبة',
+    labelEn: 'FINANCE',
+    labelAr: 'المالية',
     items: [
       { href: '/invoices', key: 'invoices', icon: 'receipt' },
-      { href: '/invoices/generate', key: 'generateInvoices', icon: 'refresh' },
       { href: '/payments', key: 'payments', icon: 'creditCard' },
+      { href: '/invoices/generate', key: 'generateInvoices', icon: 'refresh' },
     ],
   },
   {
     labelEn: 'ADMINISTRATION',
     labelAr: 'الإدارة',
     items: [
-      { href: '/customers', key: 'customers', icon: 'building' },
+      { href: '/branches', key: 'branches', icon: 'mapPin' },
       { href: '/setup', key: 'setup', icon: 'cog' },
     ],
   },
@@ -168,6 +175,127 @@ function isActive(pathname: string, href: string): boolean {
 /* ---------------------------------------------------------------------------
  * AppShell component — sidebar + top bar layout
  * -------------------------------------------------------------------------*/
+
+function NotificationBell() {
+  const router = useRouter()
+  const [unread, setUnread] = useState(0)
+  const [open, setOpen] = useState(false)
+  const [items, setItems] = useState<NotificationItem[]>([])
+  const ref = useRef<HTMLDivElement>(null)
+
+  const poll = useCallback(() => {
+    bff.getUnreadNotificationCount().then((r) => setUnread(r.unreadCount)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    poll()
+    const h = setInterval(poll, 30000)
+    return () => clearInterval(h)
+  }, [poll])
+
+  useEffect(() => {
+    if (!open) return
+    bff.getNotifications(1, 10).then((r) => setItems(r.items)).catch(() => {})
+  }, [open])
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  function handleClick(n: NotificationItem) {
+    bff.markNotificationRead(n.id).catch(() => {})
+    setOpen(false)
+    if (n.linkedEntityType && n.linkedEntityId) {
+      const path = n.linkedEntityType === 'Quotation' ? `/quotations/${n.linkedEntityId}`
+        : n.linkedEntityType === 'RFQ' ? `/rfqs/${n.linkedEntityId}`
+        : n.linkedEntityType === 'Invoice' ? `/invoices/${n.linkedEntityId}`
+        : n.linkedEntityType === 'Contract' ? `/leases/${n.linkedEntityId}`
+        : null
+      if (path) router.push(path)
+    }
+    poll()
+  }
+
+  async function handleMarkAllRead() {
+    await bff.markAllNotificationsRead().catch(() => {})
+    setUnread(0)
+    setItems((prev) => prev.map((n) => ({ ...n, isRead: true })))
+  }
+
+  const typeIcon = (type: string) => {
+    if (type.includes('approval')) return '🔔'
+    if (type.includes('expir')) return '⚠️'
+    if (type.includes('inactiv')) return '💤'
+    if (type.includes('document')) return '📄'
+    return '🔔'
+  }
+
+  function timeAgo(d: string) {
+    const diff = Date.now() - new Date(d).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 60) return `${mins}m`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24) return `${hrs}h`
+    return `${Math.floor(hrs / 24)}d`
+  }
+
+  return (
+    <div ref={ref} className="relative me-3">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="relative rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+        aria-label="Notifications"
+      >
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+        </svg>
+        {unread > 0 && (
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+            {unread > 99 ? '99+' : unread}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 w-80 rounded-lg border border-slate-200 bg-white shadow-lg">
+          <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+            <span className="text-xs font-semibold text-slate-700">Notifications</span>
+            {unread > 0 && (
+              <button type="button" onClick={handleMarkAllRead} className="text-[10px] text-brand-600 hover:underline">
+                Mark all read
+              </button>
+            )}
+          </div>
+          <div className="max-h-80 overflow-y-auto">
+            {items.length === 0 && (
+              <div className="py-6 text-center text-xs text-slate-400">No notifications</div>
+            )}
+            {items.map((n) => (
+              <button
+                key={n.id}
+                type="button"
+                onClick={() => handleClick(n)}
+                className={`flex w-full gap-2 border-b border-slate-50 px-3 py-2 text-left transition-colors hover:bg-slate-50 last:border-b-0 ${!n.isRead ? 'bg-blue-50/50' : ''}`}
+              >
+                <span className="mt-0.5 text-sm">{typeIcon(n.type)}</span>
+                <div className="min-w-0 flex-1">
+                  <p className={`truncate text-xs ${!n.isRead ? 'font-semibold text-slate-900' : 'text-slate-700'}`}>{n.title}</p>
+                  {n.body && <p className="mt-0.5 truncate text-[10px] text-slate-500">{n.body}</p>}
+                </div>
+                <span className="shrink-0 text-[10px] text-slate-400">{timeAgo(n.createdAtUtc)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { locale, setLocale, t } = useLocale()
@@ -224,7 +352,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
       {/* ---- Top bar ---- */}
-      <header className="sticky top-0 z-30 flex h-12 items-center border-b border-slate-200 bg-white px-4">
+      <header className="sticky top-0 z-30 flex h-12 items-center border-b border-slate-200 bg-white px-4 print:hidden">
         {/* Mobile menu button */}
         <button
           type="button"
@@ -236,13 +364,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         </button>
 
         {/* Logo area */}
-        <div className="flex items-baseline gap-2">
-          <span className="text-sm font-semibold text-slate-900">Auto Lead Company</span>
-          <span className="hidden text-xs text-slate-500 sm:inline">Vehicle Leasing</span>
+        <div className="flex items-center gap-2">
+          <CompanyLogo width={120} height={32} />
         </div>
 
         {/* Spacer */}
         <div className="flex-1" />
+
+        {/* Notification bell */}
+        <NotificationBell />
 
         {/* Language toggle */}
         <div className="flex items-center rounded-md bg-slate-100 p-0.5">
@@ -281,7 +411,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* Sidebar panel */}
         <aside
           className={[
-            'fixed inset-y-0 start-0 z-50 flex w-56 flex-col bg-slate-900 pt-12 text-white transition-transform md:static md:z-auto md:translate-x-0 md:pt-0',
+            'fixed inset-y-0 start-0 z-50 flex w-56 flex-col bg-slate-900 pt-12 text-white transition-transform md:static md:z-auto md:translate-x-0 md:pt-0 print:hidden',
             sidebarOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full',
           ].join(' ')}
         >
@@ -289,7 +419,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </aside>
 
         {/* ---- Main content ---- */}
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-6 print:p-0">{children}</main>
       </div>
     </div>
   )

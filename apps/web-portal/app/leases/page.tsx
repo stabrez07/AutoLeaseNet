@@ -1,162 +1,215 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useLocale } from '../../lib/locale-provider'
+import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { bff, type LeaseSummary, type PagedResult } from '../../lib/bff-client'
 import {
-  Badge,
-  DataTable,
-  DataTableMeta,
-  ErrorBox,
-  PageHeader,
-  PrimaryButton,
-  SearchInput,
-  SecondaryButton,
-  Spinner,
-  TableCell,
-  TableHeadCell,
-  Toolbar,
-  ToolbarGroup,
-} from '../../components/ui'
+  Column,
+  DataGrid,
+  DateCell,
+  DetailPanel,
+  DetailRow,
+  DetailSection,
+  FilterBar,
+  FilterPill,
+  MoneyCell,
+  PageShell,
+  SearchBox,
+  StatusBadge,
+  type BadgeTone,
+} from '../../components/data-grid'
 
-const STATUS_TONES: Record<string, 'green' | 'amber' | 'blue' | 'slate' | 'red'> = {
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const PAGE_SIZE = 20
+
+const STATUS_OPTIONS = [
+  { value: 'Draft', label: 'Draft' },
+  { value: 'PendingIssuance', label: 'Pending Issuance' },
+  { value: 'Active', label: 'Active' },
+  { value: 'Extended', label: 'Extended' },
+  { value: 'Suspended', label: 'Suspended' },
+  { value: 'Closed', label: 'Closed' },
+  { value: 'Cancelled', label: 'Cancelled' },
+]
+
+const STATUS_TONES: Record<string, BadgeTone> = {
+  Draft: 'slate',
+  PendingIssuance: 'amber',
   Active: 'green',
   Extended: 'blue',
-  PendingIssuance: 'amber',
-  Suspended: 'amber',
-  Draft: 'slate',
+  Suspended: 'red',
   Closed: 'slate',
   Cancelled: 'red',
 }
 
-function fmt(iso: string) { return iso.substring(0, 10) }
-function sar(n: number) { return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+// ─── Columns ─────────────────────────────────────────────────────────────────
+
+const COLUMNS: Column<LeaseSummary>[] = [
+  {
+    key: 'leaseNumber',
+    header: 'Contract #',
+    width: '110px',
+    render: (r) => <span className="font-mono text-xs font-semibold">{r.leaseNumber}</span>,
+  },
+  {
+    key: 'customer',
+    header: 'Customer',
+    render: (r) => (
+      <span className="max-w-[160px] truncate font-medium text-slate-900">{r.customerDisplayName}</span>
+    ),
+  },
+  {
+    key: 'vehicle',
+    header: 'Vehicle',
+    render: (r) => <span className="text-slate-700">{r.vehicleMakeModel}</span>,
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    width: '110px',
+    render: (r) => (
+      <StatusBadge tone={STATUS_TONES[r.status] ?? 'slate'}>
+        {r.status}
+      </StatusBadge>
+    ),
+  },
+  {
+    key: 'startDate',
+    header: 'Start Date',
+    width: '100px',
+    render: (r) => <DateCell date={r.contractStartUtc} />,
+  },
+  {
+    key: 'endDate',
+    header: 'End Date',
+    width: '100px',
+    render: (r) => <DateCell date={r.contractEndUtc} />,
+  },
+  {
+    key: 'rentAmount',
+    header: 'Rent Amount',
+    width: '120px',
+    align: 'right',
+    render: (r) => <MoneyCell amount={r.rentAmountSar} />,
+  },
+  {
+    key: 'branch',
+    header: 'Branch',
+    width: '120px',
+    render: (r) => <span className="text-slate-600">{r.workingBranchName}</span>,
+  },
+]
+
+// ─── Page component ──────────────────────────────────────────────────────────
 
 export default function LeasesPage() {
-  const { t } = useLocale()
-  const router = useRouter()
-  const tl = t.leases
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [page, setPage] = useState(1)
   const [data, setData] = useState<PagedResult<LeaseSummary> | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const pageSize = 20
+  const [selected, setSelected] = useState<LeaseSummary | null>(null)
 
-  async function load() {
-    setLoading(true); setError(null)
-    try {
-      setData(await bff.getLeases(page, pageSize, search || undefined, statusFilter || undefined))
-    } catch (e) { setError((e as Error).message) }
-    finally { setLoading(false) }
-  }
+  // ─── Data loading ────────────────────────────────────────────────────────
 
   useEffect(() => {
-    const h = setTimeout(load, 200)
-    return () => clearTimeout(h)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false
+    const h = setTimeout(async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await bff.getLeases(page, PAGE_SIZE, search || undefined, statusFilter || undefined)
+        if (!cancelled) setData(res)
+      } catch (e) {
+        if (!cancelled) setError((e as Error).message)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }, 200)
+    return () => { cancelled = true; clearTimeout(h) }
   }, [page, search, statusFilter])
 
-  const totalPages = useMemo(() => data?.totalPages ?? 1, [data])
-
-  function downloadCsv() {
-    if (!data) return
-    const rows = [['Lease #', 'Customer', 'Vehicle', 'Plate', 'Driver', 'Status', 'Type', 'Start', 'End', 'Rent (SAR)', 'Branch']]
-    data.items.forEach((l) => rows.push([l.leaseNumber, l.customerDisplayName, l.vehicleMakeModel, l.vehiclePlate, l.primaryDriverName ?? '', l.status, l.contractTypeCode, l.contractStartUtc.substring(0, 10), l.contractEndUtc.substring(0, 10), String(l.rentAmountSar), l.workingBranchName]))
-    const csv = rows.map((r) => r.join(',')).join('\n')
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-    a.download = `leases-${new Date().toISOString().substring(0, 10)}.csv`; a.click()
-  }
+  // ─── Render ────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title={tl.title}
-        subtitle={tl.subtitle}
-        action={
-          <div className="flex gap-2">
-            <SecondaryButton onClick={downloadCsv}>Export CSV</SecondaryButton>
-            <PrimaryButton onClick={() => router.push('/leases/new')}>+ {t.newLease.title.split('—')[0]?.trim()}</PrimaryButton>
-          </div>
-        }
-      />
-      <Toolbar>
-        <ToolbarGroup>
-          <SearchInput value={search} onChange={(v) => { setPage(1); setSearch(v) }} placeholder={tl.searchPlaceholder} />
-          <select
-            value={statusFilter}
-            onChange={(e) => { setPage(1); setStatusFilter(e.target.value) }}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm"
-          >
-            <option value="">— {tl.columns.status} —</option>
-            {Object.entries(tl.statuses).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </ToolbarGroup>
-        <div className="text-xs text-slate-500">{t.table.total}: {data?.totalCount ?? 0}</div>
-      </Toolbar>
+    <PageShell
+      title="Lease Agreements"
+      subtitle="Vehicle checkout agreements under contracts — track vehicles, drivers, and billing."
+    >
+      <FilterBar>
+        <SearchBox
+          value={search}
+          onChange={(v) => { setPage(1); setSearch(v) }}
+          placeholder="Customer, vehicle, plate..."
+        />
+        <FilterPill
+          value={statusFilter}
+          onChange={(v) => { setPage(1); setStatusFilter(v) }}
+          options={STATUS_OPTIONS}
+          placeholder="All statuses"
+        />
+      </FilterBar>
 
-      {error && <ErrorBox message={error} onRetry={load} retryLabel={t.common.retry} />}
-      {loading && <Spinner label={t.common.loading} />}
-
-      {!loading && data && (
-        <DataTable>
-          <DataTableMeta>{t.table.page} {page} {t.table.of} {totalPages}</DataTableMeta>
-          <table className="w-full text-sm">
-            <thead className="border-b border-slate-200 bg-white">
-              <tr>
-                <TableHeadCell>{tl.columns.leaseNumber}</TableHeadCell>
-                <TableHeadCell>{tl.columns.customer}</TableHeadCell>
-                <TableHeadCell>{tl.columns.vehicle}</TableHeadCell>
-                <TableHeadCell>{tl.columns.driver}</TableHeadCell>
-                <TableHeadCell>{tl.columns.status}</TableHeadCell>
-                <TableHeadCell>{tl.columns.contractType}</TableHeadCell>
-                <TableHeadCell>{tl.columns.start}</TableHeadCell>
-                <TableHeadCell>{tl.columns.end}</TableHeadCell>
-                <TableHeadCell align="end">{tl.columns.rent}</TableHeadCell>
-                <TableHeadCell>{t.common.actions}</TableHeadCell>
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.length === 0 && (
-                <tr><td colSpan={10} className="px-3 py-8 text-center text-slate-500">{tl.empty}</td></tr>
-              )}
-              {data.items.map((l) => {
-                const statusLabel = (tl.statuses as Record<string, string>)[l.status] ?? l.status
-                const tone = STATUS_TONES[l.status] ?? 'slate'
-                return (
-                  <tr key={l.id}
-                    className="cursor-pointer border-t border-slate-100 transition hover:bg-brand-50/60"
-                    onClick={() => router.push(`/leases/${l.id}`)}>
-                    <TableCell className="font-mono text-xs font-semibold text-slate-900">{l.leaseNumber}</TableCell>
-                    <TableCell className="max-w-[140px] truncate font-medium text-slate-900">{l.customerDisplayName}</TableCell>
-                    <TableCell className="max-w-[140px] truncate text-slate-700">{l.vehicleMakeModel}</TableCell>
-                    <TableCell className="text-slate-600">{l.primaryDriverName ?? '—'}</TableCell>
-                    <TableCell><Badge tone={tone}>{statusLabel}</Badge></TableCell>
-                    <TableCell><Badge tone="slate">{(tl.contractTypes as Record<string, string>)[l.contractTypeCode] ?? l.contractTypeCode}</Badge></TableCell>
-                    <TableCell className="text-xs text-slate-600">{fmt(l.contractStartUtc)}</TableCell>
-                    <TableCell className="text-xs text-slate-600">{fmt(l.contractEndUtc)}</TableCell>
-                    <TableCell align="end" className="font-mono text-xs">{sar(l.rentAmountSar)}</TableCell>
-                    <TableCell>
-                      <SecondaryButton onClick={(e) => { e.stopPropagation(); router.push(`/leases/${l.id}`) }} className="px-2 py-1 text-xs">
-                        {t.common.viewDetails}
-                      </SecondaryButton>
-                    </TableCell>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/70 px-3 py-2 text-xs text-slate-600">
-            <div>{t.table.total}: {data.totalCount}</div>
-            <div className="flex gap-2">
-              <SecondaryButton onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="px-2 py-1 text-xs">{t.table.previous}</SecondaryButton>
-              <SecondaryButton onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="px-2 py-1 text-xs">{t.table.next}</SecondaryButton>
-            </div>
-          </div>
-        </DataTable>
+      {error && (
+        <div className="border-b border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+          {error}
+          <button type="button" onClick={() => setPage(page)} className="ml-2 underline">Retry</button>
+        </div>
       )}
-    </div>
+
+      <div className="flex">
+        <div className={`flex-1 ${selected ? 'max-w-[calc(100%-400px)]' : ''}`}>
+          <DataGrid<LeaseSummary>
+            columns={COLUMNS}
+            rows={data?.items ?? []}
+            totalCount={data?.totalCount ?? 0}
+            page={page}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+            onRowClick={(row) => setSelected((prev) => (prev?.id === row.id ? null : row))}
+            selectedId={selected?.id ?? null}
+            emptyMessage="No leases found."
+            loading={loading}
+          />
+        </div>
+
+        <DetailPanel
+          open={!!selected}
+          onClose={() => setSelected(null)}
+          title={selected?.customerDisplayName ?? ''}
+          {...(selected?.vehicleMakeModel ? { subtitle: selected.vehicleMakeModel } : {})}
+          {...(selected ? { badge: <StatusBadge tone={STATUS_TONES[selected.status] ?? 'slate'}>{selected.status}</StatusBadge> } : {})}
+        >
+          {selected && (
+            <>
+              <DetailSection title="Contract">
+                <DetailRow label="Contract #" value={selected.leaseNumber} />
+                <DetailRow label="Status" value={<StatusBadge tone={STATUS_TONES[selected.status] ?? 'slate'}>{selected.status}</StatusBadge>} />
+                <DetailRow label="Contract Type" value={selected.contractTypeCode} />
+              </DetailSection>
+              <DetailSection title="Customer & Vehicle">
+                <DetailRow label="Customer" value={selected.customerDisplayName} />
+                <DetailRow label="Vehicle" value={selected.vehicleMakeModel} />
+                <DetailRow label="Plate" value={selected.vehiclePlate} />
+                <DetailRow label="Driver" value={selected.primaryDriverName ?? '—'} />
+              </DetailSection>
+              <DetailSection title="Dates & Financials">
+                <DetailRow label="Start Date" value={<DateCell date={selected.contractStartUtc} />} />
+                <DetailRow label="End Date" value={<DateCell date={selected.contractEndUtc} />} />
+                <DetailRow label="Rent Amount" value={<MoneyCell amount={selected.rentAmountSar} />} />
+                <DetailRow label="Branch" value={selected.workingBranchName} />
+              </DetailSection>
+              <DetailSection title="Actions">
+                <Link href={`/leases/${selected.id}`} className="block w-full rounded-md bg-brand-700 px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-brand-800">
+                  Open Contract Details
+                </Link>
+              </DetailSection>
+            </>
+          )}
+        </DetailPanel>
+      </div>
+    </PageShell>
   )
 }

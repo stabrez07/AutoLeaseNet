@@ -27,6 +27,7 @@ import {
   saveQuotationPricingSetupToApi,
 } from '../../lib/quotation-pricing-setup-api'
 import { Card, PageHeader, PrimaryButton, SecondaryButton } from '../../components/ui'
+import { CompanyLogoUploader } from '../../components/company-logo'
 
 interface InvoicingRules {
   billingDay: number
@@ -689,8 +690,14 @@ export default function SetupPage() {
       )}
 
       {mainTab === 'company' && (
-        <Card className="max-w-2xl space-y-3 p-4">
-          <h3 className="text-sm font-semibold">Company</h3>
+        <div className="max-w-2xl space-y-4">
+        <Card className="space-y-3 p-4">
+          <h3 className="text-sm font-semibold">Company Logo</h3>
+          <p className="text-xs text-slate-500">This logo appears in the sidebar header, printed invoices, and quotations.</p>
+          <CompanyLogoUploader />
+        </Card>
+        <Card className="space-y-3 p-4">
+          <h3 className="text-sm font-semibold">Company Details</h3>
           <div className="grid grid-cols-2 gap-3">
             <label className="text-sm">
               Name{' '}
@@ -729,6 +736,7 @@ export default function SetupPage() {
             </label>
           </div>
         </Card>
+        </div>
       )}
 
       {mainTab === 'notifications' && (
