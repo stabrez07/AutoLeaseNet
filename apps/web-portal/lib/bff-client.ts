@@ -482,6 +482,8 @@ class BffClient {
     return {
       'X-Dev-Tenant-Id': DEV_TENANT_ID,
       'X-Dev-User-Type': 'INTERNAL_STAFF',
+      'X-Dev-User-Id': 'f1f1f1f1-0001-0000-0000-000000000001',
+      'X-Dev-Roles': 'SalesManager,RegionalManager,GeneralManager,CFO,RegionalDirector',
       ...extra,
     }
   }
@@ -655,6 +657,23 @@ class BffClient {
       {},
       { 'Idempotency-Key': idempotencyKey },
     )
+  }
+
+  async sendQuotePdf(
+    quotationId: string,
+    recipientEmail: string,
+    idempotencyKey: string,
+  ): Promise<QuotationCommandResult> {
+    const res = await fetch(`${BFF_BASE_URL}/api/v1/quotations/${quotationId}/send-pdf`, {
+      method: 'POST',
+      headers: { ...this.headers({ 'Idempotency-Key': idempotencyKey }), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipientEmail }),
+    })
+    if (!res.ok) {
+      const problem = await this.tryReadProblem(res)
+      throw Object.assign(new Error(problem.title ?? `Send PDF failed (${res.status})`), { status: res.status, problem })
+    }
+    return { success: true, quotationId, status: 'Approved' }
   }
 
   recordApprovalDecision(
@@ -2701,6 +2720,17 @@ class MockBffClient {
       status: q.status,
       nextTierLevel: 1,
       nextRequiredRoleCode: 'SALES_TIER_1',
+    })
+  }
+  sendQuotePdf(quotationId: string, _recipientEmail: string, _idempotencyKey: string) {
+    const q = this.state.quotations.find((x) => x.id === quotationId)
+    if (!q) throw new Error('Quotation not found')
+    q.status = 'SentToCustomer'
+    q.sentAtUtc = new Date().toISOString()
+    return Promise.resolve({
+      success: true,
+      quotationId,
+      status: q.status,
     })
   }
   recordApprovalDecision(

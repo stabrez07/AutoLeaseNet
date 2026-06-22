@@ -139,7 +139,9 @@ public sealed partial class SendQuotePdfCommandHandler(
         if (quotation is null)
             return Fail("quotation.not_found", $"Quotation {request.QuotationId} not found.");
 
-        if (quotation.Status != QuotationStatus.Approved && quotation.Status != QuotationStatus.PendingApproval)
+        if (quotation.Status != QuotationStatus.Approved
+            && quotation.Status != QuotationStatus.PendingApproval
+            && quotation.Status != QuotationStatus.SentToCustomer)
             return Fail("quotation.invalid_status", $"Cannot send PDF for status {quotation.Status}.");
 
         try
@@ -181,9 +183,11 @@ public sealed partial class SendQuotePdfCommandHandler(
             if (!emailResult.Success)
                 return Fail("email.send_failed", emailResult.FailureDetail ?? "Unknown email error.");
 
-            // Update quotation with sent timestamp
-            quotation.MarkSentToCustomer(null, clock.UtcNow);
-            await uow.SaveChangesAsync(ct).ConfigureAwait(false);
+            if (quotation.Status == QuotationStatus.Approved)
+            {
+                quotation.MarkSentToCustomer(null, clock.UtcNow);
+                await uow.SaveChangesAsync(ct).ConfigureAwait(false);
+            }
 
             var result = Ok();
             await idempotency.SetAsync(idemKey, result, QuotePdfIdempotency.Ttl, ct).ConfigureAwait(false);

@@ -24,6 +24,24 @@ const APPROVAL_TONES: Record<string, 'green' | 'amber' | 'slate' | 'red'> = {
   Recalled: 'slate',
 }
 
+const printStyles = `
+@media print {
+  nav, header, aside, .no-print, button, [class*="actions"], [class*="Quick nav"] { display: none !important; }
+  body { font-size: 9pt !important; color: #000 !important; -webkit-print-color-adjust: exact; }
+  .print-only { display: block !important; }
+  @page { size: A4; margin: 10mm 12mm; }
+  * { box-shadow: none !important; border-radius: 0 !important; }
+  .space-y-5 > * { margin-top: 4px !important; }
+  table { font-size: 8pt !important; }
+  td, th { padding: 2px 4px !important; }
+  .p-5, .p-4 { padding: 6px !important; }
+  .mb-3, .mb-4 { margin-bottom: 4px !important; }
+  dl { gap: 2px !important; }
+  .grid.lg\\:grid-cols-3 { display: block !important; }
+  .lg\\:col-span-2 { width: 100% !important; }
+}
+`
+
 export default function QuotationDetailPage() {
   const params = useParams()
   const id = params?.id as string
@@ -41,6 +59,7 @@ export default function QuotationDetailPage() {
   // Approval decision state
   const [decisionComment, setDecisionComment] = useState('')
   const [signature, setSignature] = useState('')
+  const [pdfEmail, setPdfEmail] = useState('')
 
   async function reload() {
     setLoading(true)
@@ -79,13 +98,22 @@ export default function QuotationDetailPage() {
 
   const status = quote.status
   const canSubmitApproval = status === 'Draft' && quote.lines.length > 0
+  const canRevise = status !== 'Accepted' && status !== 'Expired' && status !== 'Withdrawn'
   const canDecide = status === 'PendingApproval'
   const nextPendingTier = quote.approvals.find(a => a.status === 'Pending')
-  const canSendPdf = status === 'Approved'
+  const canPrint = status !== 'Draft'
+  const canSendPdf = status === 'Approved' || status === 'SentToCustomer'
   const canAccept = status === 'SentToCustomer'
+  const canCreateContract = status === 'Approved' || status === 'Accepted'
 
   return (
     <div className="space-y-5">
+      <style dangerouslySetInnerHTML={{ __html: printStyles }} />
+      {/* Print-only letterhead */}
+      <div className="print-only hidden border-b-2 border-slate-800 pb-3 mb-4">
+        <h1 className="text-xl font-bold">AutoLeaseNet — Vehicle Lease Quotation</h1>
+        <p className="text-sm text-slate-600">{quote.quoteNumber} | {quote.quoteDate} | {quote.contractType}</p>
+      </div>
       <PageHeader
         title={`${d.title} — ${quote.quoteNumber}`}
         subtitle={quote.contractType}
@@ -131,25 +159,6 @@ export default function QuotationDetailPage() {
             </dl>
           </Card>
 
-          {/* Pricing */}
-          <Card className="p-5">
-            <h2 className="mb-3 text-sm font-semibold text-slate-800">Pricing</h2>
-            <dl className="space-y-1 text-sm">
-              <div className="flex justify-between text-slate-600">
-                <dt>Subtotal</dt>
-                <dd className="font-mono">{quote.subTotalSar.toLocaleString('en-SA', { minimumFractionDigits: 2 })} SAR</dd>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <dt>VAT (15%)</dt>
-                <dd className="font-mono">{quote.vatSar.toLocaleString('en-SA', { minimumFractionDigits: 2 })} SAR</dd>
-              </div>
-              <div className="flex justify-between border-t border-slate-200 pt-1 text-base font-semibold text-slate-900">
-                <dt>Total</dt>
-                <dd className="font-mono">{quote.totalSar.toLocaleString('en-SA', { minimumFractionDigits: 2 })} SAR</dd>
-              </div>
-            </dl>
-          </Card>
-
           {/* Line items */}
           <Card className="overflow-hidden">
             <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
@@ -189,6 +198,25 @@ export default function QuotationDetailPage() {
                 ))}
               </tbody>
             </table>
+          </Card>
+
+          {/* Pricing */}
+          <Card className="p-5">
+            <h2 className="mb-3 text-sm font-semibold text-slate-800">Pricing</h2>
+            <dl className="space-y-1 text-sm">
+              <div className="flex justify-between text-slate-600">
+                <dt>Subtotal</dt>
+                <dd className="font-mono">{quote.subTotalSar.toLocaleString('en-SA', { minimumFractionDigits: 2 })} SAR</dd>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <dt>VAT (15%)</dt>
+                <dd className="font-mono">{quote.vatSar.toLocaleString('en-SA', { minimumFractionDigits: 2 })} SAR</dd>
+              </div>
+              <div className="flex justify-between border-t border-slate-200 pt-1 text-base font-semibold text-slate-900">
+                <dt>Total</dt>
+                <dd className="font-mono">{quote.totalSar.toLocaleString('en-SA', { minimumFractionDigits: 2 })} SAR</dd>
+              </div>
+            </dl>
           </Card>
 
           {/* Approval chain */}
@@ -232,6 +260,16 @@ export default function QuotationDetailPage() {
           <Card className="p-4">
             <h2 className="mb-3 text-sm font-semibold text-slate-800">{d.actions}</h2>
             <div className="space-y-3">
+
+              {/* Edit / Add Lines (Draft only) */}
+              {status === 'Draft' && (
+                <button
+                  onClick={() => router.push(`/quotations/new?edit=${id}`)}
+                  className="w-full rounded-md border border-brand-600 px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50"
+                >
+                  Edit Quotation / Add Lines
+                </button>
+              )}
 
               {/* Submit for Approval */}
               {canSubmitApproval && (
@@ -283,18 +321,53 @@ export default function QuotationDetailPage() {
                 </div>
               )}
 
-              {/* Send PDF */}
-              {canSendPdf && (
+              {/* Print Quotation */}
+              {canPrint && (
+                <button
+                  onClick={() => window.print()}
+                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Print Quotation
+                </button>
+              )}
+
+              {/* Create Contract */}
+              {canCreateContract && (
                 <button
                   disabled={actionBusy}
-                  onClick={() => act(
-                    () => bff.submitQuotationForApproval(id, crypto.randomUUID()), // reuse PDF send when wired
-                    d.successMsg
-                  )}
-                  className="w-full rounded-md bg-brand-700 px-3 py-2 text-sm font-medium text-white hover:bg-brand-800 disabled:opacity-50"
+                  onClick={() => {
+                    const params = new URLSearchParams({
+                      fromQuote: id,
+                      customerId: quote.customerId,
+                      duration: String(quote.estimatedDurationMonths),
+                    })
+                    router.push(`/leases/new?${params.toString()}`)
+                  }}
+                  className="w-full rounded-md bg-green-700 px-3 py-2 text-sm font-medium text-white hover:bg-green-800 disabled:opacity-50"
                 >
-                  {actionBusy ? d.sendingPdf : d.sendPdf}
+                  Create Contract
                 </button>
+              )}
+
+              {/* Send PDF to Customer */}
+              {canSendPdf && (
+                <div className="space-y-2 rounded-md border border-brand-200 bg-brand-50 p-3">
+                  <div>
+                    <label className={lbl}>Customer Email</label>
+                    <input className={inp} value={pdfEmail} placeholder="customer@company.com"
+                      onChange={e => setPdfEmail(e.target.value)} />
+                  </div>
+                  <button
+                    disabled={actionBusy || !pdfEmail.includes('@')}
+                    onClick={() => act(
+                      () => bff.sendQuotePdf(id, pdfEmail, crypto.randomUUID()),
+                      'Quotation PDF sent to ' + pdfEmail
+                    )}
+                    className="w-full rounded-md bg-brand-700 px-3 py-2 text-sm font-medium text-white hover:bg-brand-800 disabled:opacity-50"
+                  >
+                    {actionBusy ? d.sendingPdf : d.sendPdf}
+                  </button>
+                </div>
               )}
 
               {/* Accept */}
@@ -319,9 +392,14 @@ export default function QuotationDetailPage() {
                 </div>
               )}
 
-              {/* Status info when no actions */}
-              {!canSubmitApproval && !canDecide && !canSendPdf && !canAccept && (
-                <p className="text-xs text-slate-500">No actions available for status <strong>{status}</strong>.</p>
+              {/* Revise — send back to Draft for editing */}
+              {canRevise && status !== 'Draft' && (
+                <button
+                  onClick={() => router.push(`/quotations/new?revise=${id}`)}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Revise Quotation
+                </button>
               )}
             </div>
           </Card>

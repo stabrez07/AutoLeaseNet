@@ -1,10 +1,12 @@
 using AutoLeaseNet.Application.Billing;
 using AutoLeaseNet.Application.Ports.Persistence;
 using AutoLeaseNet.Application.Ports.Tenancy;
+using AutoLeaseNet.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 
 namespace AutoLeaseNet.Bff.Endpoints;
 
@@ -20,6 +22,17 @@ public static class InvoiceEndpoints
             .WithName("Invoices")
             .WithOpenApi();
 
+        group.MapGet("", ListInvoicesAsync)
+            .WithName("ListInvoices")
+            .WithDescription("List all invoices for the tenant")
+            .WithOpenApi()
+            .RequireAuthorization();
+
+        group.MapGet("{id:guid}", GetInvoiceByIdAsync)
+            .WithName("GetInvoiceById")
+            .WithOpenApi()
+            .RequireAuthorization();
+
         group.MapGet("by-lease/{leaseId:guid}", GetByLeaseAsync)
             .WithName("GetInvoiceByLease")
             .WithDescription("Fetch invoice for a specific lease")
@@ -32,6 +45,82 @@ public static class InvoiceEndpoints
             .RequireAuthorization();
 
         return routes;
+    }
+
+    private static async Task<IResult> ListInvoicesAsync(
+        AutoLeaseNetDbContext db,
+        ITenantContext tenant,
+        CancellationToken ct,
+        int page = 1,
+        int pageSize = 20,
+        string? status = null)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var query = db.Invoices
+            .AsNoTracking()
+            .Where(i => i.TenantId == tenantId);
+
+        if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<Domain.Billing.InvoiceStatus>(status, true, out var st))
+            query = query.Where(i => i.Status == st);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(i => i.IssueDateUtc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Join(db.Customers.AsNoTracking(), i => i.CustomerId, c => c.Id, (i, c) => new { i, c })
+            .Join(db.Leases.AsNoTracking(), x => x.i.LeaseId, l => l.Id, (x, l) => new { x.i, x.c, l })
+            .Select(x => new
+            {
+                x.i.Id,
+                InvoiceNumber = x.i.InvoiceNumber,
+                LeaseId = x.i.LeaseId,
+                CustomerId = x.i.CustomerId,
+                CustomerDisplayName = x.c.DisplayName,
+                Status = x.i.Status.ToString(),
+                IssueDateUtc = x.i.IssueDateUtc,
+                DueDateUtc = x.i.DueDateUtc,
+                BaseAmountSar = x.i.BaseAmountSar,
+                VatSar = x.i.VatSar,
+                TotalSar = x.i.TotalSar,
+            })
+            .ToListAsync(ct);
+
+        return Results.Ok(new { items, page, pageSize, totalCount = total });
+    }
+
+    private static async Task<IResult> GetInvoiceByIdAsync(
+        Guid id,
+        AutoLeaseNetDbContext db,
+        ITenantContext tenant,
+        CancellationToken ct)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var inv = await db.Invoices
+            .AsNoTracking()
+            .Where(i => i.TenantId == tenantId && i.Id == id)
+            .Join(db.Customers.AsNoTracking(), i => i.CustomerId, c => c.Id, (i, c) => new { i, c })
+            .Select(x => new
+            {
+                x.i.Id,
+                x.i.InvoiceNumber,
+                x.i.LeaseId,
+                x.i.CustomerId,
+                CustomerDisplayName = x.c.DisplayName,
+                Status = x.i.Status.ToString(),
+                x.i.IssueDateUtc,
+                x.i.DueDateUtc,
+                x.i.BaseAmountSar,
+                x.i.VatSar,
+                x.i.TotalSar,
+            })
+            .FirstOrDefaultAsync(ct);
+
+        return inv is null ? Results.NotFound() : Results.Ok(inv);
     }
 
     private static async Task<IResult> GetByLeaseAsync(

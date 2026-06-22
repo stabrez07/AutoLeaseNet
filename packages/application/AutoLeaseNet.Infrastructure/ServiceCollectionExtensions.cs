@@ -28,6 +28,7 @@ public static class ServiceCollectionExtensions
         {
             sql.EnableRetryOnFailure(maxRetryCount: 3, TimeSpan.FromSeconds(2), errorNumbersToAdd: null);
             sql.MigrationsAssembly(typeof(AutoLeaseNetDbContext).Assembly.FullName);
+            sql.MaxBatchSize(1);
         }));
 
         services.AddScoped<IUnitOfWork>(sp => new EfUnitOfWork(sp.GetRequiredService<AutoLeaseNetDbContext>()));
@@ -90,6 +91,8 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<AutoLeaseNetDbContext>((sp, opt) =>
         {
             configureProvider(opt);
+            opt.EnableSensitiveDataLogging();
+            opt.EnableDetailedErrors();
             opt.AddInterceptors(
                 sp.GetRequiredService<OutboxWriteInterceptor>(),
                 sp.GetRequiredService<TenancyConnectionInterceptor>());

@@ -52,8 +52,62 @@ public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> optio
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // Apply all IEntityTypeConfiguration<T> from this assembly
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AutoLeaseNetDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
+
+        // Azure SQL Edge workaround: disable RowVersion concurrency tokens globally.
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            var rvProp = entityType.FindProperty("RowVersion");
+            if (rvProp is not null)
+            {
+                rvProp.IsConcurrencyToken = false;
+                rvProp.ValueGenerated = Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never;
+                rvProp.SetColumnType("varbinary(8)");
+            }
+        }
+    }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        FixUntrackedNavigationEntries();
+        return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        FixUntrackedNavigationEntries();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    private void FixUntrackedNavigationEntries()
+    {
+        ChangeTracker.DetectChanges();
+        foreach (var entry in ChangeTracker.Entries().ToList())
+        {
+            if (entry.State != EntityState.Modified) continue;
+
+            foreach (var nav in entry.Navigations.Where(n => n.Metadata.IsCollection))
+            {
+                if (nav.CurrentValue is not System.Collections.IEnumerable items) continue;
+                foreach (var item in items)
+                {
+                    var childEntry = Entry(item);
+                    if (childEntry.State == EntityState.Modified)
+                    {
+                        var keyProps = childEntry.Metadata.FindPrimaryKey()?.Properties;
+                        var keyProp = keyProps is { Count: > 0 } ? keyProps[0] : null;
+                        if (keyProp is null) continue;
+                        var keyValue = childEntry.Property(keyProp.Name).CurrentValue;
+                        if (keyValue is Guid g && g != Guid.Empty)
+                        {
+                            var existsInDb = childEntry.GetDatabaseValues() is null;
+                            if (existsInDb)
+                                childEntry.State = EntityState.Added;
+                        }
+                    }
+                }
+            }
+        }
     }
 }

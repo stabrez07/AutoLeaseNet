@@ -276,7 +276,7 @@ public sealed class InMemoryTajeerContractClient : ITajeerContractClient
 
     private static IntegrationResult<SaveContractResponse> DefaultSaveResponse(SaveContractRequest request, int sequenceNumber)
     {
-        var contractNumber = 1_000_000_000L + sequenceNumber;
+        var contractNumber = 9_000_000_000L + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() % 1_000_000_000L;
         var token = $"inmem-{Guid.NewGuid():N}";
         var rent = request.PaymentDetails.RentAmount;
         var paid = request.PaymentDetails.PaidAmount;

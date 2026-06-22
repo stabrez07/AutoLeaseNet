@@ -7,6 +7,7 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddQuestPdfRenderer(this IServiceCollection services)
     {
+        QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
         services.AddSingleton<IPdfRenderer, QuestPdfRenderer>();
         return services;
     }

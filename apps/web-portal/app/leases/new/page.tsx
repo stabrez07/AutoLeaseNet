@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useLocale } from '../../../lib/locale-provider'
 import {
   bff,
@@ -22,6 +23,9 @@ function toLocalDatetime(d: Date): string {
 
 export default function NewLeasePage() {
   const { t, locale } = useLocale()
+  const searchParams = useSearchParams()
+  const fromQuoteCustomerId = searchParams?.get('customerId') ?? null
+  const fromQuoteDuration = Number(searchParams?.get('duration') ?? 0)
   const [customers, setCustomers] = useState<CustomerSummary[]>([])
   const [vehicles, setVehicles] = useState<VehicleSummary[]>([])
   const [drivers, setDrivers] = useState<DriverSummary[]>([])
@@ -74,15 +78,24 @@ export default function NewLeasePage() {
         setPolicies(p)
         setBranches(b)
         // pre-pick first values for instant happy-path submit
-        setForm((f) => ({
-          ...f,
-          customerId: f.customerId || c.items[0]?.id || '',
-          vehicleId: f.vehicleId || v.items[0]?.id || '',
-          primaryDriverId: f.primaryDriverId || d.items[0]?.id || '',
-          rentPolicyId: f.rentPolicyId || p[0]?.id || '',
-          workingBranchId: f.workingBranchId || b[0]?.id || '',
-          receiveBranchId: f.receiveBranchId || b[0]?.id || '',
-          returnBranchId: f.returnBranchId || b[0]?.id || '',
+        const preCustomer = fromQuoteCustomerId || c.items[0]?.id || ''
+        const preDriver = d.items[0]?.id || ''
+        let endLocal = toLocalDatetime(twoDays)
+        if (fromQuoteDuration > 0) {
+          const end = new Date()
+          end.setMonth(end.getMonth() + fromQuoteDuration)
+          endLocal = toLocalDatetime(end)
+        }
+        setForm((prev) => ({
+          ...prev,
+          customerId: preCustomer,
+          vehicleId: prev.vehicleId || v.items[0]?.id || '',
+          primaryDriverId: preDriver,
+          rentPolicyId: prev.rentPolicyId || p[0]?.id || '',
+          workingBranchId: prev.workingBranchId || b[0]?.id || '',
+          receiveBranchId: prev.receiveBranchId || b[0]?.id || '',
+          returnBranchId: prev.returnBranchId || b[0]?.id || '',
+          contractEndLocal: endLocal,
         }))
       } catch (e) {
         setBootError((e as Error).message)
@@ -354,13 +367,23 @@ export default function NewLeasePage() {
             </Card>
           )}
 
-          <div>
+          <div className="flex gap-3">
             <button
               type="submit"
               disabled={submitting}
               className="bg-brand-600 hover:bg-brand-700 inline-flex items-center rounded-md px-4 py-2 text-sm font-medium text-white shadow-sm disabled:opacity-60"
             >
               {submitting ? t.newLease.submitting : t.newLease.submit}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const from = searchParams?.get('fromQuote')
+                window.location.href = from ? `/quotations/${from}` : '/leases'
+              }}
+              className="inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              Cancel
             </button>
           </div>
         </form>

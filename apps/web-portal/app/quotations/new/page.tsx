@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useLocale } from '../../../lib/locale-provider'
 import {
   bff,
@@ -67,6 +67,8 @@ function computePricing(lines: LineInput[], discountPercent: number) {
 export default function NewQuotationPage() {
   const { t } = useLocale()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const editId = searchParams?.get('edit') ?? searchParams?.get('revise') ?? null
   const f = t.quotations.newForm
 
   const [customers, setCustomers] = useState<CustomerSummary[]>([])
@@ -76,15 +78,16 @@ export default function NewQuotationPage() {
   const [bootError, setBootError] = useState<string | null>(null)
 
   const today = new Date().toISOString().slice(0, 10)
-  const nextMonth = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
+
+  const defaultEndDate = new Date(Date.now() + 36 * 30 * 86400000).toISOString().slice(0, 10)
 
   const [form, setForm] = useState({
     customerId: '',
     accountManagerId: '',
     quoteDate: today,
-    validUntilDate: nextMonth,
+    validUntilDate: defaultEndDate,
     contractType: 3 as QuotationContractTypeCode,
-    estimatedDurationMonths: 12,
+    estimatedDurationMonths: 36,
     discountPercent: 0,
     termsAndConditionsMd: '',
   })
@@ -119,6 +122,35 @@ export default function NewQuotationPage() {
         }))
       }
 
+      if (editId) {
+        try {
+          const existing = await bff.getQuotation(editId)
+          setForm((prev) => ({
+            ...prev,
+            customerId: existing.customerId,
+            estimatedDurationMonths: existing.estimatedDurationMonths,
+            discountPercent: existing.discountPercent,
+            quoteDate: existing.quoteDate,
+            validUntilDate: existing.validUntilDate,
+          }))
+          if (existing.lines.length > 0) {
+            setLines(
+              existing.lines.map((l) => ({
+                description: l.description,
+                vehicleSpecRef: l.vehicleSpecRef ?? '',
+                make: l.vehicleSpecRef?.split('/')[0] ?? '',
+                model: l.vehicleSpecRef?.split('/')[1] ?? '',
+                year: l.vehicleSpecRef?.split('/')[2] ?? '',
+                quantity: l.quantity,
+                unitPriceSar: l.unitPriceSar,
+              })),
+            )
+          }
+        } catch {
+          // ignore — start fresh if load fails
+        }
+      }
+
       setBooting(false)
     }
 
@@ -131,7 +163,7 @@ export default function NewQuotationPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [editId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const pricing = computePricing(lines, form.discountPercent)
 
@@ -312,27 +344,33 @@ export default function NewQuotationPage() {
 
               <div>
                 <label className={lbl}>{f.fields.durationMonths}</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={60}
-                  className={inp}
+                <select
+                  className={sel}
                   value={form.estimatedDurationMonths}
                   onChange={(e) => {
                     const months = Number(e.target.value)
-                    setForm({ ...form, estimatedDurationMonths: months })
+                    const start = new Date(form.quoteDate || today)
+                    const end = new Date(start)
+                    end.setMonth(end.getMonth() + months)
+                    const validUntilDate = end.toISOString().slice(0, 10)
+                    setForm({ ...form, estimatedDurationMonths: months, validUntilDate })
                     setLines((prev) =>
                       prev.map((line) => {
                         const matched = profileFor(line.make, line.model, line.year)
                         if (!matched) return line
                         return {
                           ...line,
+                          description: `${matched.make} ${matched.model} ${matched.year} — ${months} months`,
                           unitPriceSar: computeLinePrice(matched),
                         }
                       }),
                     )
                   }}
-                />
+                >
+                  {[36, 48, 60].map((m) => (
+                    <option key={m} value={m}>{m} months ({m / 12} years)</option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -396,12 +434,15 @@ export default function NewQuotationPage() {
                   className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3 lg:grid-cols-6"
                 >
                   <div className="col-span-2 sm:col-span-3">
-                    <label className={lbl}>{f.lineFields.description} *</label>
+                    <div className="flex items-center gap-2">
+                      <label className={lbl}>{f.lineFields.description} *</label>
+                      <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">Vehicle Rental</span>
+                    </div>
                     <input
                       className={inp}
                       required
                       value={line.description}
-                      placeholder="e.g. Toyota Camry 2025 — 12 months"
+                      placeholder="e.g. Toyota Camry 2025 — 36 months"
                       onChange={(e) => updateLine(i, { description: e.target.value })}
                     />
                   </div>
@@ -466,7 +507,7 @@ export default function NewQuotationPage() {
                         updateLine(i, {
                           year: nextYear,
                           description: matched
-                            ? `${matched.make} ${matched.model} ${matched.year} - ${matched.leaseDurationMonths} months`
+                            ? `${matched.make} ${matched.model} ${matched.year} — ${form.estimatedDurationMonths} months`
                             : line.description,
                           unitPriceSar: matched ? computeLinePrice(matched) : line.unitPriceSar,
                           vehicleSpecRef:
@@ -570,13 +611,20 @@ export default function NewQuotationPage() {
 
           {submitError && <ErrorBox message={`${f.error}: ${submitError}`} />}
 
-          <div>
+          <div className="flex gap-3">
             <button
               type="submit"
               disabled={submitting}
               className="bg-brand-600 hover:bg-brand-700 inline-flex items-center rounded-md px-5 py-2.5 text-sm font-medium text-white shadow-sm disabled:opacity-60"
             >
               {submitting ? f.submitting : f.submit}
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push(editId ? `/quotations/${editId}` : '/quotations')}
+              className="inline-flex items-center rounded-md border border-slate-300 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              Cancel
             </button>
           </div>
         </form>
