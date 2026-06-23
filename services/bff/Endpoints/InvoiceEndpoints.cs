@@ -38,6 +38,11 @@ public static class InvoiceEndpoints
             .WithDescription("Fetch invoice for a specific lease")
             .WithOpenApi();
 
+        group.MapPost("generate", GenerateInvoiceAsync)
+            .WithName("GenerateInvoice")
+            .WithDescription("Generate a new invoice for a lease billing period.")
+            .RequireAuthorization();
+
         group.MapPost("{id:guid}/submit-zatca", SubmitToZatcaAsync)
             .WithName("SubmitInvoiceToZatca")
             .WithDescription("Trigger ZATCA clearance submission for an invoice. Idempotent.")
@@ -319,6 +324,96 @@ public static class InvoiceEndpoints
             ? Results.Ok(result)
             : Results.Problem(detail: result.Message, title: "zatca.submission_failed", statusCode: 502);
     }
+
+    private static async Task<IResult> GenerateInvoiceAsync(
+        HttpContext ctx,
+        GenerateInvoiceRequest body,
+        AutoLeaseNetDbContext db,
+        ITenantContext tenant,
+        CancellationToken ct)
+    {
+        var idempotencyKey = ctx.Request.Headers["Idempotency-Key"].ToString();
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+            return Results.Problem(title: "Missing Idempotency-Key", statusCode: StatusCodes.Status400BadRequest);
+
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var lease = await db.Leases.AsNoTracking()
+            .FirstOrDefaultAsync(l => l.Id == body.LeaseId && l.TenantId == tenantId, ct);
+        if (lease is null)
+            return Results.Problem(title: "lease.not_found", detail: "Lease not found.", statusCode: StatusCodes.Status404NotFound);
+
+        var issueDate = DateOnly.TryParse(body.BillingPeriodStart, out var parsed)
+            ? parsed : DateOnly.FromDateTime(DateTime.UtcNow);
+
+        // Check for duplicate invoice for same lease+period
+        var existing = await db.Invoices.AsNoTracking()
+            .FirstOrDefaultAsync(i => i.LeaseId == body.LeaseId && i.TenantId == tenantId && i.IssueDateUtc == issueDate, ct);
+        if (existing is not null)
+            return Results.Problem(title: "invoice.duplicate", detail: $"Invoice already exists for this period: {existing.InvoiceNumber}", statusCode: StatusCodes.Status409Conflict);
+
+        var invoiceCount = await db.Invoices.CountAsync(i => i.TenantId == tenantId, ct);
+        var invoiceNumber = $"INV-{DateTime.UtcNow:yyyy}-{(invoiceCount + 1).ToString("D5", System.Globalization.CultureInfo.InvariantCulture)}";
+
+        var customerId = lease.CustomerId ?? Guid.Empty;
+        var baseAmount = lease.RentAmount;
+
+        var invoice = Domain.Billing.Invoice.CreateFromLease(
+            tenantId, lease.Id, customerId, invoiceNumber, baseAmount, issueDate);
+
+        db.Invoices.Add(invoice);
+        await db.SaveChangesAsync(ct);
+
+        // Return the full invoice shape the frontend expects
+        var customer = await db.Customers.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == customerId, ct);
+        var vehicle = lease.VehicleId.HasValue
+            ? await db.Vehicles.AsNoTracking().FirstOrDefaultAsync(v => v.Id == lease.VehicleId.Value, ct)
+            : null;
+
+        return Results.Ok(new
+        {
+            invoice.Id,
+            invoice.DisplayId,
+            invoice.InvoiceNumber,
+            invoice.LeaseId,
+            LeaseNumber = "LA-" + lease.DisplayId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            invoice.CustomerId,
+            CustomerDisplayName = customer?.DisplayName ?? "—",
+            VehiclePlate = vehicle?.PlateNumber ?? "—",
+            VehiclePlateAr = (vehicle?.PlateLetters ?? "") + " " + (vehicle?.PlateNumber ?? ""),
+            VehicleMakeModel = vehicle != null ? vehicle.Make + " " + vehicle.Model : "—",
+            SupplierName = "AutoLeaseNet",
+            SupplierCrNo = "1010000000",
+            SupplierVatNo = "300000000000003",
+            QuotationNumber = (string?)null,
+            PoNumber = (string?)null,
+            BillingPeriodStart = body.BillingPeriodStart,
+            BillingPeriodEnd = body.BillingPeriodEnd,
+            IssuedDate = issueDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            DueDate = invoice.DueDateUtc.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            Status = invoice.Status.ToString(),
+            Lines = Array.Empty<object>(),
+            SubTotalSar = invoice.BaseAmountSar,
+            VatAmountSar = invoice.VatSar,
+            TotalSar = invoice.TotalSar,
+            PaidAmountSar = 0m,
+            BalanceSar = invoice.TotalSar,
+            ZatcaInvoiceNumber = (string?)null,
+            Notes = body.Notes,
+            Allocations = Array.Empty<object>(),
+            invoice.CreatedAtUtc,
+        });
+    }
+}
+
+public sealed record GenerateInvoiceRequest
+{
+    public required Guid LeaseId { get; init; }
+    public required string BillingPeriodStart { get; init; }
+    public required string BillingPeriodEnd { get; init; }
+    public string? Notes { get; init; }
 }
 
 /// <summary>Invoice response DTO (Phase 1).</summary>
