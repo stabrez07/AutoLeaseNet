@@ -1250,6 +1250,47 @@ class BffClient {
     return this.getJson<AdvancePayment>(`/api/v1/payments/${id}`)
   }
 
+  // ─── Customer Update ────────────────────────────────────────────────────────
+  updateCustomerB2B(id: string, body: UpdateCustomerB2BRequest, idempotencyKey: string) {
+    return this.putJson<CustomerCommandResult, UpdateCustomerB2BRequest>(
+      `/api/v1/customers/${id}`,
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
+  // ─── Accounts ──────────────────────────────────────────────────────────────
+  getAccounts(page = 1, pageSize = 30, search?: string, customerId?: string) {
+    const q = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+    if (search) q.set('search', search)
+    if (customerId) q.set('customerId', customerId)
+    return this.getJson<PagedResult<AccountSummary>>(`/api/v1/accounts?${q}`)
+  }
+  getAccountById(id: string) {
+    return this.getJson<AccountDetail>(`/api/v1/accounts/${id}`)
+  }
+  createAccount(body: CreateAccountRequest, idempotencyKey: string) {
+    return this.postJson<{ accountId: string; displayId: number; status: string }, CreateAccountRequest>(
+      '/api/v1/accounts',
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+  updateAccount(id: string, body: UpdateAccountRequest, idempotencyKey: string) {
+    return this.putJson<{ accountId: string; status: string }, UpdateAccountRequest>(
+      `/api/v1/accounts/${id}`,
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+  deleteAccount(id: string, idempotencyKey: string) {
+    return this.postJson<{ deleted: boolean; accountId: string }, Record<string, never>>(
+      `/api/v1/accounts/${id}/delete`,
+      {},
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+
   // ─── Audit ──────────────────────────────────────────────────────────────────
   getAuditEvents(entityType: string, entityId: string) {
     return this.getJson<AuditEvent[]>(`/api/v1/audit/${entityType}/${entityId}`)
@@ -1759,6 +1800,102 @@ export interface DeleteResult {
   success: boolean
   errorCode?: string | null
   errorMessage?: string | null
+}
+
+// ─── Account types ─────────────────────────────────────────────────────────
+
+export interface AccountSummary {
+  id: string
+  displayId: number
+  customerId: string
+  customerDisplayName: string
+  natureOfBusiness: string
+  customerContactNameEn: string
+  accountHolderNameEn: string
+  city: string | null
+  status: string
+  createdAtUtc: string
+}
+
+export interface AccountDetail {
+  id: string
+  displayId: number
+  customerId: string
+  customerDisplayName: string
+  customerDisplayNameAr: string | null
+  natureOfBusiness: string
+  customerContactNameEn: string
+  customerContactNameAr: string | null
+  customerContactPosition: string | null
+  customerContactMobile: string | null
+  customerContactEmail: string | null
+  accountHolderNameEn: string
+  accountHolderNameAr: string | null
+  accountHolderPosition: string | null
+  accountHolderMobile: string | null
+  accountHolderEmail: string | null
+  street: string | null
+  city: string | null
+  region: string | null
+  postalCode: string | null
+  country: string | null
+  status: string
+  createdAtUtc: string
+  updatedAtUtc: string
+}
+
+export interface CreateAccountRequest {
+  customerId: string
+  natureOfBusiness?: string | undefined
+  customerContactNameEn: string
+  customerContactNameAr?: string | undefined
+  customerContactPosition?: string | undefined
+  customerContactMobile?: string | undefined
+  customerContactEmail?: string | undefined
+  accountHolderNameEn: string
+  accountHolderNameAr?: string | undefined
+  accountHolderPosition?: string | undefined
+  accountHolderMobile?: string | undefined
+  accountHolderEmail?: string | undefined
+  street?: string | undefined
+  city?: string | undefined
+  region?: string | undefined
+  postalCode?: string | undefined
+  country?: string | undefined
+}
+
+export interface UpdateAccountRequest {
+  natureOfBusiness?: string | undefined
+  customerContactNameEn?: string | undefined
+  customerContactNameAr?: string | undefined
+  customerContactPosition?: string | undefined
+  customerContactMobile?: string | undefined
+  customerContactEmail?: string | undefined
+  accountHolderNameEn?: string | undefined
+  accountHolderNameAr?: string | undefined
+  accountHolderPosition?: string | undefined
+  accountHolderMobile?: string | undefined
+  accountHolderEmail?: string | undefined
+  street?: string | undefined
+  city?: string | undefined
+  region?: string | undefined
+  postalCode?: string | undefined
+  country?: string | undefined
+}
+
+export interface UpdateCustomerB2BRequest {
+  legalName?: string | undefined
+  legalNameAr?: string | undefined
+  commercialRegistration?: string | undefined
+  vatNumber?: string | undefined
+  email?: string | undefined
+  mobile?: string | undefined
+  nationalAddress?: string | undefined
+  billingAddress?: string | undefined
+  creditLimit?: number | undefined
+  creditCurrency?: string | undefined
+  industry?: string | undefined
+  paymentTermsDays?: number | undefined
 }
 
 // ─── Service history ──────────────────────────────────────────────────────────

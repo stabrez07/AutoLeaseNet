@@ -180,6 +180,7 @@ v1.MapZatcaStatusEndpoints();
 v1.MapMeEndpoints();
 v1.MapTajeerWebhookEndpoints();
 v1.MapCustomerEndpoints();
+v1.MapAccountEndpoints();
 v1.MapVehicleEndpoints();
 v1.MapDriverEndpoints();
 v1.MapBranchEndpoints();

@@ -1,10 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { useLocale } from '../../../lib/locale-provider'
-import { bff, type ContractSummary, type CustomerDetail, type CustomerInvoiceSummary, type CustomerPaymentSummary, type LeaseSummary, type VehicleSummary, type DriverSummary, type AuditEvent } from '../../../lib/bff-client'
+import { bff, type ContractSummary, type CustomerDetail, type CustomerInvoiceSummary, type CustomerPaymentSummary, type LeaseSummary, type VehicleSummary, type DriverSummary, type AuditEvent, type UpdateCustomerB2BRequest } from '../../../lib/bff-client'
 import { Badge, Card, ErrorBox, PageHeader, PrimaryButton, SecondaryButton, Spinner } from '../../../components/ui'
+
+/* ── styling constants ──────────────────────────────────────────────────────── */
+
+const INPUT = 'w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500'
+const LABEL = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500'
+
+/* ── helpers ────────────────────────────────────────────────────────────────── */
 
 function Field({ label, value }: { label: string; value: string | number | boolean | null | undefined }) {
   return (
@@ -16,6 +23,7 @@ function Field({ label, value }: { label: string; value: string | number | boole
     </div>
   )
 }
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
@@ -24,6 +32,17 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     </div>
   )
 }
+
+function EditField({ label, value, onChange, type = 'text' }: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
+  return (
+    <div>
+      <label className={LABEL}>{label}</label>
+      <input type={type} className={INPUT} value={value} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  )
+}
+
+/* ── tone maps ──────────────────────────────────────────────────────────────── */
 
 const LEASE_TONES: Record<string, 'green' | 'amber' | 'blue' | 'slate' | 'red'> = {
   Active: 'green', Extended: 'blue', PendingIssuance: 'amber',
@@ -37,14 +56,48 @@ const AUDIT_TONES: Record<string, 'green' | 'amber' | 'blue' | 'slate' | 'red'> 
   Created: 'green', Updated: 'blue', StatusChanged: 'amber', Deleted: 'red', Viewed: 'slate', Exported: 'slate',
 }
 
+/* ── edit-mode form shape ───────────────────────────────────────────────────── */
+
+interface B2BFormState {
+  legalName: string
+  legalNameAr: string
+  commercialRegistration: string
+  vatNumber: string
+  email: string
+  mobile: string
+  nationalAddress: string
+  billingAddress: string
+  creditLimit: string
+  creditCurrency: string
+}
+
+function toFormState(d: CustomerDetail): B2BFormState {
+  return {
+    legalName: d.legalName ?? '',
+    legalNameAr: d.legalNameAr ?? '',
+    commercialRegistration: d.commercialRegistration ?? '',
+    vatNumber: d.vatNumber ?? '',
+    email: d.email ?? '',
+    mobile: d.mobile ?? '',
+    nationalAddress: d.nationalAddress ?? '',
+    billingAddress: d.billingAddress ?? '',
+    creditLimit: d.creditLimit != null ? String(d.creditLimit) : '',
+    creditCurrency: d.creditCurrency ?? 'SAR',
+  }
+}
+
+/* ── main component ─────────────────────────────────────────────────────────── */
+
 type Tab = 'details' | 'contracts' | 'leases' | 'vehicles' | 'drivers' | 'invoices' | 'payments' | 'audit'
 
 export default function CustomerDetailPage() {
   const { t } = useLocale()
   const router = useRouter()
   const { id } = useParams<{ id: string }>()
+  const searchParams = useSearchParams()
   const c = t.crudCustomers
 
+  /* ── data state ─────────────────────────────────────────────────────────── */
   const [data, setData] = useState<CustomerDetail | null>(null)
   const [contracts, setContracts] = useState<ContractSummary[] | null>(null)
   const [leases, setLeases] = useState<LeaseSummary[] | null>(null)
@@ -60,7 +113,22 @@ export default function CustomerDetailPage() {
   const [tab, setTab] = useState<Tab>('details')
   const [selectedLease, setSelectedLease] = useState<LeaseSummary | null>(null)
 
-  async function load() {
+  /* ── edit mode state ────────────────────────────────────────────────────── */
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState<B2BFormState>({
+    legalName: '', legalNameAr: '', commercialRegistration: '', vatNumber: '',
+    email: '', mobile: '', nationalAddress: '', billingAddress: '',
+    creditLimit: '', creditCurrency: 'SAR',
+  })
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  /* ── delete state ───────────────────────────────────────────────────────── */
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  /* ── data loading ───────────────────────────────────────────────────────── */
+  const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
       const [cust, cnts, ls, vs, ds, inv, pay, events] = await Promise.all([
@@ -73,13 +141,30 @@ export default function CustomerDetailPage() {
         bff.getCustomerPayments(id).catch(() => [] as CustomerPaymentSummary[]),
         bff.getAuditEvents('Customer', id).catch(() => [] as AuditEvent[]),
       ])
-      setData(cust); setContracts(cnts); setLeases(ls); setVehicles(vs); setDrivers(ds); setInvoices(inv); setPayments(pay); setAuditEvents(events)
+      setData(cust)
+      setContracts(cnts)
+      setLeases(ls)
+      setVehicles(vs)
+      setDrivers(ds)
+      setInvoices(inv)
+      setPayments(pay)
+      setAuditEvents(events)
+      setForm(toFormState(cust))
     } catch (e) { setError((e as Error).message) }
     finally { setLoading(false) }
-  }
+  }, [id])
 
-  useEffect(() => { void load() }, [id])
+  useEffect(() => { void load() }, [load])
 
+  /* auto-enter edit mode from URL query param */
+  useEffect(() => {
+    if (searchParams.get('edit') === 'true' && data) {
+      setEditing(true)
+      setTab('details')
+    }
+  }, [searchParams, data])
+
+  /* ── status action ──────────────────────────────────────────────────────── */
   async function handleStatusAction(action: string) {
     const comment = window.prompt(`Enter reason/comment for "${action}" action (required for audit):`)
     if (comment === null) return
@@ -94,11 +179,51 @@ export default function CustomerDetailPage() {
     finally { setActionBusy(false) }
   }
 
+  /* ── save edit ──────────────────────────────────────────────────────────── */
+  async function handleSave() {
+    setSaving(true); setSaveError(null)
+    try {
+      const body: UpdateCustomerB2BRequest = {
+        ...(form.legalName ? { legalName: form.legalName } : {}),
+        ...(form.legalNameAr ? { legalNameAr: form.legalNameAr } : {}),
+        ...(form.commercialRegistration ? { commercialRegistration: form.commercialRegistration } : {}),
+        ...(form.vatNumber ? { vatNumber: form.vatNumber } : {}),
+        ...(form.email ? { email: form.email } : {}),
+        ...(form.mobile ? { mobile: form.mobile } : {}),
+        ...(form.nationalAddress ? { nationalAddress: form.nationalAddress } : {}),
+        ...(form.billingAddress ? { billingAddress: form.billingAddress } : {}),
+        ...(form.creditLimit ? { creditLimit: Number(form.creditLimit) } : {}),
+        ...(form.creditCurrency ? { creditCurrency: form.creditCurrency } : {}),
+      }
+      const res = await bff.updateCustomerB2B(id, body, crypto.randomUUID())
+      if (!res.success) throw new Error(res.errorMessage ?? res.errorCode ?? 'Update failed')
+      setEditing(false)
+      await load()
+    } catch (e) { setSaveError((e as Error).message) }
+    finally { setSaving(false) }
+  }
+
+  /* ── delete ─────────────────────────────────────────────────────────────── */
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      const res = await bff.deleteCustomer(id, crypto.randomUUID())
+      if (!res.success) throw new Error(res.errorMessage ?? res.errorCode ?? 'Delete failed')
+      router.push('/customers')
+    } catch (e) { setActionMsg((e as Error).message); setDeleteConfirm(false) }
+    finally { setDeleting(false) }
+  }
+
+  /* ── form field updater ─────────────────────────────────────────────────── */
+  function setField(key: keyof B2BFormState) {
+    return (val: string) => setForm((prev) => ({ ...prev, [key]: val }))
+  }
+
+  /* ── guards ─────────────────────────────────────────────────────────────── */
   if (loading) return <Spinner label={t.common.loading} />
   if (error) return <ErrorBox message={error} onRetry={load} retryLabel={t.common.retry} />
   if (!data) return <p className="text-sm text-slate-500">{t.common.notFound}</p>
 
-  const isB2B = data.type === 'B2B'
   const statusTone = data.status === 'Active' ? 'green' : data.status === 'Suspended' ? 'amber' : 'slate'
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
@@ -112,38 +237,42 @@ export default function CustomerDetailPage() {
     { key: 'audit', label: 'Audit Log' },
   ]
 
+  /* ══════════════════════════════════════════════════════════════════════════ */
+  /*  RENDER                                                                   */
+  /* ══════════════════════════════════════════════════════════════════════════ */
+
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       <PageHeader
         title={data.displayName}
-        subtitle={`${data.type} · ${data.id}`}
+        subtitle={`B2B · ${data.id}`}
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <SecondaryButton onClick={() => router.push(`/accounts?customerId=${data.id}`)} className="px-3 py-1.5 text-xs">View Accounts</SecondaryButton>
+            <SecondaryButton onClick={() => router.push(`/accounts/new?customerId=${data.id}`)} className="px-3 py-1.5 text-xs">Create Account</SecondaryButton>
             <SecondaryButton onClick={() => router.push(`/customers/${data.id}/account`)} className="px-3 py-1.5 text-xs">Account &amp; SOA</SecondaryButton>
             <SecondaryButton onClick={() => router.back()}>{t.common.back}</SecondaryButton>
           </div>
         }
       />
 
-      {/* Company header card */}
+      {/* ── B2B header card ─────────────────────────────────────────────────── */}
       <Card className="p-4">
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3">
               <Badge tone={statusTone}>{c.statuses[data.status as keyof typeof c.statuses] ?? data.status}</Badge>
-              <Badge tone={isB2B ? 'blue' : 'slate'}>{isB2B ? t.customers.type.b2b : t.customers.type.b2c}</Badge>
+              <Badge tone="blue">{t.customers.type.b2b}</Badge>
               {data.kycVerified && <Badge tone="green">{c.kycBadge}</Badge>}
             </div>
-            {isB2B && (
-              <div className="mt-3 grid grid-cols-2 gap-x-8 gap-y-1 text-sm md:grid-cols-4">
-                <div><span className="text-xs text-slate-500">CR No</span><p className="font-mono text-xs font-semibold text-slate-900">{data.commercialRegistration ?? '—'}</p></div>
-                <div><span className="text-xs text-slate-500">VAT No</span><p className="font-mono text-xs font-semibold text-slate-900">{data.vatNumber ?? '—'}</p></div>
-                <div><span className="text-xs text-slate-500">Credit Limit</span><p className="text-xs font-medium text-slate-900">{data.creditLimit ? `SAR ${data.creditLimit.toLocaleString()}` : '—'}</p></div>
-                <div><span className="text-xs text-slate-500">City</span><p className="text-xs font-medium text-slate-900">{data.nationalAddress?.split(',')[0] ?? '—'}</p></div>
-              </div>
-            )}
+            <div className="mt-3 grid grid-cols-2 gap-x-8 gap-y-1 text-sm md:grid-cols-4">
+              <div><span className="text-xs text-slate-500">CR No</span><p className="font-mono text-xs font-semibold text-slate-900">{data.commercialRegistration ?? '—'}</p></div>
+              <div><span className="text-xs text-slate-500">VAT No</span><p className="font-mono text-xs font-semibold text-slate-900">{data.vatNumber ?? '—'}</p></div>
+              <div><span className="text-xs text-slate-500">Credit Limit</span><p className="text-xs font-medium text-slate-900">{data.creditLimit ? `SAR ${data.creditLimit.toLocaleString()}` : '—'}</p></div>
+              <div><span className="text-xs text-slate-500">City</span><p className="text-xs font-medium text-slate-900">{data.nationalAddress?.split(',')[0] ?? '—'}</p></div>
+            </div>
           </div>
-          {isB2B && data.contactPersonNameEn && (
+          {data.contactPersonNameEn && (
             <div className="ms-6 shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-right">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Contact Person</p>
               <p className="text-sm font-semibold text-slate-900">{data.contactPersonNameEn}</p>
@@ -159,7 +288,7 @@ export default function CustomerDetailPage() {
         </div>
       </Card>
 
-      {/* Tab bar */}
+      {/* ── Tab bar ─────────────────────────────────────────────────────────── */}
       <div className="flex border-b border-slate-200">
         {tabs.map(({ key, label, count }) => (
           <button key={key} type="button"
@@ -175,11 +304,45 @@ export default function CustomerDetailPage() {
         ))}
       </div>
 
-      {/* Details tab */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
+      {/*  DETAILS TAB                                                          */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
       {tab === 'details' && (
         <>
           <Card className="divide-y divide-slate-100 p-6">
-            {isB2B ? (
+            {/* edit / cancel toggle */}
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-700">B2B Customer Details</h3>
+              <div className="flex gap-2">
+                {!editing ? (
+                  <SecondaryButton onClick={() => { setForm(toFormState(data)); setEditing(true); setSaveError(null) }} className="px-3 py-1.5 text-xs">Edit</SecondaryButton>
+                ) : (
+                  <>
+                    <PrimaryButton onClick={handleSave} disabled={saving} className="px-3 py-1.5 text-xs">{saving ? 'Saving...' : 'Save'}</PrimaryButton>
+                    <SecondaryButton onClick={() => { setEditing(false); setSaveError(null); setForm(toFormState(data)) }} disabled={saving} className="px-3 py-1.5 text-xs">Cancel</SecondaryButton>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {saveError && (
+              <p className="mb-3 rounded bg-red-50 px-3 py-1.5 text-sm text-red-700">{saveError}</p>
+            )}
+
+            {/* ── identity section ────────────────────────────────────────────── */}
+            {editing ? (
+              <div className="pb-4">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">{c.sections.identity}</h3>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3">
+                  <EditField label={c.fields.legalName} value={form.legalName} onChange={setField('legalName')} />
+                  <EditField label={c.fields.legalNameAr} value={form.legalNameAr} onChange={setField('legalNameAr')} />
+                  <EditField label={c.fields.commercialReg} value={form.commercialRegistration} onChange={setField('commercialRegistration')} />
+                  <EditField label={c.fields.vatNumber} value={form.vatNumber} onChange={setField('vatNumber')} />
+                  <EditField label={c.fields.creditLimit} value={form.creditLimit} onChange={setField('creditLimit')} type="number" />
+                  <EditField label="Credit Currency" value={form.creditCurrency} onChange={setField('creditCurrency')} />
+                </div>
+              </div>
+            ) : (
               <Section title={c.sections.identity}>
                 <Field label={c.fields.legalName} value={data.legalName} />
                 <Field label={c.fields.legalNameAr} value={data.legalNameAr} />
@@ -188,17 +351,10 @@ export default function CustomerDetailPage() {
                 <Field label={c.fields.creditLimit} value={data.creditLimit != null ? `${data.creditLimit} ${data.creditCurrency ?? ''}` : undefined} />
                 <Field label={c.fields.billingAddress} value={data.billingAddress} />
               </Section>
-            ) : (
-              <Section title={c.sections.identity}>
-                <Field label={c.fields.personNameEn} value={data.personNameEn} />
-                <Field label={c.fields.personNameAr} value={data.personNameAr} />
-                <Field label={c.fields.idTypeCode} value={c.idTypes[data.idTypeCode as keyof typeof c.idTypes] ?? data.idTypeCode} />
-                <Field label={c.fields.personIdNumber} value={data.personIdNumber} />
-                <Field label={c.fields.dateOfBirth} value={data.dateOfBirth} />
-                <Field label={c.fields.nationalityCode} value={data.nationalityCode} />
-              </Section>
             )}
-            {isB2B && data.contactPersonNameEn && (
+
+            {/* ── contact person (read-only, not editable B2B field) ──────────── */}
+            {data.contactPersonNameEn && (
               <div className="pt-4">
                 <Section title="Contact Person">
                   <Field label="Name (EN)" value={data.contactPersonNameEn} />
@@ -209,24 +365,41 @@ export default function CustomerDetailPage() {
                 </Section>
               </div>
             )}
-            <div className="pt-4">
-              <Section title={c.sections.contact}>
-                <Field label={c.fields.email} value={data.email} />
-                <Field label={c.fields.mobile} value={data.mobile} />
-                <Field label={c.fields.nationalAddress} value={data.nationalAddress} />
-              </Section>
-            </div>
+
+            {/* ── contact / address section ───────────────────────────────────── */}
+            {editing ? (
+              <div className="pt-4">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">{c.sections.contact}</h3>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3">
+                  <EditField label={c.fields.email} value={form.email} onChange={setField('email')} type="email" />
+                  <EditField label={c.fields.mobile} value={form.mobile} onChange={setField('mobile')} />
+                  <EditField label={c.fields.nationalAddress} value={form.nationalAddress} onChange={setField('nationalAddress')} />
+                  <EditField label={c.fields.billingAddress} value={form.billingAddress} onChange={setField('billingAddress')} />
+                </div>
+              </div>
+            ) : (
+              <div className="pt-4">
+                <Section title={c.sections.contact}>
+                  <Field label={c.fields.email} value={data.email} />
+                  <Field label={c.fields.mobile} value={data.mobile} />
+                  <Field label={c.fields.nationalAddress} value={data.nationalAddress} />
+                </Section>
+              </div>
+            )}
+
+            {/* ── system details (always read-only) ───────────────────────────── */}
             <div className="pt-4">
               <Section title={t.common.details}>
                 <Field label={t.common.id} value={data.id} />
                 <Field label="Preferred language" value={data.preferredLanguage} />
-                <Field label="KYC verified" value={data.kycVerified ? `Yes — ${data.kycVerifiedAtUtc?.substring(0, 10) ?? ''}` : 'No'} />
+                <Field label="KYC verified" value={data.kycVerified ? `Yes -- ${data.kycVerifiedAtUtc?.substring(0, 10) ?? ''}` : 'No'} />
                 <Field label={t.common.createdAt} value={data.createdAtUtc?.substring(0, 10)} />
                 <Field label={t.common.updatedAt} value={data.updatedAtUtc?.substring(0, 10)} />
               </Section>
             </div>
           </Card>
 
+          {/* ── actions card ──────────────────────────────────────────────────── */}
           <Card className="p-4">
             <h3 className="mb-3 text-sm font-semibold text-slate-700">{t.common.actions}</h3>
             {actionMsg && (
@@ -244,12 +417,25 @@ export default function CustomerDetailPage() {
               {data.status !== 'Closed' && (
                 <SecondaryButton onClick={() => handleStatusAction('close')} disabled={actionBusy}>{c.actions.close}</SecondaryButton>
               )}
+
+              {/* delete customer */}
+              {!deleteConfirm ? (
+                <SecondaryButton onClick={() => setDeleteConfirm(true)} disabled={actionBusy} className="border-red-200 text-red-600 hover:bg-red-50">Delete Customer</SecondaryButton>
+              ) : (
+                <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5">
+                  <span className="text-sm text-red-700">Are you sure? This cannot be undone.</span>
+                  <PrimaryButton onClick={handleDelete} disabled={deleting} className="bg-red-600 px-3 py-1 text-xs hover:bg-red-700">{deleting ? 'Deleting...' : 'Confirm Delete'}</PrimaryButton>
+                  <SecondaryButton onClick={() => setDeleteConfirm(false)} disabled={deleting} className="px-3 py-1 text-xs">Cancel</SecondaryButton>
+                </div>
+              )}
             </div>
           </Card>
         </>
       )}
 
-      {/* Contracts tab */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
+      {/*  CONTRACTS TAB                                                        */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
       {tab === 'contracts' && (
         <Card className="overflow-hidden">
           {!contracts || contracts.length === 0 ? (
@@ -270,17 +456,17 @@ export default function CustomerDetailPage() {
               </thead>
               <tbody>
                 {contracts.map((cnt) => {
-                  const statusTone = cnt.status === 'Active' ? 'green' : cnt.status === 'Draft' ? 'slate' : cnt.status === 'Suspended' ? 'amber' : 'slate'
+                  const cntTone = cnt.status === 'Active' ? 'green' : cnt.status === 'Draft' ? 'slate' : cnt.status === 'Suspended' ? 'amber' : 'slate'
                   return (
                     <tr key={cnt.id} className="cursor-pointer border-t border-slate-100 hover:bg-brand-50/40" onClick={() => router.push(`/contracts/${cnt.id}`)}>
                       <td className="px-3 py-2 font-mono text-xs font-semibold text-brand-700">{cnt.contractNumber}</td>
-                      <td className="px-3 py-2"><Badge tone={statusTone as 'green' | 'amber' | 'slate'}>{cnt.status}</Badge></td>
+                      <td className="px-3 py-2"><Badge tone={cntTone as 'green' | 'amber' | 'slate'}>{cnt.status}</Badge></td>
                       <td className="px-3 py-2 text-end text-xs font-medium text-slate-900">{cnt.totalVehicles}</td>
                       <td className="px-3 py-2 text-end font-mono text-xs">SAR {cnt.monthlyRentSar.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       <td className="px-3 py-2 text-xs text-slate-600">{cnt.durationMonths} months</td>
                       <td className="px-3 py-2 text-end font-mono text-xs font-semibold">SAR {cnt.totalContractValueSar.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       <td className="px-3 py-2 text-end text-xs font-medium text-brand-700">{cnt.leaseAgreementCount}</td>
-                      <td className="px-3 py-2 text-xs text-slate-600">{cnt.startDate?.substring(0, 10)} → {cnt.endDate?.substring(0, 10)}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600">{cnt.startDate?.substring(0, 10)} {'→'} {cnt.endDate?.substring(0, 10)}</td>
                     </tr>
                   )
                 })}
@@ -290,7 +476,9 @@ export default function CustomerDetailPage() {
         </Card>
       )}
 
-      {/* Leases tab */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
+      {/*  LEASES TAB                                                           */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
       {tab === 'leases' && (
         <Card className="overflow-hidden">
           {!leases || leases.length === 0 ? (
@@ -322,7 +510,7 @@ export default function CustomerDetailPage() {
                       <td className="px-3 py-2 text-xs text-slate-600">{l.primaryDriverName ?? '—'}</td>
                       <td className="px-3 py-2"><Badge tone={LEASE_TONES[l.status] ?? 'slate'}>{(t.leases.statuses as Record<string, string>)[l.status] ?? l.status}</Badge></td>
                       <td className="px-3 py-2 text-xs text-slate-600">{l.contractTypeCode}</td>
-                      <td className="px-3 py-2 text-xs text-slate-600">{l.contractStartUtc.substring(0,10)} → {l.contractEndUtc.substring(0,10)}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600">{l.contractStartUtc.substring(0,10)} {'→'} {l.contractEndUtc.substring(0,10)}</td>
                       <td className="px-3 py-2 text-end font-mono text-xs">{l.rentAmountSar.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     </tr>
                   ))}
@@ -347,7 +535,7 @@ export default function CustomerDetailPage() {
                     <div><span className="text-xs text-slate-500">Driver</span><p className="text-xs font-medium text-slate-900">{selectedLease.primaryDriverName ?? '—'}</p></div>
                     <div><span className="text-xs text-slate-500">Status</span><p className="text-xs"><Badge tone={LEASE_TONES[selectedLease.status] ?? 'slate'}>{selectedLease.status}</Badge></p></div>
                     <div><span className="text-xs text-slate-500">Type</span><p className="text-xs text-slate-900">{selectedLease.contractTypeCode}</p></div>
-                    <div><span className="text-xs text-slate-500">Period</span><p className="text-xs text-slate-900">{selectedLease.contractStartUtc.substring(0,10)} → {selectedLease.contractEndUtc.substring(0,10)}</p></div>
+                    <div><span className="text-xs text-slate-500">Period</span><p className="text-xs text-slate-900">{selectedLease.contractStartUtc.substring(0,10)} {'→'} {selectedLease.contractEndUtc.substring(0,10)}</p></div>
                     <div><span className="text-xs text-slate-500">Rent</span><p className="font-mono text-xs text-slate-900">SAR {selectedLease.rentAmountSar.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
                     <div><span className="text-xs text-slate-500">Branch</span><p className="text-xs text-slate-900">{selectedLease.workingBranchName}</p></div>
                     <div><span className="text-xs text-slate-500">Contract #</span><p className="font-mono text-xs text-slate-900">{selectedLease.leaseNumber}</p></div>
@@ -359,7 +547,9 @@ export default function CustomerDetailPage() {
         </Card>
       )}
 
-      {/* Vehicles tab */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
+      {/*  VEHICLES TAB                                                         */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
       {tab === 'vehicles' && (
         <Card className="overflow-hidden">
           {!vehicles || vehicles.length === 0 ? (
@@ -391,7 +581,9 @@ export default function CustomerDetailPage() {
         </Card>
       )}
 
-      {/* Drivers tab */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
+      {/*  DRIVERS TAB                                                          */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
       {tab === 'drivers' && (
         <Card className="overflow-hidden">
           {!drivers || drivers.length === 0 ? (
@@ -414,7 +606,7 @@ export default function CustomerDetailPage() {
                       <td className="px-3 py-2 text-xs font-medium text-brand-700">{d.personNameEn}</td>
                       <td className="px-3 py-2 font-mono text-xs text-slate-700">{d.driverLicenseNumber}</td>
                       <td className={`px-3 py-2 text-xs ${expiring ? 'text-red-600 font-semibold' : 'text-slate-600'}`}>
-                        {d.licenseExpiryDate} {expiring ? '⚠' : ''}
+                        {d.licenseExpiryDate} {expiring ? '(!)' : ''}
                       </td>
                       <td className="px-3 py-2"><Badge tone={DRIVER_TONES[d.status] ?? 'slate'}>{(t.drivers.statuses as Record<number, string>)[d.status] ?? d.status}</Badge></td>
                     </tr>
@@ -426,7 +618,9 @@ export default function CustomerDetailPage() {
         </Card>
       )}
 
-      {/* Invoices tab */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
+      {/*  INVOICES TAB                                                         */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
       {tab === 'invoices' && (
         <Card className="overflow-hidden">
           {!invoices || invoices.length === 0 ? (
@@ -448,12 +642,12 @@ export default function CustomerDetailPage() {
               <tbody>
                 {invoices.map((inv) => {
                   const balance = inv.totalAmountSar - inv.paidAmountSar
-                  const statusTone = inv.status === 'Cleared' || inv.status === 'Finalized' ? 'green' : inv.status === 'Draft' ? 'slate' : inv.status === 'Submitted' ? 'blue' : 'amber'
+                  const invTone = inv.status === 'Cleared' || inv.status === 'Finalized' ? 'green' : inv.status === 'Draft' ? 'slate' : inv.status === 'Submitted' ? 'blue' : 'amber'
                   return (
                     <tr key={inv.id} className="cursor-pointer border-t border-slate-100 hover:bg-brand-50/40" onClick={() => router.push(`/invoices/${inv.id}`)}>
                       <td className="px-3 py-2 font-mono text-xs font-semibold text-brand-700">{inv.invoiceNumber}</td>
                       <td className="px-3 py-2 font-mono text-xs text-slate-600">{inv.leaseNumber}</td>
-                      <td className="px-3 py-2"><Badge tone={statusTone as 'green' | 'amber' | 'blue' | 'slate'}>{inv.status}</Badge></td>
+                      <td className="px-3 py-2"><Badge tone={invTone as 'green' | 'amber' | 'blue' | 'slate'}>{inv.status}</Badge></td>
                       <td className="px-3 py-2 text-xs text-slate-600">{inv.issueDateUtc?.substring(0, 10)}</td>
                       <td className="px-3 py-2 text-xs text-slate-600">{inv.dueDateUtc?.substring(0, 10)}</td>
                       <td className="px-3 py-2 text-end font-mono text-xs">{inv.totalAmountSar.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
@@ -470,7 +664,9 @@ export default function CustomerDetailPage() {
         </Card>
       )}
 
-      {/* Payments tab */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
+      {/*  PAYMENTS TAB                                                         */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
       {tab === 'payments' && (
         <Card className="overflow-hidden">
           {!payments || payments.length === 0 ? (
@@ -513,7 +709,9 @@ export default function CustomerDetailPage() {
         </Card>
       )}
 
-      {/* Audit tab */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
+      {/*  AUDIT TAB                                                            */}
+      {/* ════════════════════════════════════════════════════════════════════── */}
       {tab === 'audit' && (
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">

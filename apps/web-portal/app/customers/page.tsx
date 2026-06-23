@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { bff, type CustomerSummary, type PagedResult } from '../../lib/bff-client'
 import {
@@ -16,40 +17,21 @@ import {
   type BadgeTone,
 } from '../../components/data-grid'
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-
 const PAGE_SIZE = 30
-
-const TYPE_OPTIONS = [
-  { value: 'b2b', label: 'Business (B2B)' },
-  { value: 'b2c', label: 'Individual (B2C)' },
-]
 
 const STATUS_OPTIONS = [
   { value: 'active', label: 'Active' },
   { value: 'inactive', label: 'Inactive' },
 ]
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function typeLabel(c: CustomerSummary): string {
-  return c.type === 1 ? 'B2B' : 'B2C'
-}
-
-function typeTone(c: CustomerSummary): BadgeTone {
-  return c.type === 1 ? 'blue' : 'slate'
-}
-
 function statusTone(c: CustomerSummary): BadgeTone {
   return c.isActive ? 'green' : 'slate'
 }
 
-// ─── Columns ─────────────────────────────────────────────────────────────────
-
 const COLUMNS: Column<CustomerSummary>[] = [
   {
     key: 'displayName',
-    header: 'Name',
+    header: 'Company Name',
     render: (r) => <span className="font-medium text-slate-900">{r.displayName}</span>,
   },
   {
@@ -58,22 +40,22 @@ const COLUMNS: Column<CustomerSummary>[] = [
     render: (r) => <span className="text-slate-500">{r.email ?? '—'}</span>,
   },
   {
-    key: 'type',
-    header: 'Type',
-    width: '90px',
-    render: (r) => <StatusBadge tone={typeTone(r)}>{typeLabel(r)}</StatusBadge>,
-  },
-  {
     key: 'mobile',
     header: 'Mobile',
     width: '130px',
-    render: (r) => <span className="font-mono">{r.mobile ?? '—'}</span>,
+    render: (r) => <span className="font-mono text-xs">{r.mobile ?? '—'}</span>,
   },
   {
     key: 'crNumber',
     header: 'CR Number',
-    width: '120px',
-    render: (r) => <span className="font-mono">{r.type === 1 ? (r.commercialRegistration ?? '—') : '—'}</span>,
+    width: '130px',
+    render: (r) => <span className="font-mono text-xs">{r.commercialRegistration ?? '—'}</span>,
+  },
+  {
+    key: 'vatNumber',
+    header: 'VAT Number',
+    width: '130px',
+    render: (r) => <span className="font-mono text-xs">{r.vatNumber ?? '—'}</span>,
   },
   {
     key: 'status',
@@ -87,19 +69,14 @@ const COLUMNS: Column<CustomerSummary>[] = [
   },
 ]
 
-// ─── Page component ──────────────────────────────────────────────────────────
-
 export default function CustomersPage() {
   const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [page, setPage] = useState(1)
   const [data, setData] = useState<PagedResult<CustomerSummary> | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<CustomerSummary | null>(null)
-
-  // ─── Data loading ────────────────────────────────────────────────────────
 
   useEffect(() => {
     let cancelled = false
@@ -118,36 +95,42 @@ export default function CustomersPage() {
     return () => { cancelled = true; clearTimeout(h) }
   }, [page, search])
 
-  // ─── Client-side filtering ─────────────────────────────────────────────
-
   const filteredItems = useMemo(() => {
     if (!data) return []
-    let items = data.items
-    if (typeFilter === 'b2b') items = items.filter((c) => c.type === 1)
-    if (typeFilter === 'b2c') items = items.filter((c) => c.type === 2)
+    let items = data.items.filter((c) => c.type === 1)
     if (statusFilter === 'active') items = items.filter((c) => c.isActive)
     if (statusFilter === 'inactive') items = items.filter((c) => !c.isActive)
     return items
-  }, [data, typeFilter, statusFilter])
+  }, [data, statusFilter])
 
-  // ─── Render ────────────────────────────────────────────────────────────
+  async function handleDelete(id: string) {
+    if (!window.confirm('Are you sure you want to delete this customer?')) return
+    try {
+      await bff.deleteCustomer(id, crypto.randomUUID())
+      setSelected(null)
+      setPage(page)
+      const res = await bff.getCustomers(page, PAGE_SIZE, search || undefined)
+      setData(res)
+    } catch (e) {
+      alert((e as Error).message)
+    }
+  }
 
   return (
     <PageShell
       title="Customers"
-      subtitle="Tenant customers (B2B + B2C)."
+      subtitle="B2B corporate fleet accounts."
+      actions={
+        <Link href="/customers/new" className="rounded-md bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-800">
+          + New Customer
+        </Link>
+      }
     >
       <FilterBar>
         <SearchBox
           value={search}
           onChange={(v) => { setPage(1); setSearch(v) }}
-          placeholder="Search by name or mobile..."
-        />
-        <FilterPill
-          value={typeFilter}
-          onChange={(v) => { setPage(1); setTypeFilter(v) }}
-          options={TYPE_OPTIONS}
-          placeholder="All types"
+          placeholder="Search by company name, CR, or mobile..."
         />
         <FilterPill
           value={statusFilter}
@@ -195,13 +178,25 @@ export default function CustomersPage() {
                 <DetailRow label="Contact Mobile" value={selected.contactPersonMobile ?? '—'} />
               </DetailSection>
               <DetailSection title="Business">
-                <DetailRow label="Type" value={<StatusBadge tone={typeTone(selected)}>{typeLabel(selected)}</StatusBadge>} />
                 <DetailRow label="CR Number" value={selected.commercialRegistration ?? '—'} />
                 <DetailRow label="VAT Number" value={selected.vatNumber ?? '—'} />
                 <DetailRow label="City" value={selected.city ?? '—'} />
               </DetailSection>
-              <DetailSection title="KYC">
-                <DetailRow label="Status" value={<StatusBadge tone={statusTone(selected)}>{selected.isActive ? 'Active' : 'Inactive'}</StatusBadge>} />
+              <DetailSection title="Actions">
+                <div className="flex flex-col gap-2">
+                  <Link href={`/customers/${selected.id}`} className="block w-full rounded-md bg-brand-700 px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-brand-800">
+                    View Details
+                  </Link>
+                  <Link href={`/customers/${selected.id}?edit=true`} className="block w-full rounded-md border border-brand-300 bg-white px-3 py-1.5 text-center text-xs font-medium text-brand-700 hover:bg-brand-50">
+                    Edit Customer
+                  </Link>
+                  <button type="button" onClick={() => handleDelete(selected.id)} className="w-full rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
+                    Delete Customer
+                  </button>
+                  <Link href={`/accounts?customerId=${selected.id}`} className="block w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-center text-xs font-medium text-slate-700 hover:bg-slate-50">
+                    View Accounts
+                  </Link>
+                </div>
               </DetailSection>
             </>
           )}

@@ -41,6 +41,7 @@ function rfqHistoryGuid(ri, hi) { return guid(`f5f5f5f5-${ri.toString(16).padSta
 function paymentAllocationGuid(pi, ai) { return guid(`f3f3f3f3-${pi.toString(16).padStart(4, '0')}`, ai); }
 function contractGuid(i) { return guid('a5a5a5a5-0001', i); }
 function contractLineGuid(ci, li) { return guid(`a6a6a6a6-${ci.toString(16).padStart(4, '0')}`, li); }
+function accountRecordGuid(i) { return guid('a7a7a7a7-0001', i); }
 
 // ─── SQL escape helper ────────────────────────────────────────────────────────
 function esc(val) {
@@ -282,42 +283,7 @@ function generateCustomers() {
       piiOptedOut: false,
     });
   }
-  // 30 B2C
-  for (let i = 71; i <= 100; i++) {
-    const idx = i - 71;
-    const firstEn = SAUDI_FIRST_NAMES_EN[idx % 30];
-    const lastEn = SAUDI_LAST_NAMES_EN[idx % 30];
-    const firstAr = SAUDI_FIRST_NAMES_AR[idx % 30];
-    const lastAr = SAUDI_LAST_NAMES_AR[idx % 30];
-    const fullEn = `${firstEn} ${lastEn}`;
-    const fullAr = `${firstAr} ${lastAr}`;
-    customers.push({
-      id: customerGuid(i),
-      type: 0,
-      status: 1,
-      displayName: fullEn,
-      displayNameAr: fullAr,
-      email: `${firstEn.toLowerCase()}.${lastEn.toLowerCase().replace(/[^a-z]/g, '')}@gmail.com`,
-      mobile: `+9665${(80000000 + i * 100000).toString().substring(0, 8)}`,
-      nationalAddress: `${2000 + i} Residential St, ${KSA_CITIES[idx % 30].en}`,
-      preferredLanguage: idx % 2,
-      legalName: null,
-      legalNameAr: null,
-      commercialRegistration: null,
-      vatNumber: null,
-      billingAddress: null,
-      creditLimit: null,
-      creditCurrency: null,
-      personNameEn: fullEn,
-      personNameAr: fullAr,
-      idTypeCode: 1,
-      personIdNumber: `1${(100000000 + idx * 1111111).toString().substring(0, 9)}`,
-      dateOfBirth: `19${75 + (idx % 20)}-${(1 + idx % 12).toString().padStart(2, '0')}-${(1 + idx % 28).toString().padStart(2, '0')}`,
-      nationalityCode: 'SA',
-      kycVerified: true,
-      piiOptedOut: false,
-    });
-  }
+  // B2C removed — B2B only
   return customers;
 }
 
@@ -386,7 +352,7 @@ function generateDrivers(customers) {
     const lastEn = SAUDI_LAST_NAMES_EN[lastIdx];
     const firstAr = SAUDI_FIRST_NAMES_AR[firstIdx];
     const lastAr = SAUDI_LAST_NAMES_AR[lastIdx];
-    const custIdx = ((i - 1) % 100) + 1;
+    const custIdx = ((i - 1) % 70) + 1;
 
     drivers.push({
       id: driverGuid(i),
@@ -464,7 +430,7 @@ function generateLeases(customers, vehicles, drivers, rentPolicies, extCoverages
 
   for (let i = 1; i <= 60; i++) {
     const status = statusDist[i - 1];
-    const custIdx = ((i - 1) % 100) + 1;
+    const custIdx = ((i - 1) % 70) + 1;
     const vehIdx = ((i - 1) % 120) + 1;
     const drvIdx = ((i - 1) % 200) + 1;
     const policyIdx = ((i - 1) % 8) + 1;
@@ -531,7 +497,7 @@ function generateQuotations(customers) {
 
   for (let i = 1; i <= 30; i++) {
     const status = statuses[i - 1];
-    const custIdx = ((i - 1) % 100) + 1;
+    const custIdx = ((i - 1) % 70) + 1;
     const amIdx = ((i - 1) % 5) + 1;
     const quoteDate = `2026-${(3 + (i % 4)).toString().padStart(2, '0')}-${(1 + i % 28).toString().padStart(2, '0')}`;
     const validDate = `2026-${(4 + (i % 4)).toString().padStart(2, '0')}-${(1 + i % 28).toString().padStart(2, '0')}`;
@@ -1009,6 +975,64 @@ VALUES ('${b.id}', ${esc(b.code)}, ${esc(b.nameEn)}, ${esc(b.nameAr)}, ${esc(b.c
   return sql;
 }
 
+function generateAccounts(customers) {
+  const BUSINESS_TYPES = [
+    'Construction', 'Transportation', 'Oil & Gas', 'Real Estate', 'Retail',
+    'Healthcare', 'Education', 'Government', 'Technology', 'Manufacturing',
+    'Hospitality', 'Agriculture', 'Financial Services', 'Telecommunications', 'Logistics',
+  ];
+  const POSITIONS_CUSTOMER = ['Fleet Manager', 'Operations Director', 'Procurement Manager', 'VP Operations', 'CEO', 'CFO', 'Transport Manager'];
+  const POSITIONS_OURS = ['Account Manager', 'Senior Account Executive', 'Regional Manager', 'Sales Manager', 'Business Development Mgr'];
+  const OUR_NAMES_EN = ['Fahad Al-Otaibi', 'Sultan Al-Shehri', 'Mohammed Al-Ghamdi', 'Abdulrahman Al-Qahtani', 'Nasser Al-Dosari',
+    'Khalid Al-Zahrani', 'Ahmad Al-Maliki', 'Omar Al-Turki', 'Saad Al-Harbi', 'Faisal Al-Juhani'];
+  const OUR_NAMES_AR = ['فهد العتيبي', 'سلطان الشهري', 'محمد الغامدي', 'عبدالرحمن القحطاني', 'ناصر الدوسري',
+    'خالد الزهراني', 'أحمد المالكي', 'عمر التركي', 'سعد الحربي', 'فيصل الجهني'];
+  const REGIONS = ['Riyadh', 'Makkah', 'Eastern Province', 'Madinah', 'Qassim', 'Asir', 'Tabuk', 'Hail'];
+
+  const b2bCustomers = customers.filter(c => c.type === 1);
+  const accounts = [];
+  for (let i = 0; i < Math.min(b2bCustomers.length, 40); i++) {
+    const cust = b2bCustomers[i];
+    accounts.push({
+      id: accountRecordGuid(i + 1),
+      customerId: cust.id,
+      natureOfBusiness: BUSINESS_TYPES[i % BUSINESS_TYPES.length],
+      customerContactNameEn: cust.displayName.split(' ')[0] + ' (Contact)',
+      customerContactNameAr: null,
+      customerContactPosition: POSITIONS_CUSTOMER[i % POSITIONS_CUSTOMER.length],
+      customerContactMobile: cust.mobile,
+      customerContactEmail: cust.email,
+      accountHolderNameEn: OUR_NAMES_EN[i % OUR_NAMES_EN.length],
+      accountHolderNameAr: OUR_NAMES_AR[i % OUR_NAMES_AR.length],
+      accountHolderPosition: POSITIONS_OURS[i % POSITIONS_OURS.length],
+      accountHolderMobile: `+9665${(50000000 + i * 111111).toString().substring(0, 8)}`,
+      accountHolderEmail: OUR_NAMES_EN[i % OUR_NAMES_EN.length].split(' ')[0].toLowerCase() + '@autoleasenet.sa',
+      street: `${100 + i * 10} Industrial Rd`,
+      city: KSA_CITIES[i % KSA_CITIES.length].en,
+      region: REGIONS[i % REGIONS.length],
+      postalCode: (11000 + i * 100).toString(),
+      country: 'Saudi Arabia',
+      status: 'Active',
+    });
+  }
+  return accounts;
+}
+
+function insertAccounts(accounts) {
+  let sql = `-- =============================================================================
+-- ACCOUNTS (${accounts.length} rows)
+-- =============================================================================
+${batchHeader()}
+`;
+  for (const a of accounts) {
+    sql += `INSERT INTO Accounts (Id, CustomerId, NatureOfBusiness, CustomerContactNameEn, CustomerContactNameAr, CustomerContactPosition, CustomerContactMobile, CustomerContactEmail, AccountHolderNameEn, AccountHolderNameAr, AccountHolderPosition, AccountHolderMobile, AccountHolderEmail, Street, City, Region, PostalCode, Country, Status, TenantId, CreatedAtUtc, UpdatedAtUtc)
+VALUES ('${a.id}', '${a.customerId}', ${esc(a.natureOfBusiness)}, ${esc(a.customerContactNameEn)}, ${esc(a.customerContactNameAr)}, ${esc(a.customerContactPosition)}, ${esc(a.customerContactMobile)}, ${esc(a.customerContactEmail)}, ${esc(a.accountHolderNameEn)}, ${esc(a.accountHolderNameAr)}, ${esc(a.accountHolderPosition)}, ${esc(a.accountHolderMobile)}, ${esc(a.accountHolderEmail)}, ${esc(a.street)}, ${esc(a.city)}, ${esc(a.region)}, ${esc(a.postalCode)}, ${esc(a.country)}, ${esc(a.status)}, @TenantId, @Now, @Now);
+`;
+  }
+  sql += '\nGO\n\n';
+  return sql;
+}
+
 function insertCustomers(customers) {
   let sql = `-- =============================================================================
 -- CUSTOMERS (${customers.length} rows)
@@ -1342,9 +1366,12 @@ function main() {
   const pricingDiscountPolicies = generatePricingDiscountPolicies();
   const pricingFormulas = generatePricingFormulas();
 
+  const accounts = generateAccounts(customers);
+
   let sql = sqlHeader();
   sql += insertBranches(branches);
   sql += insertCustomers(customers);
+  sql += insertAccounts(accounts);
   sql += insertVehicles(vehicles);
   sql += insertDrivers(drivers);
   sql += insertRentPolicies(rentPolicies);
@@ -1378,7 +1405,8 @@ GO
 
   console.log(`Done! Output: ${outputPath}`);
   console.log(`  Branches:          ${branches.length}`);
-  console.log(`  Customers:         ${customers.length} (${customers.filter(c => c.type === 1).length} B2B, ${customers.filter(c => c.type === 0).length} B2C)`);
+  console.log(`  Customers:         ${customers.length} (B2B only)`);
+  console.log(`  Accounts:          ${accounts.length}`);
   console.log(`  Vehicles:          ${vehicles.length}`);
   console.log(`  Drivers:           ${drivers.length}`);
   console.log(`  RentPolicies:      ${rentPolicies.length}`);

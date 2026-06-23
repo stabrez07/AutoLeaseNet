@@ -24,6 +24,7 @@ export const messagesEn = {
   nav: {
     dashboard: 'Dashboard',
     customers: 'Customers',
+    accounts: 'Accounts',
     leads: 'Leads',
     quotations: 'Quotations',
     contracts: 'Contracts',
@@ -591,6 +592,7 @@ export const messagesAr: Messages = {
   nav: {
     dashboard: 'لوحة المعلومات',
     customers: 'العملاء',
+    accounts: 'الحسابات',
     leads: 'العملاء المحتملون',
     quotations: 'العروض',
     contracts: 'العقود',

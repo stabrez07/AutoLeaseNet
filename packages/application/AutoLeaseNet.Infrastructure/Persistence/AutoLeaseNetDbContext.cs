@@ -61,6 +61,7 @@ public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> optio
     public DbSet<CustomerDocument> CustomerDocuments => Set<CustomerDocument>();
     public DbSet<AccountActivity> AccountActivities => Set<AccountActivity>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<Account> Accounts => Set<Account>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

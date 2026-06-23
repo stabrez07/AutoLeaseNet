@@ -174,6 +174,25 @@ public sealed class Customer : Entity
         OwnerUserId = userId;
         UpdatedAtUtc = DateTimeOffset.UtcNow;
     }
+
+    public void UpdateB2B(B2BUpdateInput input, DateTimeOffset nowUtc)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        if (input.LegalName is not null) { LegalName = input.LegalName; DisplayName = input.LegalName; }
+        if (input.LegalNameAr is not null) { LegalNameAr = input.LegalNameAr; DisplayNameAr = input.LegalNameAr; }
+        if (input.CommercialRegistration is not null) CommercialRegistration = input.CommercialRegistration;
+        if (input.VatNumber is not null) VatNumber = input.VatNumber;
+        if (input.Email is not null) Email = input.Email;
+        if (input.Mobile is not null) Mobile = input.Mobile;
+        if (input.NationalAddress is not null) NationalAddress = input.NationalAddress;
+        if (input.BillingAddress is not null) BillingAddress = input.BillingAddress;
+        if (input.CreditLimit.HasValue) CreditLimit = input.CreditLimit;
+        if (input.CreditCurrency is not null) CreditCurrency = input.CreditCurrency;
+        if (input.Industry is not null) Industry = input.Industry;
+        if (input.PaymentTermsDays.HasValue) PaymentTermsDays = input.PaymentTermsDays;
+        UpdatedAtUtc = nowUtc;
+    }
 }
 
 public sealed record B2BCreateInput
@@ -191,6 +210,22 @@ public sealed record B2BCreateInput
     public string? CreditCurrency { get; init; }
     public PreferredLanguage PreferredLanguage { get; init; } = PreferredLanguage.Ar;
     public required DateTimeOffset NowUtc { get; init; }
+}
+
+public sealed record B2BUpdateInput
+{
+    public string? LegalName { get; init; }
+    public string? LegalNameAr { get; init; }
+    public string? CommercialRegistration { get; init; }
+    public string? VatNumber { get; init; }
+    public string? Email { get; init; }
+    public string? Mobile { get; init; }
+    public string? NationalAddress { get; init; }
+    public string? BillingAddress { get; init; }
+    public decimal? CreditLimit { get; init; }
+    public string? CreditCurrency { get; init; }
+    public string? Industry { get; init; }
+    public int? PaymentTermsDays { get; init; }
 }
 
 public sealed record B2CCreateInput

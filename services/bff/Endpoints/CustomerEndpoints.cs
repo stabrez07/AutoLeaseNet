@@ -21,7 +21,9 @@ public static class CustomerEndpoints
         group.MapPost("/b2b", CreateB2BAsync).WithName("CreateCustomerB2B").RequireAuthorization();
         group.MapPost("/b2c", CreateB2CAsync).WithName("CreateCustomerB2C").RequireAuthorization();
         group.MapGet("/{id:guid}", GetByIdAsync).WithName("GetCustomer").RequireAuthorization();
+        group.MapPut("/{id:guid}", UpdateB2BAsync).WithName("UpdateCustomer").RequireAuthorization();
         group.MapPost("/{id:guid}/status", UpdateStatusAsync).WithName("UpdateCustomerStatus").RequireAuthorization();
+        group.MapPost("/{id:guid}/delete", DeleteAsync).WithName("DeleteCustomer").RequireAuthorization();
 
         // Documents
         group.MapGet("/{id:guid}/documents", ListDocumentsAsync).WithName("ListCustomerDocuments").RequireAuthorization();
@@ -126,6 +128,68 @@ public static class CustomerEndpoints
         return result.Success
             ? Results.Ok(result)
             : Results.Problem(detail: result.ErrorMessage, title: result.ErrorCode, statusCode: 400);
+    }
+
+    // ─── Update B2B customer ─────────────────────────────────────────────
+
+    private static async Task<IResult> UpdateB2BAsync(
+        Guid id, HttpContext ctx, UpdateCustomerB2BRequest body,
+        ICustomerRepository customers, ITenantContext tenant, CancellationToken ct)
+    {
+        var idempotencyKey = ctx.Request.Headers["Idempotency-Key"].ToString();
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+            return Results.BadRequest("Missing Idempotency-Key header.");
+
+        var customer = await customers.GetByIdAsync(tenant.TenantId, id, ct).ConfigureAwait(false);
+        if (customer is null) return Results.NotFound();
+
+        customer.UpdateB2B(new B2BUpdateInput
+        {
+            LegalName = body.LegalName,
+            LegalNameAr = body.LegalNameAr,
+            CommercialRegistration = body.CommercialRegistration,
+            VatNumber = body.VatNumber,
+            Email = body.Email,
+            Mobile = body.Mobile,
+            NationalAddress = body.NationalAddress,
+            BillingAddress = body.BillingAddress,
+            CreditLimit = body.CreditLimit,
+            CreditCurrency = body.CreditCurrency,
+            Industry = body.Industry,
+            PaymentTermsDays = body.PaymentTermsDays,
+        }, DateTimeOffset.UtcNow);
+        await customers.UpdateAsync(customer, ct).ConfigureAwait(false);
+
+        return Results.Ok(new CustomerCommandResult(true, customer.Id, customer.Status.ToString(), null, null));
+    }
+
+    // ─── Delete customer ──────────────────────────────────────────────
+
+    private static async Task<IResult> DeleteAsync(
+        Guid id, HttpContext ctx,
+        AutoLeaseNetDbContext db, ITenantContext tenant, CancellationToken ct)
+    {
+        var idempotencyKey = ctx.Request.Headers["Idempotency-Key"].ToString();
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+            return Results.BadRequest("Missing Idempotency-Key header.");
+
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var customer = await db.Customers
+            .FirstOrDefaultAsync(c => c.TenantId == tenantId && c.Id == id, ct);
+        if (customer is null) return Results.NotFound();
+
+        // Check for active contracts/leases
+        var hasActiveContracts = await db.Contracts.AsNoTracking()
+            .AnyAsync(c => c.TenantId == tenantId && c.CustomerId == id && c.Status.ToString() != "Closed", ct);
+        if (hasActiveContracts)
+            return Results.Problem(detail: "Cannot delete customer with active contracts.", title: "HasActiveContracts", statusCode: 400);
+
+        db.Customers.Remove(customer);
+        await db.SaveChangesAsync(ct);
+
+        return Results.Ok(new { deleted = true, customerId = id });
     }
 
     // ─── Documents ────────────────────────────────────────────────────────
@@ -489,3 +553,10 @@ public sealed record CustomerPaymentDto(
 
 public sealed record PaymentAllocationDto(
     Guid InvoiceId, string InvoiceNumber, decimal AllocatedAmountSar);
+
+public sealed record UpdateCustomerB2BRequest(
+    string? LegalName, string? LegalNameAr,
+    string? CommercialRegistration, string? VatNumber,
+    string? Email, string? Mobile, string? NationalAddress, string? BillingAddress,
+    decimal? CreditLimit, string? CreditCurrency,
+    string? Industry, int? PaymentTermsDays);

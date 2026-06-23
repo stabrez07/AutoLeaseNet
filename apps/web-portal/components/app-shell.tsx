@@ -97,6 +97,7 @@ const ICONS = {
 type NavKey =
   | 'dashboard'
   | 'customers'
+  | 'accounts'
   | 'leads'
   | 'quotations'
   | 'contracts'
@@ -128,6 +129,7 @@ const NAV_GROUPS: NavGroup[] = [
     labelAr: 'المبيعات',
     items: [
       { href: '/customers', key: 'customers', icon: 'building' },
+      { href: '/accounts', key: 'accounts', icon: 'users' },
       { href: '/rfqs', key: 'leads', icon: 'clipboard' },
       { href: '/quotations', key: 'quotations', icon: 'receipt' },
       { href: '/contracts', key: 'contracts', icon: 'fileText' },
