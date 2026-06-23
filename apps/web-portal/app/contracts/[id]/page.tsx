@@ -47,6 +47,9 @@ function LeaseAgreementsTab({ contract, onReload }: { contract: ContractDetail; 
   const [laForm, setLaForm] = useState({ vehicleId: '', driverId: '', checkoutDate: new Date().toISOString().substring(0, 10) })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [showNewDriver, setShowNewDriver] = useState(false)
+  const [newDriver, setNewDriver] = useState({ personNameEn: '', driverLicenseNumber: '', licenseExpiryDate: '', idTypeCode: 1, personIdNumber: '', licenseClass: 2 })
+  const [driverBusy, setDriverBusy] = useState(false)
 
   useEffect(() => {
     bff.getContractAllocatedVehicles(contract.id).then(setAllocatedVehicles).catch(() => {})
@@ -56,9 +59,13 @@ function LeaseAgreementsTab({ contract, onReload }: { contract: ContractDetail; 
     if (showAllocate) bff.getVehicles(1, 100, undefined, 1).then(r => setAvailableVehicles(r.items)).catch(() => {})
   }, [showAllocate])
 
+  function loadCustomerDrivers() {
+    bff.getCustomerDrivers(contract.customerId).then(setDrivers).catch(() => setDrivers([]))
+  }
+
   useEffect(() => {
-    if (showCreateLA) bff.getDrivers(1, 100).then(r => setDrivers(r.items)).catch(() => {})
-  }, [showCreateLA])
+    if (showCreateLA) loadCustomerDrivers()
+  }, [showCreateLA]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleAllocate() {
     if (!allocVehicleId) return
@@ -162,33 +169,124 @@ function LeaseAgreementsTab({ contract, onReload }: { contract: ContractDetail; 
       {showCreateLA && (
         <Card className="border-green-200 bg-green-50/30 p-4">
           <h4 className="mb-2 text-xs font-semibold text-green-800">Create Lease Agreement (Vehicle Checkout)</h4>
-          <p className="mb-3 text-[10px] text-green-600">Select an allocated vehicle and authorized driver. Monthly rent is auto-filled from the contract.</p>
+          <p className="mb-3 text-[10px] text-green-600">
+            Customer: <span className="font-semibold">{contract.customerDisplayName}</span> &middot; Contract: <span className="font-semibold">{contract.contractNumber}</span>
+          </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Vehicle *</label>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Allocated Vehicle *</label>
               <select className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={laForm.vehicleId} onChange={e => setLaForm(f => ({ ...f, vehicleId: e.target.value }))}>
-                <option value="">— Select allocated vehicle —</option>
+                <option value="">— Select vehicle —</option>
                 {allocatedVehicles.filter(v => v.status !== 'OnRent').map(v => (
-                  <option key={v.id} value={v.id}>{v.plateNumber} — {v.make} {v.model}</option>
+                  <option key={v.id} value={v.id}>{v.plateNumber} — {v.make} {v.model} ({v.modelYear})</option>
                 ))}
               </select>
+              {allocatedVehicles.filter(v => v.status !== 'OnRent').length === 0 && (
+                <p className="mt-1 text-[10px] text-red-600">No available vehicles. Allocate a vehicle first.</p>
+              )}
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Driver *</label>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Customer Driver *</label>
               <select className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={laForm.driverId} onChange={e => setLaForm(f => ({ ...f, driverId: e.target.value }))}>
-                <option value="">— Select driver —</option>
+                <option value="">— Select driver for {contract.customerDisplayName} —</option>
                 {drivers.map(d => (
-                  <option key={d.id} value={d.id}>{d.personNameEn} — {d.driverLicenseNumber}</option>
+                  <option key={d.id} value={d.id}>{d.personNameEn} — Lic: {d.driverLicenseNumber}</option>
                 ))}
               </select>
+              {drivers.length === 0 && !showNewDriver && (
+                <div className="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1.5">
+                  <p className="text-[10px] text-amber-800">No drivers found for this customer.</p>
+                  <button type="button" onClick={() => setShowNewDriver(true)} className="mt-1 text-[10px] font-semibold text-brand-700 hover:underline">
+                    + Create New Driver
+                  </button>
+                </div>
+              )}
+              {drivers.length > 0 && (
+                <button type="button" onClick={() => setShowNewDriver(!showNewDriver)} className="mt-1 text-[10px] text-brand-600 hover:underline">
+                  {showNewDriver ? 'Cancel' : '+ Add new driver'}
+                </button>
+              )}
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">Checkout Date</label>
               <input type="date" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={laForm.checkoutDate} onChange={e => setLaForm(f => ({ ...f, checkoutDate: e.target.value }))} />
             </div>
           </div>
+
+          {/* Inline New Driver Form */}
+          {showNewDriver && (
+            <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <h5 className="text-xs font-semibold text-blue-800">New Driver for {contract.customerDisplayName}</h5>
+                <span className="rounded bg-slate-200 px-2 py-0.5 text-[10px] font-mono text-slate-600">{contract.customerDisplayName}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <div>
+                  <label className="mb-0.5 block text-[10px] font-medium text-slate-600">Full Name (EN) *</label>
+                  <input className="w-full rounded border border-slate-300 px-2 py-1.5 text-xs" value={newDriver.personNameEn} onChange={e => setNewDriver(d => ({ ...d, personNameEn: e.target.value }))} placeholder="Driver full name" />
+                </div>
+                <div>
+                  <label className="mb-0.5 block text-[10px] font-medium text-slate-600">ID Type *</label>
+                  <select className="w-full rounded border border-slate-300 px-2 py-1.5 text-xs" value={newDriver.idTypeCode} onChange={e => setNewDriver(d => ({ ...d, idTypeCode: Number(e.target.value) }))}>
+                    <option value={1}>National ID</option>
+                    <option value={2}>Iqama</option>
+                    <option value={3}>Passport</option>
+                    <option value={4}>GCC ID</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-0.5 block text-[10px] font-medium text-slate-600">ID Number *</label>
+                  <input className="w-full rounded border border-slate-300 px-2 py-1.5 text-xs" value={newDriver.personIdNumber} onChange={e => setNewDriver(d => ({ ...d, personIdNumber: e.target.value }))} placeholder="1234567890" />
+                </div>
+                <div>
+                  <label className="mb-0.5 block text-[10px] font-medium text-slate-600">License Number *</label>
+                  <input className="w-full rounded border border-slate-300 px-2 py-1.5 text-xs" value={newDriver.driverLicenseNumber} onChange={e => setNewDriver(d => ({ ...d, driverLicenseNumber: e.target.value }))} placeholder="DL1234567890" />
+                </div>
+                <div>
+                  <label className="mb-0.5 block text-[10px] font-medium text-slate-600">License Class *</label>
+                  <select className="w-full rounded border border-slate-300 px-2 py-1.5 text-xs" value={newDriver.licenseClass} onChange={e => setNewDriver(d => ({ ...d, licenseClass: Number(e.target.value) }))}>
+                    <option value={1}>Class 1 — Motorcycle</option>
+                    <option value={2}>Class 2 — Light Vehicle</option>
+                    <option value={3}>Class 3 — Heavy Vehicle</option>
+                    <option value={4}>Class 4 — Bus</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-0.5 block text-[10px] font-medium text-slate-600">License Expiry *</label>
+                  <input type="date" className="w-full rounded border border-slate-300 px-2 py-1.5 text-xs" value={newDriver.licenseExpiryDate} onChange={e => setNewDriver(d => ({ ...d, licenseExpiryDate: e.target.value }))} />
+                </div>
+              </div>
+              <PrimaryButton
+                disabled={driverBusy || !newDriver.personNameEn || !newDriver.driverLicenseNumber || !newDriver.personIdNumber || !newDriver.licenseExpiryDate}
+                onClick={async () => {
+                  setDriverBusy(true); setMsg(null)
+                  try {
+                    await bff.createDriver({
+                      personNameEn: newDriver.personNameEn,
+                      idTypeCode: newDriver.idTypeCode,
+                      personIdNumber: newDriver.personIdNumber,
+                      nationalityCode: 'SA',
+                      driverLicenseNumber: newDriver.driverLicenseNumber,
+                      licenseClass: newDriver.licenseClass,
+                      licenseExpiryDate: newDriver.licenseExpiryDate,
+                      customerId: contract.customerId,
+                    }, crypto.randomUUID())
+                    setMsg({ ok: true, text: `Driver ${newDriver.personNameEn} created.` })
+                    setShowNewDriver(false)
+                    setNewDriver({ personNameEn: '', driverLicenseNumber: '', licenseExpiryDate: '', idTypeCode: 1, personIdNumber: '', licenseClass: 2 })
+                    loadCustomerDrivers()
+                  } catch (e) { setMsg({ ok: false, text: (e as Error).message }) }
+                  finally { setDriverBusy(false) }
+                }}
+                className="mt-2 px-3 py-1.5 text-xs"
+              >
+                {driverBusy ? 'Creating...' : 'Create Driver'}
+              </PrimaryButton>
+            </div>
+          )}
+
           <div className="mt-2 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600">
-            Monthly Rent: <span className="font-mono font-bold text-brand-700">SAR {fmtMoney(contract.monthlyRentSar)}</span> (from contract)
+            Monthly Rent: <span className="font-mono font-bold text-brand-700">SAR {fmtMoney(contract.monthlyRentSar)}</span> (from contract — non-editable)
           </div>
           <div className="mt-3">
             <PrimaryButton onClick={handleCreateLA} disabled={busy || !laForm.vehicleId || !laForm.driverId} className="px-4 py-2 text-sm">

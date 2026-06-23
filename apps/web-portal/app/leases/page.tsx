@@ -137,6 +137,11 @@ export default function LeasesPage() {
     <PageShell
       title="Lease Agreements"
       subtitle="Vehicle checkout agreements under contracts — track vehicles, drivers, and billing."
+      actions={
+        <Link href="/contracts" className="rounded-md bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-800">
+          + New LA (via Contract)
+        </Link>
+      }
     >
       <FilterBar>
         <SearchBox

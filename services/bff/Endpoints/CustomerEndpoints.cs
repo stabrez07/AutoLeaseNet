@@ -35,6 +35,9 @@ public static class CustomerEndpoints
         // RFQs for a customer
         group.MapGet("/{id:guid}/rfqs", ListCustomerRfqsAsync).WithName("ListCustomerRfqs").RequireAuthorization();
 
+        // Drivers for a customer
+        group.MapGet("/{id:guid}/drivers", ListCustomerDriversAsync).WithName("ListCustomerDrivers").RequireAuthorization();
+
         // Invoices & Payments for a customer
         group.MapGet("/{id:guid}/invoices", ListCustomerInvoicesAsync).WithName("ListCustomerInvoices").RequireAuthorization();
         group.MapGet("/{id:guid}/payments", ListCustomerPaymentsAsync).WithName("ListCustomerPayments").RequireAuthorization();
@@ -276,6 +279,32 @@ public static class CustomerEndpoints
     }
 
     // ─── Customer Invoices ──────────────────────────────────────────────
+
+    private static async Task<IResult> ListCustomerDriversAsync(
+        Guid id, AutoLeaseNetDbContext db, ITenantContext tenant, CancellationToken ct)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var drivers = await db.Drivers.AsNoTracking()
+            .Where(d => d.TenantId == tenantId && d.CustomerId == id)
+            .OrderBy(d => d.PersonNameEn)
+            .Select(d => new
+            {
+                d.Id,
+                d.DisplayId,
+                d.PersonNameEn,
+                d.PersonNameAr,
+                d.DriverLicenseNumber,
+                LicenseExpiryDate = d.LicenseExpiryDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                IdTypeCode = d.IdTypeCode,
+                PersonIdNumber = d.PersonIdNumber,
+                Status = (int)d.Status,
+            })
+            .ToListAsync(ct);
+
+        return Results.Ok(drivers);
+    }
 
     private static async Task<IResult> ListCustomerInvoicesAsync(
         Guid id, AutoLeaseNetDbContext db, ITenantContext tenant, CancellationToken ct,
