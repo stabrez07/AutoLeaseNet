@@ -18,36 +18,13 @@ public static class InvoiceEndpoints
 {
     public static IEndpointRouteBuilder MapInvoiceEndpoints(this IEndpointRouteBuilder routes)
     {
-        var group = routes.MapGroup("/invoices")
-            .WithName("Invoices")
-            .WithOpenApi();
+        var group = routes.MapGroup("/invoices").WithTags("invoices");
 
-        group.MapGet("", ListInvoicesAsync)
-            .WithName("ListInvoices")
-            .WithDescription("List all invoices for the tenant")
-            .WithOpenApi()
-            .RequireAuthorization();
-
-        group.MapGet("{id:guid}", GetInvoiceByIdAsync)
-            .WithName("GetInvoiceById")
-            .WithOpenApi()
-            .RequireAuthorization();
-
-        group.MapGet("by-lease/{leaseId:guid}", GetByLeaseAsync)
-            .WithName("GetInvoiceByLease")
-            .WithDescription("Fetch invoice for a specific lease")
-            .WithOpenApi();
-
-        group.MapPost("generate", GenerateInvoiceAsync)
-            .WithName("GenerateInvoice")
-            .WithDescription("Generate a new invoice for a lease billing period.")
-            .RequireAuthorization();
-
-        group.MapPost("{id:guid}/submit-zatca", SubmitToZatcaAsync)
-            .WithName("SubmitInvoiceToZatca")
-            .WithDescription("Trigger ZATCA clearance submission for an invoice. Idempotent.")
-            .WithOpenApi()
-            .RequireAuthorization();
+        group.MapGet("", ListInvoicesAsync).WithName("ListInvoices").RequireAuthorization();
+        group.MapGet("{id:guid}", GetInvoiceByIdAsync).WithName("GetInvoiceById").RequireAuthorization();
+        group.MapGet("by-lease/{leaseId:guid}", GetByLeaseAsync).WithName("GetInvoiceByLease").RequireAuthorization();
+        group.MapPost("generate", GenerateInvoiceAsync).WithName("GenerateInvoice").RequireAuthorization();
+        group.MapPost("{id:guid}/submit-zatca", SubmitToZatcaAsync).WithName("SubmitInvoiceToZatca").RequireAuthorization();
 
         return routes;
     }
