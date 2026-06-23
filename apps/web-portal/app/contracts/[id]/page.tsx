@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { bff, type ContractDetail } from '../../../lib/bff-client'
-import { Badge, Card, ErrorBox, PageHeader, Spinner } from '../../../components/ui'
+import { bff, type ContractDetail, type DriverSummary, type VehicleSummary } from '../../../lib/bff-client'
+import { Badge, Card, ErrorBox, PageHeader, PrimaryButton, SecondaryButton, Spinner } from '../../../components/ui'
 
 const STATUS_TONES: Record<string, 'green' | 'amber' | 'blue' | 'slate' | 'red'> = {
   Draft: 'slate', Active: 'green', Suspended: 'amber', Closed: 'slate', Cancelled: 'red',
@@ -31,6 +31,218 @@ function fmtMoney(n: number | string | null | undefined) {
 }
 
 type Tab = 'overview' | 'quotation' | 'leases'
+
+/* ---------------------------------------------------------------------------
+ * Lease Agreements Tab — allocate vehicles + create LA + view grid
+ * -------------------------------------------------------------------------*/
+
+function LeaseAgreementsTab({ contract, onReload }: { contract: ContractDetail; onReload: () => void }) {
+  const router = useRouter()
+  const [showAllocate, setShowAllocate] = useState(false)
+  const [showCreateLA, setShowCreateLA] = useState(false)
+  const [availableVehicles, setAvailableVehicles] = useState<VehicleSummary[]>([])
+  const [allocatedVehicles, setAllocatedVehicles] = useState<{ id: string; plateNumber: string; make: string; model: string; modelYear: number; status: string }[]>([])
+  const [drivers, setDrivers] = useState<DriverSummary[]>([])
+  const [allocVehicleId, setAllocVehicleId] = useState('')
+  const [laForm, setLaForm] = useState({ vehicleId: '', driverId: '', checkoutDate: new Date().toISOString().substring(0, 10) })
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    bff.getContractAllocatedVehicles(contract.id).then(setAllocatedVehicles).catch(() => {})
+  }, [contract.id])
+
+  useEffect(() => {
+    if (showAllocate) bff.getVehicles(1, 100, undefined, 1).then(r => setAvailableVehicles(r.items)).catch(() => {})
+  }, [showAllocate])
+
+  useEffect(() => {
+    if (showCreateLA) bff.getDrivers(1, 100).then(r => setDrivers(r.items)).catch(() => {})
+  }, [showCreateLA])
+
+  async function handleAllocate() {
+    if (!allocVehicleId) return
+    setBusy(true); setMsg(null)
+    try {
+      await bff.allocateVehicleToContract(contract.id, allocVehicleId, crypto.randomUUID())
+      setMsg({ ok: true, text: 'Vehicle allocated to this contract.' })
+      setAllocVehicleId('')
+      setShowAllocate(false)
+      const updated = await bff.getContractAllocatedVehicles(contract.id)
+      setAllocatedVehicles(updated)
+    } catch (e) { setMsg({ ok: false, text: (e as Error).message }) }
+    finally { setBusy(false) }
+  }
+
+  async function handleCreateLA() {
+    if (!laForm.vehicleId || !laForm.driverId) { setMsg({ ok: false, text: 'Select vehicle and driver.' }); return }
+    setBusy(true); setMsg(null)
+    try {
+      const res = await bff.createLeaseAgreement(contract.id, laForm, crypto.randomUUID())
+      setMsg({ ok: true, text: `Lease Agreement ${res.leaseNumber} created.` })
+      setShowCreateLA(false)
+      setLaForm({ vehicleId: '', driverId: '', checkoutDate: new Date().toISOString().substring(0, 10) })
+      onReload()
+    } catch (e) { setMsg({ ok: false, text: (e as Error).message }) }
+    finally { setBusy(false) }
+  }
+
+  const availableSlots = contract.totalVehicles - (contract.checkedOutVehicles ?? 0)
+
+  return (
+    <div className="space-y-4">
+      {/* Status bar */}
+      <div className="flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-white px-4 py-3">
+        <div className="text-xs"><span className="text-slate-500">Total Vehicles:</span> <span className="font-semibold">{contract.totalVehicles}</span></div>
+        <div className="text-xs"><span className="text-slate-500">Allocated:</span> <span className="font-semibold">{allocatedVehicles.length}</span></div>
+        <div className="text-xs"><span className="text-slate-500">Checked Out:</span> <span className="font-semibold">{contract.checkedOutVehicles ?? 0}</span></div>
+        <div className="text-xs"><span className="text-slate-500">Available Slots:</span> <span className={`font-semibold ${availableSlots > 0 ? 'text-green-700' : 'text-red-600'}`}>{availableSlots}</span></div>
+        <div className="flex-1" />
+        <SecondaryButton onClick={() => setShowAllocate(!showAllocate)} className="px-3 py-1.5 text-xs">
+          {showAllocate ? 'Cancel' : '+ Allocate Vehicle'}
+        </SecondaryButton>
+        {allocatedVehicles.length > 0 && availableSlots > 0 && (
+          <PrimaryButton onClick={() => setShowCreateLA(!showCreateLA)} className="px-3 py-1.5 text-xs">
+            {showCreateLA ? 'Cancel' : '+ Create Lease Agreement'}
+          </PrimaryButton>
+        )}
+      </div>
+
+      {/* Feedback */}
+      {msg && <div className={`rounded-md border p-3 text-sm ${msg.ok ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-800'}`}>{msg.text}</div>}
+
+      {/* Allocate Vehicle Form */}
+      {showAllocate && (
+        <Card className="border-blue-200 bg-blue-50/30 p-4">
+          <h4 className="mb-2 text-xs font-semibold text-blue-800">Allocate Vehicle to Contract</h4>
+          <p className="mb-3 text-[10px] text-blue-600">Select an available vehicle to assign to this contract and customer. Only allocated vehicles can be checked out.</p>
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <label className="mb-1 block text-xs font-medium text-slate-600">Vehicle</label>
+              <select className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={allocVehicleId} onChange={e => setAllocVehicleId(e.target.value)}>
+                <option value="">— Select available vehicle —</option>
+                {availableVehicles.filter(v => !allocatedVehicles.some(av => av.id === v.id)).map(v => (
+                  <option key={v.id} value={v.id}>{v.plateNumber} — {v.make} {v.model} ({v.modelYear})</option>
+                ))}
+              </select>
+            </div>
+            <PrimaryButton onClick={handleAllocate} disabled={busy || !allocVehicleId} className="px-4 py-2 text-sm">
+              {busy ? 'Allocating...' : 'Allocate'}
+            </PrimaryButton>
+          </div>
+        </Card>
+      )}
+
+      {/* Allocated Vehicles */}
+      {allocatedVehicles.length > 0 && (
+        <Card className="overflow-hidden">
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-2">
+            <h4 className="text-xs font-semibold text-slate-700">Allocated Vehicles ({allocatedVehicles.length})</h4>
+          </div>
+          <table className="w-full text-xs">
+            <thead className="bg-slate-100 text-slate-600"><tr>
+              <th className="px-3 py-1.5 text-start font-medium">Plate</th>
+              <th className="px-3 py-1.5 text-start font-medium">Make / Model</th>
+              <th className="px-3 py-1.5 text-start font-medium">Year</th>
+              <th className="px-3 py-1.5 text-start font-medium">Status</th>
+            </tr></thead>
+            <tbody>{allocatedVehicles.map(v => (
+              <tr key={v.id} className="border-t border-slate-100">
+                <td className="px-3 py-1.5 font-mono font-semibold">{v.plateNumber}</td>
+                <td className="px-3 py-1.5">{v.make} {v.model}</td>
+                <td className="px-3 py-1.5">{v.modelYear}</td>
+                <td className="px-3 py-1.5"><Badge tone={v.status === 'OnRent' ? 'amber' : 'green'}>{v.status}</Badge></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </Card>
+      )}
+
+      {/* Create LA Form */}
+      {showCreateLA && (
+        <Card className="border-green-200 bg-green-50/30 p-4">
+          <h4 className="mb-2 text-xs font-semibold text-green-800">Create Lease Agreement (Vehicle Checkout)</h4>
+          <p className="mb-3 text-[10px] text-green-600">Select an allocated vehicle and authorized driver. Monthly rent is auto-filled from the contract.</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Vehicle *</label>
+              <select className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={laForm.vehicleId} onChange={e => setLaForm(f => ({ ...f, vehicleId: e.target.value }))}>
+                <option value="">— Select allocated vehicle —</option>
+                {allocatedVehicles.filter(v => v.status !== 'OnRent').map(v => (
+                  <option key={v.id} value={v.id}>{v.plateNumber} — {v.make} {v.model}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Driver *</label>
+              <select className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={laForm.driverId} onChange={e => setLaForm(f => ({ ...f, driverId: e.target.value }))}>
+                <option value="">— Select driver —</option>
+                {drivers.map(d => (
+                  <option key={d.id} value={d.id}>{d.personNameEn} — {d.driverLicenseNumber}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Checkout Date</label>
+              <input type="date" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={laForm.checkoutDate} onChange={e => setLaForm(f => ({ ...f, checkoutDate: e.target.value }))} />
+            </div>
+          </div>
+          <div className="mt-2 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600">
+            Monthly Rent: <span className="font-mono font-bold text-brand-700">SAR {fmtMoney(contract.monthlyRentSar)}</span> (from contract)
+          </div>
+          <div className="mt-3">
+            <PrimaryButton onClick={handleCreateLA} disabled={busy || !laForm.vehicleId || !laForm.driverId} className="px-4 py-2 text-sm">
+              {busy ? 'Creating...' : 'Create & Checkout'}
+            </PrimaryButton>
+          </div>
+        </Card>
+      )}
+
+      {/* LA Grid */}
+      <Card className="overflow-hidden">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <h3 className="text-sm font-semibold text-slate-800">Lease Agreements ({contract.leaseAgreements.length})</h3>
+        </div>
+        {contract.leaseAgreements.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-slate-400">
+            No lease agreements yet. Allocate vehicles first, then create lease agreements.
+          </div>
+        ) : (
+          <table className="w-full text-xs">
+            <thead className="bg-slate-100 text-slate-600"><tr>
+              <th className="px-3 py-2 text-start font-medium">LA #</th>
+              <th className="px-3 py-2 text-start font-medium">Vehicle</th>
+              <th className="px-3 py-2 text-start font-medium">Plate</th>
+              <th className="px-3 py-2 text-start font-medium">Driver</th>
+              <th className="px-3 py-2 text-start font-medium">Status</th>
+              <th className="px-3 py-2 text-start font-medium">Checkout</th>
+              <th className="px-3 py-2 text-start font-medium">Return</th>
+              <th className="px-3 py-2 text-end font-medium">Rent / mo</th>
+              <th className="px-3 py-2 text-start font-medium">Actions</th>
+            </tr></thead>
+            <tbody>{contract.leaseAgreements.map(la => (
+              <tr key={la.id} className="border-t border-slate-100 hover:bg-brand-50/40">
+                <td className="px-3 py-2 font-mono font-semibold text-brand-700">{la.leaseNumber}</td>
+                <td className="px-3 py-2">{la.vehicleMakeModel}</td>
+                <td className="px-3 py-2 font-mono text-slate-600">{la.vehiclePlate}</td>
+                <td className="px-3 py-2 text-slate-600">{la.primaryDriverName || '—'}</td>
+                <td className="px-3 py-2"><Badge tone={LA_STATUS_TONES[la.status] ?? 'slate'}>{la.status}</Badge></td>
+                <td className="px-3 py-2 text-slate-600">{safeDate(la.contractStartUtc)}</td>
+                <td className="px-3 py-2 text-slate-600">{safeDate(la.contractEndUtc)}</td>
+                <td className="px-3 py-2 text-end font-mono">SAR {fmtMoney(la.rentAmountSar)}</td>
+                <td className="px-3 py-2">
+                  <button onClick={() => router.push(`/leases/${la.id}`)} className="rounded border border-brand-300 px-2 py-0.5 text-[10px] font-medium text-brand-700 hover:bg-brand-50">
+                    View / Edit
+                  </button>
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        )}
+      </Card>
+    </div>
+  )
+}
 
 export default function ContractDetailPage() {
   const params = useParams()
@@ -304,54 +516,7 @@ export default function ContractDetailPage() {
 
       {/* ─── Lease Agreements Tab ─── */}
       {tab === 'leases' && (
-        <Card className="overflow-hidden">
-          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-800">Lease Agreements</h3>
-              <p className="text-[10px] text-slate-500">Vehicle checkouts under this contract — each LA tracks one vehicle + driver assignment.</p>
-            </div>
-          </div>
-          {contract.leaseAgreements.length === 0 ? (
-            <div className="px-4 py-10 text-center">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                <svg className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
-                </svg>
-              </div>
-              <p className="text-sm font-medium text-slate-600">No lease agreements yet</p>
-              <p className="mt-1 text-xs text-slate-400">Create lease agreements by checking out vehicles to drivers under this contract.</p>
-            </div>
-          ) : (
-            <table className="w-full text-xs">
-              <thead className="bg-slate-100 text-slate-600">
-                <tr>
-                  <th className="px-3 py-2 text-start font-medium">LA #</th>
-                  <th className="px-3 py-2 text-start font-medium">Vehicle</th>
-                  <th className="px-3 py-2 text-start font-medium">Plate</th>
-                  <th className="px-3 py-2 text-start font-medium">Driver</th>
-                  <th className="px-3 py-2 text-start font-medium">Status</th>
-                  <th className="px-3 py-2 text-start font-medium">Checkout</th>
-                  <th className="px-3 py-2 text-start font-medium">Check-in</th>
-                  <th className="px-3 py-2 text-end font-medium">Rent / mo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {contract.leaseAgreements.map((la) => (
-                  <tr key={la.id} className="border-t border-slate-100 cursor-pointer hover:bg-brand-50/40" onClick={() => router.push(`/leases/${la.id}`)}>
-                    <td className="px-3 py-2 font-mono font-semibold text-brand-700">{la.leaseNumber}</td>
-                    <td className="px-3 py-2">{la.vehicleMakeModel}</td>
-                    <td className="px-3 py-2 font-mono text-slate-600">{la.vehiclePlate}</td>
-                    <td className="px-3 py-2 text-slate-600">{la.primaryDriverName || '—'}</td>
-                    <td className="px-3 py-2"><Badge tone={LA_STATUS_TONES[la.status] ?? 'slate'}>{la.status}</Badge></td>
-                    <td className="px-3 py-2 text-slate-600">{safeDate(la.contractStartUtc)}</td>
-                    <td className="px-3 py-2 text-slate-600">{safeDate(la.contractEndUtc)}</td>
-                    <td className="px-3 py-2 text-end font-mono">SAR {fmtMoney(la.rentAmountSar)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </Card>
+        <LeaseAgreementsTab contract={contract} onReload={reload} />
       )}
     </div>
   )

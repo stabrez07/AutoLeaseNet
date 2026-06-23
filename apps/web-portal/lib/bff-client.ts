@@ -986,6 +986,25 @@ class BffClient {
       { 'Idempotency-Key': idempotencyKey },
     )
   }
+  allocateVehicleToContract(contractId: string, vehicleId: string, idempotencyKey: string) {
+    return this.postJson<{ vehicleId: string; contractId: string; allocated: boolean }, { vehicleId: string }>(
+      `/api/v1/contracts/${contractId}/allocate-vehicle`,
+      { vehicleId },
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+  createLeaseAgreement(contractId: string, body: { vehicleId: string; driverId: string; checkoutDate: string }, idempotencyKey: string) {
+    return this.postJson<{ leaseId: string; leaseNumber: string; contractId: string; status: string }, { vehicleId: string; driverId: string; checkoutDate: string }>(
+      `/api/v1/contracts/${contractId}/create-lease-agreement`,
+      body,
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
+  getContractAllocatedVehicles(contractId: string) {
+    return this.getJson<{ id: string; plateNumber: string; make: string; model: string; modelYear: number; status: string; currentKm: number }[]>(
+      `/api/v1/contracts/${contractId}/allocated-vehicles`
+    )
+  }
 
   // ─── Leases ────────────────────────────────────────────────────────────────
 
@@ -3419,6 +3438,15 @@ class MockBffClient {
   }
   createContractFromQuotation(_quotationId: string, _idempotencyKey: string): Promise<{ contractId: string; contractNumber: string; alreadyExists: boolean }> {
     return Promise.resolve({ contractId: 'mock-id', contractNumber: 'CNT-MOCK', alreadyExists: false })
+  }
+  allocateVehicleToContract(_contractId: string, _vehicleId: string, _ik: string): Promise<{ vehicleId: string; contractId: string; allocated: boolean }> {
+    return Promise.resolve({ vehicleId: _vehicleId, contractId: _contractId, allocated: true })
+  }
+  createLeaseAgreement(_contractId: string, _body: { vehicleId: string; driverId: string; checkoutDate: string }, _ik: string): Promise<{ leaseId: string; leaseNumber: string; contractId: string; status: string }> {
+    return Promise.resolve({ leaseId: 'mock', leaseNumber: 'LA-MOCK', contractId: _contractId, status: 'PendingIssuance' })
+  }
+  getContractAllocatedVehicles(_contractId: string): Promise<{ id: string; plateNumber: string; make: string; model: string; modelYear: number; status: string; currentKm: number }[]> {
+    return Promise.resolve([])
   }
 
   // ─── Leases ────────────────────────────────────────────────────────────────

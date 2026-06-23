@@ -22,6 +22,7 @@ public static class ContractEndpoints
         group.MapGet("/{id:guid}", GetContractByIdAsync).WithName("GetContractById").RequireAuthorization();
         group.MapGet("/{id:guid}/lease-agreements", GetContractLeaseAgreementsAsync).WithName("GetContractLeaseAgreements").RequireAuthorization();
         group.MapPost("", CreateContractFromQuotationAsync).WithName("CreateContract").RequireAuthorization();
+        group.MapGet("/{id:guid}/allocated-vehicles", GetAllocatedVehiclesAsync).WithName("GetAllocatedVehicles").RequireAuthorization();
         group.MapPost("/{id:guid}/allocate-vehicle", AllocateVehicleAsync).WithName("AllocateVehicle").RequireAuthorization();
         group.MapPost("/{id:guid}/create-lease-agreement", CreateLeaseAgreementAsync).WithName("CreateLeaseAgreement").RequireAuthorization();
 
@@ -349,6 +350,31 @@ public static class ContractEndpoints
         await db.SaveChangesAsync(ct);
 
         return Results.Ok(new { contractId = contract.Id, contractNumber = contract.ContractNumber, alreadyExists = false });
+    }
+
+    private static async Task<IResult> GetAllocatedVehiclesAsync(
+        Guid id, AutoLeaseNetDbContext db, ITenantContext tenant, CancellationToken ct)
+    {
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var vehicles = await db.Vehicles.AsNoTracking()
+            .Where(v => v.TenantId == tenantId && v.AllocatedToContractId == id)
+            .Select(v => new
+            {
+                v.Id,
+                v.PlateNumber,
+                v.PlateLetters,
+                v.Make,
+                v.Model,
+                v.ModelYear,
+                v.Color,
+                Status = v.Status.ToString(),
+                v.CurrentKm,
+            })
+            .ToListAsync(ct);
+
+        return Results.Ok(vehicles);
     }
 
     private static async Task<IResult> AllocateVehicleAsync(
