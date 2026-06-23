@@ -457,14 +457,14 @@ public static class ContractEndpoints
             ContractId = contract.Id,
             VehicleId = vehicle.Id,
             PrimaryDriverId = driver.Id,
-            TajeerContractNumber = 1, // Placeholder — no Tajeer call yet
+            TajeerContractNumber = 9000000 + leaseCount + 1,
             IssuanceUrl = $"local://lease/{leaseNumber}",
             ContractTypeCode = contract.ContractTypeCode,
             ContractStartUtc = checkoutDate,
             ContractEndUtc = checkoutDate.AddMonths(contract.DurationMonths),
             RentAmount = contract.MonthlyRentSar,
-            VatAmount = contract.VatAmountSar,
-            TotalAmount = contract.TotalAmountSar,
+            VatAmount = contract.DurationMonths > 0 ? Math.Round(contract.VatAmountSar / contract.DurationMonths, 2, MidpointRounding.AwayFromZero) : 0m,
+            TotalAmount = contract.MonthlyRentSar,
             PaymentMethodCode = 1, // Default: bank transfer
             NowUtc = now,
         });
