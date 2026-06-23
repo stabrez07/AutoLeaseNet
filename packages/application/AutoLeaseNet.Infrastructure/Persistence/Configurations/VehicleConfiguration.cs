@@ -32,6 +32,9 @@ public sealed class VehicleConfiguration : IEntityTypeConfiguration<Vehicle>
         builder.Property(v => v.DeviceImei).HasMaxLength(32);
         builder.Property(v => v.Notes).HasMaxLength(1024);
 
+        builder.Property(v => v.AllocatedToCustomerId);
+        builder.Property(v => v.AllocatedToContractId);
+
         builder.Property(v => v.PurchasePrice).HasPrecision(18, 2);
         builder.Property(v => v.DepreciationPerMonth).HasPrecision(18, 2);
         builder.Property(v => v.CurrentBookValue).HasPrecision(18, 2);

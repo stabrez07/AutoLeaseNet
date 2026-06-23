@@ -159,6 +159,7 @@ public sealed class Lease : Entity
         {
             TenantId = input.TenantId,
             CustomerId = input.CustomerId,
+            ContractId = input.ContractId,
             VehicleId = input.VehicleId,
             PrimaryDriverId = input.PrimaryDriverId,
             ExtraDriverId = input.ExtraDriverId,
@@ -341,6 +342,7 @@ public sealed record CreatePendingInput
 {
     public required Guid TenantId { get; init; }
     public Guid? CustomerId { get; init; }
+    public Guid? ContractId { get; init; }
     public Guid? VehicleId { get; init; }
     public Guid? PrimaryDriverId { get; init; }
     public Guid? ExtraDriverId { get; init; }

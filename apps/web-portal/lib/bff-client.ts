@@ -979,6 +979,13 @@ class BffClient {
   getContractLeaseAgreements(contractId: string) {
     return this.getJson<ContractLeaseAgreement[]>(`/api/v1/contracts/${contractId}/lease-agreements`)
   }
+  createContractFromQuotation(quotationId: string, idempotencyKey: string) {
+    return this.postJson<{ contractId: string; contractNumber: string; alreadyExists: boolean }, { quotationId: string }>(
+      '/api/v1/contracts',
+      { quotationId },
+      { 'Idempotency-Key': idempotencyKey },
+    )
+  }
 
   // ─── Leases ────────────────────────────────────────────────────────────────
 
@@ -1589,6 +1596,14 @@ export interface ContractSummary {
   endDate: string
   durationMonths: number
   totalVehicles: number
+  checkedOutVehicles: number
+  baseAmountSar: number
+  discountPercent: number
+  discountAmountSar: number
+  netAmountSar: number
+  vatPercent: number
+  vatAmountSar: number
+  totalAmountSar: number
   monthlyRentSar: number
   totalContractValueSar: number
   leaseAgreementCount: number
@@ -1675,6 +1690,7 @@ export interface LeaseSummary {
 }
 
 export interface LeaseDetail extends LeaseSummary {
+  quotationId: string
   rentPolicyId: string
   paidAmountSar: number
   vatAmountSar: number
@@ -2412,6 +2428,7 @@ function buildMockState(): MockState {
       displayId: i + 1,
       leaseNumber: `LA-${i + 1}`,
       contractId: '',
+      quotationId: '',
       customerId: customer.id,
       customerDisplayName: customer.displayName,
       vehicleId: vehicle.id,
@@ -3399,6 +3416,9 @@ class MockBffClient {
   }
   getContractLeaseAgreements(_id: string): Promise<ContractLeaseAgreement[]> {
     return Promise.resolve([])
+  }
+  createContractFromQuotation(_quotationId: string, _idempotencyKey: string): Promise<{ contractId: string; contractNumber: string; alreadyExists: boolean }> {
+    return Promise.resolve({ contractId: 'mock-id', contractNumber: 'CNT-MOCK', alreadyExists: false })
   }
 
   // ─── Leases ────────────────────────────────────────────────────────────────

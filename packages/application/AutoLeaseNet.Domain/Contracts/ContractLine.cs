@@ -2,7 +2,7 @@ using AutoLeaseNet.Domain.Shared;
 
 namespace AutoLeaseNet.Domain.Contracts;
 
-public sealed class ContractLine : Entity
+public sealed class ContractLine : Entity, ILineItem
 {
     public Guid ContractId { get; private set; }
     public string Make { get; private set; } = string.Empty;

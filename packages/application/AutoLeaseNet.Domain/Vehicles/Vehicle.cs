@@ -69,6 +69,24 @@ public sealed class Vehicle : Entity
 
     public string? Notes { get; private set; }
 
+    // ─── Allocation (links vehicle to customer + contract for fleet ops) ────
+    public Guid? AllocatedToCustomerId { get; private set; }
+    public Guid? AllocatedToContractId { get; private set; }
+
+    public void AllocateToContract(Guid customerId, Guid contractId, DateTimeOffset nowUtc)
+    {
+        AllocatedToCustomerId = customerId;
+        AllocatedToContractId = contractId;
+        UpdatedAtUtc = nowUtc;
+    }
+
+    public void Deallocate(DateTimeOffset nowUtc)
+    {
+        AllocatedToCustomerId = null;
+        AllocatedToContractId = null;
+        UpdatedAtUtc = nowUtc;
+    }
+
     private Vehicle() { }
 
     public static Vehicle Create(VehicleCreateInput input)

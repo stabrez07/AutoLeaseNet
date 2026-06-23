@@ -368,17 +368,20 @@ export default function QuotationDetailPage() {
               {canCreateContract && (
                 <button
                   disabled={actionBusy}
-                  onClick={() => {
-                    const params = new URLSearchParams({
-                      fromQuote: id,
-                      customerId: quote.customerId,
-                      duration: String(quote.estimatedDurationMonths),
-                    })
-                    router.push(`/leases/new?${params.toString()}`)
-                  }}
+                  onClick={() => act(
+                    async () => {
+                      const res = await bff.createContractFromQuotation(id, crypto.randomUUID())
+                      if (res.alreadyExists) {
+                        router.push(`/contracts/${res.contractId}`)
+                        throw new Error(`Contract ${res.contractNumber} already exists for this quotation. Navigating to it.`)
+                      }
+                      router.push(`/contracts/${res.contractId}`)
+                    },
+                    'Contract created successfully.'
+                  )}
                   className="w-full rounded-md bg-green-700 px-3 py-2 text-sm font-medium text-white hover:bg-green-800 disabled:opacity-50"
                 >
-                  Create Contract
+                  {actionBusy ? 'Creating...' : 'Create Contract'}
                 </button>
               )}
 

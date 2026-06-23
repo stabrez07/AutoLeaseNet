@@ -32,6 +32,14 @@ public sealed class ContractConfiguration : IEntityTypeConfiguration<Contract>
         builder.Property(c => c.PaymentTermsDays).IsRequired();
         builder.Property(c => c.Notes).HasMaxLength(2000);
 
+        builder.Property(c => c.CheckedOutVehicles);
+        builder.Property(c => c.BaseAmountSar).HasPrecision(18, 2);
+        builder.Property(c => c.DiscountPercent).HasPrecision(5, 2);
+        builder.Property(c => c.DiscountAmountSar).HasPrecision(18, 2);
+        builder.Property(c => c.NetAmountSar).HasPrecision(18, 2);
+        builder.Property(c => c.VatPercent).HasPrecision(5, 2);
+        builder.Property(c => c.VatAmountSar).HasPrecision(18, 2);
+        builder.Property(c => c.TotalAmountSar).HasPrecision(18, 2);
         builder.Property(c => c.MonthlyRentSar).HasPrecision(18, 2);
         builder.Property(c => c.TotalContractValueSar).HasPrecision(18, 2);
 

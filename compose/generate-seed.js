@@ -1152,8 +1152,15 @@ function insertContracts(contracts) {
 ${batchHeader()}
 `;
   for (const c of contracts) {
-    sql += `INSERT INTO Contracts (Id, ContractNumber, CustomerId, QuotationId, Status, ContractTypeCode, StartDate, EndDate, DurationMonths, TotalVehicles, MonthlyRentSar, TotalContractValueSar, PaymentTermsDays, Notes, TenantId, CreatedAtUtc, UpdatedAtUtc)
-VALUES ('${c.id}', ${esc(c.contractNumber)}, '${c.customerId}', ${c.quotationId ? `'${c.quotationId}'` : 'NULL'}, ${esc(c.status === 2 ? 'Active' : c.status === 3 ? 'Suspended' : c.status === 4 ? 'Closed' : 'Draft')}, ${c.contractTypeCode}, '${c.startDate}', '${c.endDate}', ${c.durationMonths}, ${c.totalVehicles}, ${c.monthlyRentSar}, ${c.totalContractValueSar}, ${c.paymentTermsDays}, ${esc(c.notes)}, @TenantId, @Now, @Now);
+    const discPct = 0;
+    const discAmt = Math.round(c.monthlyRentSar * discPct / 100 * 100) / 100;
+    const netAmt = c.monthlyRentSar - discAmt;
+    const vatPct = 15;
+    const vatAmt = Math.round(netAmt * vatPct / 100 * 100) / 100;
+    const totalAmt = Math.round((netAmt + vatAmt) * 100) / 100;
+    const monthlyRent = c.durationMonths > 0 ? Math.round(totalAmt / c.durationMonths * 100) / 100 : totalAmt;
+    sql += `INSERT INTO Contracts (Id, ContractNumber, CustomerId, QuotationId, Status, ContractTypeCode, StartDate, EndDate, DurationMonths, TotalVehicles, CheckedOutVehicles, BaseAmountSar, DiscountPercent, DiscountAmountSar, NetAmountSar, VatPercent, VatAmountSar, TotalAmountSar, MonthlyRentSar, TotalContractValueSar, PaymentTermsDays, Notes, TenantId, CreatedAtUtc, UpdatedAtUtc)
+VALUES ('${c.id}', ${esc(c.contractNumber)}, '${c.customerId}', ${c.quotationId ? `'${c.quotationId}'` : 'NULL'}, ${esc(c.status === 2 ? 'Active' : c.status === 3 ? 'Suspended' : c.status === 4 ? 'Closed' : 'Draft')}, ${c.contractTypeCode}, '${c.startDate}', '${c.endDate}', ${c.durationMonths}, ${c.totalVehicles}, 0, ${c.monthlyRentSar}, ${discPct}, ${discAmt}, ${netAmt}, ${vatPct}, ${vatAmt}, ${totalAmt}, ${monthlyRent}, ${totalAmt}, ${c.paymentTermsDays}, ${esc(c.notes)}, @TenantId, @Now, @Now);
 `;
   }
   sql += '\nGO\n\n';

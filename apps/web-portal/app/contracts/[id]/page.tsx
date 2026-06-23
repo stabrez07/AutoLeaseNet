@@ -71,13 +71,14 @@ export default function ContractDetailPage() {
       />
 
       {/* Key metrics bar */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
         {[
-          { label: 'Total Vehicles', value: String(contract.totalVehicles), accent: false },
-          { label: 'Monthly Rent', value: `SAR ${fmtMoney(contract.monthlyRentSar)}`, accent: false },
-          { label: 'Contract Value', value: `SAR ${fmtMoney(contract.totalContractValueSar)}`, accent: true },
-          { label: 'Duration', value: `${contract.durationMonths} months`, accent: false },
-          { label: 'Lease Agreements', value: String(contract.leaseAgreements.length), accent: false },
+          { label: 'Vehicles', value: `${contract.checkedOutVehicles ?? 0} / ${contract.totalVehicles}`, accent: false },
+          { label: 'Base Amount', value: `SAR ${fmtMoney(contract.baseAmountSar)}`, accent: false },
+          { label: 'Discount', value: `${contract.discountPercent ?? 0}%`, accent: false },
+          { label: 'VAT (15%)', value: `SAR ${fmtMoney(contract.vatAmountSar)}`, accent: false },
+          { label: 'Total Amount', value: `SAR ${fmtMoney(contract.totalAmountSar)}`, accent: true },
+          { label: 'Monthly Rent', value: `SAR ${fmtMoney(contract.monthlyRentSar)}`, accent: true },
         ].map((m) => (
           <Card key={m.label} className={`p-3 text-center ${m.accent ? 'border-brand-200 bg-brand-50' : ''}`}>
             <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{m.label}</div>
@@ -175,6 +176,19 @@ export default function ContractDetailPage() {
 
           {/* Right column */}
           <div className="space-y-4">
+            {/* Pricing Breakdown */}
+            <Card className="p-4">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Pricing Summary</h3>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between"><span className="text-slate-500">Base Amount (lines)</span><span className="font-mono font-medium">SAR {fmtMoney(contract.baseAmountSar)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Discount ({contract.discountPercent ?? 0}%)</span><span className="font-mono text-red-600">- SAR {fmtMoney(contract.discountAmountSar)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Net Amount</span><span className="font-mono">SAR {fmtMoney(contract.netAmountSar)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">VAT ({contract.vatPercent ?? 15}%)</span><span className="font-mono">SAR {fmtMoney(contract.vatAmountSar)}</span></div>
+                <div className="flex justify-between border-t border-slate-200 pt-2"><span className="font-semibold text-slate-700">Total Contract Value ({contract.durationMonths} mo)</span><span className="font-mono font-bold text-brand-700">SAR {fmtMoney(contract.totalAmountSar)}</span></div>
+                <div className="flex justify-between bg-brand-50 rounded-md px-2 py-1.5 -mx-1"><span className="font-semibold text-brand-700">Monthly Rent</span><span className="font-mono font-bold text-brand-700">SAR {fmtMoney(contract.monthlyRentSar)}</span></div>
+              </div>
+            </Card>
+
             <Card className="p-4">
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Actions</h3>
               <div className="space-y-2">

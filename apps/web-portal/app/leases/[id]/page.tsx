@@ -786,13 +786,16 @@ export default function LeaseDetailPage() {
               </div>
               <div className="mt-3 flex flex-col gap-1.5 border-t border-slate-200 pt-3">
                 {lease.contractId && lease.contractId !== '00000000-0000-0000-0000-000000000000' && (
-                  <Link href={`/contracts/${lease.contractId}`} className="flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline">
-                    <span>View Contract →</span>
+                  <Link href={`/contracts/${lease.contractId}`} className="flex items-center gap-1 rounded-md border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-100">
+                    View this Contract →
                   </Link>
                 )}
-                <Link href="/contracts" className="text-xs text-brand-600 hover:underline">All Contracts</Link>
-                <Link href="/quotations" className="text-xs text-brand-600 hover:underline">All Quotations</Link>
-                <Link href="/leases" className="text-xs text-slate-500 hover:underline">← Back to Lease Agreements</Link>
+                {lease.quotationId && lease.quotationId !== '00000000-0000-0000-0000-000000000000' && (
+                  <Link href={`/quotations/${lease.quotationId}`} className="flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+                    View this Quotation →
+                  </Link>
+                )}
+                <Link href="/leases" className="mt-1 text-xs text-slate-500 hover:underline">← Back to Lease Agreements</Link>
               </div>
             </Card>
           </div>

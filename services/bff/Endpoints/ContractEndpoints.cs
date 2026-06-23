@@ -1,7 +1,9 @@
 using System.Globalization;
 using AutoLeaseNet.Application.Ports.Tenancy;
 using AutoLeaseNet.Domain.Contracts;
+using AutoLeaseNet.Domain.Leases;
 using AutoLeaseNet.Domain.Sales;
+using AutoLeaseNet.Domain.Vehicles;
 using AutoLeaseNet.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -19,6 +21,9 @@ public static class ContractEndpoints
         group.MapGet("", ListContractsAsync).WithName("ListContracts").RequireAuthorization();
         group.MapGet("/{id:guid}", GetContractByIdAsync).WithName("GetContractById").RequireAuthorization();
         group.MapGet("/{id:guid}/lease-agreements", GetContractLeaseAgreementsAsync).WithName("GetContractLeaseAgreements").RequireAuthorization();
+        group.MapPost("", CreateContractFromQuotationAsync).WithName("CreateContract").RequireAuthorization();
+        group.MapPost("/{id:guid}/allocate-vehicle", AllocateVehicleAsync).WithName("AllocateVehicle").RequireAuthorization();
+        group.MapPost("/{id:guid}/create-lease-agreement", CreateLeaseAgreementAsync).WithName("CreateLeaseAgreement").RequireAuthorization();
 
         return group;
     }
@@ -76,7 +81,12 @@ public static class ContractEndpoints
                 c.EndDate,
                 c.DurationMonths,
                 c.TotalVehicles,
+                c.CheckedOutVehicles,
                 c.MonthlyRentSar,
+                c.BaseAmountSar,
+                c.DiscountPercent,
+                c.VatPercent,
+                c.TotalAmountSar,
                 c.TotalContractValueSar,
                 LeaseAgreementCount = laCount,
                 QuotationId = c.QuotationId ?? Guid.Empty,
@@ -198,7 +208,16 @@ public static class ContractEndpoints
             contract.EndDate,
             contract.DurationMonths,
             contract.TotalVehicles,
+            contract.CheckedOutVehicles,
+            AvailableVehicles = contract.TotalVehicles - contract.CheckedOutVehicles,
             contract.MonthlyRentSar,
+            contract.BaseAmountSar,
+            contract.DiscountPercent,
+            contract.DiscountAmountSar,
+            contract.NetAmountSar,
+            contract.VatPercent,
+            contract.VatAmountSar,
+            contract.TotalAmountSar,
             contract.TotalContractValueSar,
             contract.PaymentTermsDays,
             contract.Notes,
@@ -260,4 +279,201 @@ public static class ContractEndpoints
 
         return Results.Ok(items);
     }
+
+    private static async Task<IResult> CreateContractFromQuotationAsync(
+        HttpContext ctx,
+        CreateContractRequest body,
+        AutoLeaseNetDbContext db,
+        ITenantContext tenant,
+        CancellationToken ct)
+    {
+        var idempotencyKey = ctx.Request.Headers["Idempotency-Key"].ToString();
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+            return Results.Problem(title: "Missing Idempotency-Key", statusCode: StatusCodes.Status400BadRequest);
+
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var quotation = await db.Quotations.AsNoTracking()
+            .FirstOrDefaultAsync(q => q.Id == body.QuotationId && q.TenantId == tenantId, ct);
+        if (quotation is null)
+            return Results.Problem(title: "quotation.not_found", detail: "Quotation not found.", statusCode: StatusCodes.Status404NotFound);
+
+        // Prevent duplicate: check if a contract already exists for this quotation
+        var existing = await db.Contracts.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.QuotationId == body.QuotationId && c.TenantId == tenantId, ct);
+        if (existing is not null)
+            return Results.Ok(new { contractId = existing.Id, contractNumber = existing.ContractNumber, alreadyExists = true });
+
+        // Monthly rent = quotation TotalSar / duration months (exact match to quote)
+        var durationMonths = quotation.EstimatedDurationMonths > 0 ? quotation.EstimatedDurationMonths : 12;
+        var monthlyRent = Math.Round(quotation.TotalSar / durationMonths, 2, MidpointRounding.AwayFromZero);
+
+        var now = DateTimeOffset.UtcNow;
+        var contract = Domain.Contracts.Contract.CreateFromQuotation(
+            tenantId,
+            $"CNT-{now:yyyy}-{(await db.Contracts.CountAsync(c => c.TenantId == tenantId, ct) + 1).ToString("D5", CultureInfo.InvariantCulture)}",
+            quotation.CustomerId,
+            quotation.Id,
+            1, // Long Term Lease
+            quotation.DiscountPercent,
+            15m, // VAT rate (hardcoded per QuotationPricingCalculator)
+            now,
+            durationMonths,
+            30,
+            now);
+
+        // Copy quotation lines as contract vehicle lines
+        var quoteLines = await db.QuotationLines.AsNoTracking()
+            .Where(ql => ql.QuotationId == quotation.Id)
+            .ToListAsync(ct);
+
+        foreach (var ql in quoteLines)
+        {
+            var parts = ql.VehicleSpecRef?.Split('/') ?? [];
+            var make = parts.Length > 0 ? parts[0] : ql.ItemType.ToString();
+            var model = parts.Length > 1 ? parts[1] : ql.Description;
+            var year = parts.Length > 2 && int.TryParse(parts[2], out var y) ? y : now.Year;
+            contract.AddLine(make, model, year, ql.Description, ql.Quantity, ql.UnitPriceSar);
+        }
+
+        // If no lines from quote, set totals from quotation directly
+        if (quoteLines.Count == 0)
+        {
+            // Use reflection-free approach: the contract recalculates on AddLine,
+            // so add a single summary line
+            contract.AddLine("Fleet", "Vehicles", now.Year, "As per quotation", 1, monthlyRent);
+        }
+
+        db.Contracts.Add(contract);
+        await db.SaveChangesAsync(ct);
+
+        return Results.Ok(new { contractId = contract.Id, contractNumber = contract.ContractNumber, alreadyExists = false });
+    }
+
+    private static async Task<IResult> AllocateVehicleAsync(
+        Guid id,
+        HttpContext ctx,
+        AllocateVehicleRequest body,
+        AutoLeaseNetDbContext db,
+        ITenantContext tenant,
+        CancellationToken ct)
+    {
+        var idempotencyKey = ctx.Request.Headers["Idempotency-Key"].ToString();
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+            return Results.Problem(title: "Missing Idempotency-Key", statusCode: StatusCodes.Status400BadRequest);
+
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var contract = await db.Contracts
+            .FirstOrDefaultAsync(c => c.Id == id && c.TenantId == tenantId, ct);
+        if (contract is null) return Results.NotFound();
+
+        var vehicle = await db.Vehicles
+            .FirstOrDefaultAsync(v => v.Id == body.VehicleId && v.TenantId == tenantId, ct);
+        if (vehicle is null)
+            return Results.Problem(title: "vehicle.not_found", detail: "Vehicle not found.", statusCode: StatusCodes.Status404NotFound);
+
+        if (vehicle.Status != VehicleStatus.Available)
+            return Results.Problem(title: "vehicle.not_available", detail: $"Vehicle is not available (current status: {vehicle.Status}).", statusCode: StatusCodes.Status409Conflict);
+
+        var now = DateTimeOffset.UtcNow;
+        vehicle.AllocateToContract(contract.CustomerId, contract.Id, now);
+        await db.SaveChangesAsync(ct);
+
+        return Results.Ok(new { vehicleId = vehicle.Id, contractId = contract.Id, allocated = true });
+    }
+
+    private static async Task<IResult> CreateLeaseAgreementAsync(
+        Guid id,
+        HttpContext ctx,
+        CreateLeaseAgreementRequest body,
+        AutoLeaseNetDbContext db,
+        ITenantContext tenant,
+        CancellationToken ct)
+    {
+        var idempotencyKey = ctx.Request.Headers["Idempotency-Key"].ToString();
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+            return Results.Problem(title: "Missing Idempotency-Key", statusCode: StatusCodes.Status400BadRequest);
+
+        var tenantId = tenant.TenantId;
+        if (tenantId == Guid.Empty) return Results.Unauthorized();
+
+        var contract = await db.Contracts
+            .FirstOrDefaultAsync(c => c.Id == id && c.TenantId == tenantId, ct);
+        if (contract is null) return Results.NotFound();
+
+        var vehicle = await db.Vehicles
+            .FirstOrDefaultAsync(v => v.Id == body.VehicleId && v.TenantId == tenantId, ct);
+        if (vehicle is null)
+            return Results.Problem(title: "vehicle.not_found", detail: "Vehicle not found.", statusCode: StatusCodes.Status404NotFound);
+
+        if (vehicle.AllocatedToContractId != contract.Id)
+            return Results.Problem(title: "vehicle.not_allocated", detail: "Vehicle is not allocated to this contract.", statusCode: StatusCodes.Status409Conflict);
+
+        var driver = await db.Drivers.AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == body.DriverId && d.TenantId == tenantId, ct);
+        if (driver is null)
+            return Results.Problem(title: "driver.not_found", detail: "Driver not found.", statusCode: StatusCodes.Status404NotFound);
+
+        var now = DateTimeOffset.UtcNow;
+        var checkoutDate = DateTimeOffset.TryParse(body.CheckoutDate, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)
+            ? parsed : now;
+
+        var leaseCount = await db.Leases.CountAsync(l => l.TenantId == tenantId, ct);
+        var leaseNumber = $"LA-{now:yyyy}-{(leaseCount + 1).ToString("D5", CultureInfo.InvariantCulture)}";
+
+        var lease = Lease.CreatePending(new CreatePendingInput
+        {
+            TenantId = tenantId,
+            CustomerId = contract.CustomerId,
+            ContractId = contract.Id,
+            VehicleId = vehicle.Id,
+            PrimaryDriverId = driver.Id,
+            TajeerContractNumber = 1, // Placeholder — no Tajeer call yet
+            IssuanceUrl = $"local://lease/{leaseNumber}",
+            ContractTypeCode = contract.ContractTypeCode,
+            ContractStartUtc = checkoutDate,
+            ContractEndUtc = checkoutDate.AddMonths(contract.DurationMonths),
+            RentAmount = contract.MonthlyRentSar,
+            VatAmount = contract.VatAmountSar,
+            TotalAmount = contract.TotalAmountSar,
+            PaymentMethodCode = 1, // Default: bank transfer
+            NowUtc = now,
+        });
+
+        contract.IncrementCheckout();
+        vehicle.StartRental(now);
+
+        db.Leases.Add(lease);
+        await db.SaveChangesAsync(ct);
+
+        return Results.Ok(new
+        {
+            leaseId = lease.Id,
+            leaseNumber,
+            contractId = contract.Id,
+            vehicleId = vehicle.Id,
+            driverId = driver.Id,
+            status = lease.Status.ToString(),
+        });
+    }
+}
+
+public sealed record CreateContractRequest
+{
+    public required Guid QuotationId { get; init; }
+}
+
+public sealed record AllocateVehicleRequest
+{
+    public required Guid VehicleId { get; init; }
+}
+
+public sealed record CreateLeaseAgreementRequest
+{
+    public required Guid VehicleId { get; init; }
+    public required Guid DriverId { get; init; }
+    public required string CheckoutDate { get; init; }
 }

@@ -161,12 +161,24 @@ public static class LeaseEndpoints
             ? await db.Branches.AsNoTracking().FirstOrDefaultAsync(b => b.Id == lease.WorkingBranchId.Value, ct)
             : null;
 
+        // Lookup quotationId via contract
+        Guid quotationId = Guid.Empty;
+        if (lease.ContractId.HasValue)
+        {
+            var parentContract = await db.Contracts.AsNoTracking()
+                .Where(c => c.Id == lease.ContractId.Value)
+                .Select(c => new { c.QuotationId })
+                .FirstOrDefaultAsync(ct);
+            if (parentContract?.QuotationId != null) quotationId = parentContract.QuotationId.Value;
+        }
+
         return Results.Ok(new
         {
             lease.Id,
             lease.DisplayId,
             LeaseNumber = "LA-" + lease.DisplayId.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ContractId = lease.ContractId ?? Guid.Empty,
+            QuotationId = quotationId,
             CustomerId = lease.CustomerId ?? Guid.Empty,
             CustomerDisplayName = cust?.DisplayName ?? "—",
             VehicleId = lease.VehicleId ?? Guid.Empty,
