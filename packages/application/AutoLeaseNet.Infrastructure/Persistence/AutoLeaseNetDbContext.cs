@@ -78,6 +78,28 @@ public class AutoLeaseNetDbContext(DbContextOptions<AutoLeaseNetDbContext> optio
             e.Property(p => p.AllocatedAmountSar).HasColumnType("decimal(18,2)");
         });
 
+        // Performance indexes for hot query paths
+        modelBuilder.Entity<Lease>(e =>
+        {
+            e.HasIndex(l => new { l.TenantId, l.CustomerId });
+            e.HasIndex(l => new { l.TenantId, l.VehicleId });
+            e.HasIndex(l => new { l.TenantId, l.ContractId });
+            e.HasIndex(l => new { l.TenantId, l.Status });
+        });
+        modelBuilder.Entity<Contract>(e =>
+        {
+            e.HasIndex(ct => new { ct.TenantId, ct.CustomerId });
+        });
+        modelBuilder.Entity<Invoice>(e =>
+        {
+            e.HasIndex(i => new { i.TenantId, i.LeaseId });
+            e.HasIndex(i => new { i.TenantId, i.CustomerId });
+        });
+        modelBuilder.Entity<Vehicle>(e =>
+        {
+            e.HasIndex(v => new { v.TenantId, v.Make, v.Model });
+        });
+
         // DisplayId: auto-increment identity column on all entities.
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {

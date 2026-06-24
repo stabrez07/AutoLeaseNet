@@ -36,12 +36,16 @@ public static class ContractEndpoints
         int page = 1,
         int pageSize = 20,
         string? search = null,
-        string? status = null)
+        string? status = null,
+        Guid? customerId = null)
     {
         var tenantId = tenant.TenantId;
         if (tenantId == Guid.Empty) return Results.Unauthorized();
 
         var query = db.Contracts.AsNoTracking().Where(c => c.TenantId == tenantId);
+
+        if (customerId.HasValue)
+            query = query.Where(c => c.CustomerId == customerId.Value);
 
         if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<ContractStatus>(status, true, out var st))
             query = query.Where(c => c.Status == st);

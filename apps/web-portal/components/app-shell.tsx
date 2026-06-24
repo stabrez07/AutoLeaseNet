@@ -191,7 +191,7 @@ function NotificationBell() {
 
   useEffect(() => {
     poll()
-    const h = setInterval(poll, 30000)
+    const h = setInterval(poll, 60000)
     return () => clearInterval(h)
   }, [poll])
 

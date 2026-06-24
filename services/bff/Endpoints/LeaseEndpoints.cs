@@ -74,61 +74,58 @@ public static class LeaseEndpoints
         var tenantId = tenant.TenantId;
         if (tenantId == Guid.Empty) return Results.Unauthorized();
 
-        var query = db.Leases.AsNoTracking().Where(l => l.TenantId == tenantId);
+        var query = from l in db.Leases.Where(l => l.TenantId == tenantId)
+                    join c in db.Customers on l.CustomerId equals c.Id into cg
+                    from c in cg.DefaultIfEmpty()
+                    join v in db.Vehicles on l.VehicleId equals v.Id into vg
+                    from v in vg.DefaultIfEmpty()
+                    join d in db.Drivers on l.PrimaryDriverId equals d.Id into dg
+                    from d in dg.DefaultIfEmpty()
+                    join b in db.Branches on l.WorkingBranchId equals b.Id into bg
+                    from b in bg.DefaultIfEmpty()
+                    select new
+                    {
+                        l.Id, l.DisplayId, l.Status, l.ContractId,
+                        l.ContractStartUtc, l.ContractEndUtc, l.ContractTypeCode,
+                        RentAmountSar = l.RentAmount, l.CreatedAtUtc,
+                        CustomerDisplayName = c != null ? c.DisplayName : "—",
+                        VehicleMakeModel = v != null ? v.Make + " " + v.Model : "—",
+                        VehiclePlate = v != null ? v.PlateNumber : "—",
+                        PrimaryDriverName = d != null ? d.PersonNameEn : (string?)null,
+                        WorkingBranchName = b != null ? b.NameEn : (string?)null,
+                        CustomerId = l.CustomerId,
+                        VehicleId = l.VehicleId,
+                    };
 
         if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<Domain.Leases.LeaseStatus>(status, true, out var st))
-            query = query.Where(l => l.Status == st);
-
-        var total = await query.CountAsync(ct);
-        var leases = await query
-            .OrderByDescending(l => l.CreatedAtUtc)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(ct);
-
-        var customerIds = leases.Where(l => l.CustomerId.HasValue).Select(l => l.CustomerId!.Value).Distinct().ToList();
-        var vehicleIds = leases.Where(l => l.VehicleId.HasValue).Select(l => l.VehicleId!.Value).Distinct().ToList();
-        var driverIds = leases.Where(l => l.PrimaryDriverId.HasValue).Select(l => l.PrimaryDriverId!.Value).Distinct().ToList();
-        var branchIds = leases.Where(l => l.WorkingBranchId.HasValue).Select(l => l.WorkingBranchId!.Value).Distinct().ToList();
-
-        var customers = await db.Customers.AsNoTracking().Where(c => customerIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id, ct);
-        var vehicles = await db.Vehicles.AsNoTracking().Where(v => vehicleIds.Contains(v.Id)).ToDictionaryAsync(v => v.Id, ct);
-        var drivers = await db.Drivers.AsNoTracking().Where(d => driverIds.Contains(d.Id)).ToDictionaryAsync(d => d.Id, ct);
-        var branches = await db.Branches.AsNoTracking().Where(b => branchIds.Contains(b.Id)).ToDictionaryAsync(b => b.Id, ct);
-
-        var items = leases.Select(l =>
-        {
-            var cust = l.CustomerId.HasValue && customers.TryGetValue(l.CustomerId.Value, out var c) ? c : null;
-            var veh = l.VehicleId.HasValue && vehicles.TryGetValue(l.VehicleId.Value, out var v) ? v : null;
-            var drv = l.PrimaryDriverId.HasValue && drivers.TryGetValue(l.PrimaryDriverId.Value, out var d) ? d : null;
-            var br = l.WorkingBranchId.HasValue && branches.TryGetValue(l.WorkingBranchId.Value, out var b) ? b : null;
-            return new
-            {
-                l.Id,
-                l.DisplayId,
-                LeaseNumber = "LA-" + l.DisplayId.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                ContractId = l.ContractId ?? Guid.Empty,
-                CustomerDisplayName = cust?.DisplayName ?? "—",
-                VehicleMakeModel = veh != null ? veh.Make + " " + veh.Model : "—",
-                VehiclePlate = veh?.PlateNumber ?? "—",
-                Status = l.Status.ToString(),
-                l.ContractStartUtc,
-                l.ContractEndUtc,
-                ContractTypeCode = l.ContractTypeCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                RentAmountSar = l.RentAmount,
-                PrimaryDriverName = drv?.PersonNameEn,
-                WorkingBranchName = br?.NameEn,
-            };
-        }).ToList();
+            query = query.Where(x => x.Status == st);
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var filtered = items.Where(x =>
-                (x.CustomerDisplayName.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
-                (x.VehicleMakeModel.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
-                (x.VehiclePlate.Contains(search, StringComparison.OrdinalIgnoreCase))).ToList();
-            return Results.Ok(new { items = filtered, page, pageSize, totalCount = filtered.Count });
+            var s = search.Trim();
+            query = query.Where(x =>
+                x.CustomerDisplayName.Contains(s) ||
+                x.VehicleMakeModel.Contains(s) ||
+                x.VehiclePlate.Contains(s));
         }
+
+        var total = await query.CountAsync(ct);
+        var raw = await query
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .ToListAsync(ct);
+
+        var items = raw.Select(x => new
+        {
+            x.Id, x.DisplayId,
+            LeaseNumber = "LA-" + x.DisplayId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ContractId = x.ContractId ?? Guid.Empty,
+            x.CustomerDisplayName, x.VehicleMakeModel, x.VehiclePlate,
+            Status = x.Status.ToString(),
+            x.ContractStartUtc, x.ContractEndUtc,
+            ContractTypeCode = x.ContractTypeCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            x.RentAmountSar, x.PrimaryDriverName, x.WorkingBranchName,
+        }).ToList();
 
         return Results.Ok(new { items, page, pageSize, totalCount = total });
     }
@@ -142,65 +139,56 @@ public static class LeaseEndpoints
         var tenantId = tenant.TenantId;
         if (tenantId == Guid.Empty) return Results.Unauthorized();
 
-        var lease = await db.Leases.AsNoTracking()
-            .Where(l => l.TenantId == tenantId && l.Id == id)
-            .FirstOrDefaultAsync(ct);
+        var result = await (
+            from l in db.Leases.Where(l => l.TenantId == tenantId && l.Id == id)
+            join c in db.Customers on l.CustomerId equals c.Id into cg from c in cg.DefaultIfEmpty()
+            join v in db.Vehicles on l.VehicleId equals v.Id into vg from v in vg.DefaultIfEmpty()
+            join d in db.Drivers on l.PrimaryDriverId equals d.Id into dg from d in dg.DefaultIfEmpty()
+            join b in db.Branches on l.WorkingBranchId equals b.Id into bg from b in bg.DefaultIfEmpty()
+            join ct2 in db.Contracts on l.ContractId equals ct2.Id into ctg from ct2 in ctg.DefaultIfEmpty()
+            select new
+            {
+                l.Id, l.DisplayId, l.ContractId, l.CustomerId, l.VehicleId,
+                l.PrimaryDriverId, l.Status, l.ContractTypeCode,
+                l.ContractStartUtc, l.ContractEndUtc, l.RentAmount, l.PaidAmount,
+                l.VatAmount, l.TotalAmount, l.RemainingAmount, l.AllowedKmPerDay,
+                l.PaymentMethodCode, l.RentPolicyId, l.CreatedAtUtc,
+                CustomerDisplayName = c != null ? c.DisplayName : "—",
+                VehiclePlate = v != null ? v.PlateNumber : "—",
+                VehicleMakeModel = v != null ? v.Make + " " + v.Model : "—",
+                PrimaryDriverName = d != null ? d.PersonNameEn : (string?)null,
+                WorkingBranchCode = b != null ? b.Code : "—",
+                WorkingBranchName = b != null ? b.NameEn : "—",
+                QuotationId = ct2 != null ? ct2.QuotationId : (Guid?)null,
+            }
+        ).FirstOrDefaultAsync(ct);
 
-        if (lease is null) return Results.NotFound();
-
-        var cust = lease.CustomerId.HasValue
-            ? await db.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == lease.CustomerId.Value, ct)
-            : null;
-        var veh = lease.VehicleId.HasValue
-            ? await db.Vehicles.AsNoTracking().FirstOrDefaultAsync(v => v.Id == lease.VehicleId.Value, ct)
-            : null;
-        var drv = lease.PrimaryDriverId.HasValue
-            ? await db.Drivers.AsNoTracking().FirstOrDefaultAsync(d => d.Id == lease.PrimaryDriverId.Value, ct)
-            : null;
-        var br = lease.WorkingBranchId.HasValue
-            ? await db.Branches.AsNoTracking().FirstOrDefaultAsync(b => b.Id == lease.WorkingBranchId.Value, ct)
-            : null;
-
-        // Lookup quotationId via contract
-        Guid quotationId = Guid.Empty;
-        if (lease.ContractId.HasValue)
-        {
-            var parentContract = await db.Contracts.AsNoTracking()
-                .Where(c => c.Id == lease.ContractId.Value)
-                .Select(c => new { c.QuotationId })
-                .FirstOrDefaultAsync(ct);
-            if (parentContract?.QuotationId != null) quotationId = parentContract.QuotationId.Value;
-        }
+        if (result is null) return Results.NotFound();
 
         return Results.Ok(new
         {
-            lease.Id,
-            lease.DisplayId,
-            LeaseNumber = "LA-" + lease.DisplayId.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ContractId = lease.ContractId ?? Guid.Empty,
-            QuotationId = quotationId,
-            CustomerId = lease.CustomerId ?? Guid.Empty,
-            CustomerDisplayName = cust?.DisplayName ?? "—",
-            VehicleId = lease.VehicleId ?? Guid.Empty,
-            VehiclePlate = veh?.PlateNumber ?? "—",
-            VehicleMakeModel = veh != null ? veh.Make + " " + veh.Model : "—",
-            PrimaryDriverId = lease.PrimaryDriverId,
-            PrimaryDriverName = drv?.PersonNameEn,
-            Status = lease.Status.ToString(),
-            ContractTypeCode = lease.ContractTypeCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            lease.ContractStartUtc,
-            lease.ContractEndUtc,
-            RentAmountSar = lease.RentAmount,
-            WorkingBranchCode = br?.Code ?? "—",
-            WorkingBranchName = br?.NameEn ?? "—",
-            lease.CreatedAtUtc,
-            RentPolicyId = lease.RentPolicyId ?? Guid.Empty,
-            PaidAmountSar = lease.PaidAmount,
-            VatAmountSar = lease.VatAmount,
-            TotalAmountSar = lease.TotalAmount,
-            RemainingAmountSar = lease.RemainingAmount,
-            AllowedKmPerDay = lease.AllowedKmPerDay,
-            PaymentMethodCode = lease.PaymentMethodCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            result.Id, result.DisplayId,
+            LeaseNumber = "LA-" + result.DisplayId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ContractId = result.ContractId ?? Guid.Empty,
+            QuotationId = result.QuotationId ?? Guid.Empty,
+            CustomerId = result.CustomerId ?? Guid.Empty,
+            result.CustomerDisplayName,
+            VehicleId = result.VehicleId ?? Guid.Empty,
+            result.VehiclePlate, result.VehicleMakeModel,
+            result.PrimaryDriverId, result.PrimaryDriverName,
+            Status = result.Status.ToString(),
+            ContractTypeCode = result.ContractTypeCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            result.ContractStartUtc, result.ContractEndUtc,
+            RentAmountSar = result.RentAmount,
+            result.WorkingBranchCode, result.WorkingBranchName,
+            result.CreatedAtUtc,
+            RentPolicyId = result.RentPolicyId ?? Guid.Empty,
+            PaidAmountSar = result.PaidAmount,
+            VatAmountSar = result.VatAmount,
+            TotalAmountSar = result.TotalAmount,
+            RemainingAmountSar = result.RemainingAmount,
+            AllowedKmPerDay = result.AllowedKmPerDay,
+            PaymentMethodCode = result.PaymentMethodCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
             IssuedAtUtc = (string?)null,
             SuspendedAtUtc = (string?)null,
             ResumedAtUtc = (string?)null,

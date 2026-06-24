@@ -127,34 +127,36 @@ export default function CustomerDetailPage() {
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  /* ── data loading ───────────────────────────────────────────────────────── */
+  /* ── data loading — only customer detail on mount, tabs load lazily ────── */
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const [cust, cnts, ls, vs, ds, inv, pay, events] = await Promise.all([
-        bff.getCustomerById(id),
-        bff.getCustomerContracts(id).catch(() => [] as ContractSummary[]),
-        bff.getCustomerLeases(id),
-        bff.getCustomerVehicles(id),
-        bff.getCustomerDrivers(id),
-        bff.getCustomerInvoices(id).catch(() => [] as CustomerInvoiceSummary[]),
-        bff.getCustomerPayments(id).catch(() => [] as CustomerPaymentSummary[]),
-        bff.getAuditEvents('Customer', id).catch(() => [] as AuditEvent[]),
-      ])
+      const cust = await bff.getCustomerById(id)
       setData(cust)
-      setContracts(cnts)
-      setLeases(ls)
-      setVehicles(vs)
-      setDrivers(ds)
-      setInvoices(inv)
-      setPayments(pay)
-      setAuditEvents(events)
       setForm(toFormState(cust))
     } catch (e) { setError((e as Error).message) }
     finally { setLoading(false) }
   }, [id])
 
   useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    if (!data) return
+    if (tab === 'contracts' && contracts === null)
+      bff.getCustomerContracts(id).then(setContracts).catch(() => setContracts([]))
+    if (tab === 'leases' && leases === null)
+      bff.getCustomerLeases(id).then(setLeases).catch(() => setLeases([]))
+    if (tab === 'vehicles' && vehicles === null)
+      bff.getCustomerVehicles(id).then(setVehicles).catch(() => setVehicles([]))
+    if (tab === 'drivers' && drivers === null)
+      bff.getCustomerDrivers(id).then(setDrivers).catch(() => setDrivers([]))
+    if (tab === 'invoices' && invoices === null)
+      bff.getCustomerInvoices(id).then(setInvoices).catch(() => setInvoices([]))
+    if (tab === 'payments' && payments === null)
+      bff.getCustomerPayments(id).then(setPayments).catch(() => setPayments([]))
+    if (tab === 'audit' && auditEvents.length === 0)
+      bff.getAuditEvents('Customer', id).then(setAuditEvents).catch(() => setAuditEvents([]))
+  }, [tab, data, id, contracts, leases, vehicles, drivers, invoices, payments, auditEvents.length])
 
   /* auto-enter edit mode from URL query param */
   useEffect(() => {

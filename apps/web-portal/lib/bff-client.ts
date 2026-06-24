@@ -967,10 +967,11 @@ class BffClient {
 
   // ─── Contracts ──────────────────────────────────────────────────────────────
 
-  getContracts(page = 1, pageSize = 20, search?: string, status?: string) {
+  getContracts(page = 1, pageSize = 20, search?: string, status?: string, customerId?: string) {
     const q = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
     if (search) q.set('search', search)
     if (status) q.set('status', status)
+    if (customerId) q.set('customerId', customerId)
     return this.getJson<PagedResult<ContractSummary>>(`/api/v1/contracts?${q.toString()}`)
   }
   getContractById(id: string) {
@@ -1038,8 +1039,9 @@ class BffClient {
     return res.items
   }
   async getCustomerContracts(customerId: string) {
-    const res = await bff.getContracts(1, 50)
-    return res.items.filter(c => c.customerId === customerId)
+    const q = new URLSearchParams({ page: '1', pageSize: '100', customerId })
+    const res = await this.getJson<PagedResult<ContractSummary>>(`/api/v1/contracts?${q}`)
+    return res.items
   }
   getVehicleCurrentLease(vehicleId: string) {
     return this.getJson<LeaseSummary | null>(`/api/v1/vehicles/${vehicleId}/current-lease`)
