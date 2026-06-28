@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { Suspense, useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { useLocale } from '../../../lib/locale-provider'
 import { bff, type ContractSummary, type CustomerDetail, type CustomerInvoiceSummary, type CustomerPaymentSummary, type LeaseSummary, type VehicleSummary, type DriverSummary, type AuditEvent, type UpdateCustomerB2BRequest } from '../../../lib/bff-client'
@@ -90,7 +90,15 @@ function toFormState(d: CustomerDetail): B2BFormState {
 
 type Tab = 'details' | 'contracts' | 'leases' | 'vehicles' | 'drivers' | 'invoices' | 'payments' | 'audit'
 
-export default function CustomerDetailPage() {
+export default function CustomerDetailPageWrapper() {
+  return (
+    <Suspense fallback={<Spinner label="Loading customer..." />}>
+      <CustomerDetailPage />
+    </Suspense>
+  )
+}
+
+function CustomerDetailPage() {
   const { t } = useLocale()
   const router = useRouter()
   const { id } = useParams<{ id: string }>()

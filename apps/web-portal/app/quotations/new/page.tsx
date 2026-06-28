@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useLocale } from '../../../lib/locale-provider'
 import {
@@ -64,7 +64,15 @@ function computePricing(lines: LineInput[], discountPercent: number) {
   }
 }
 
-export default function NewQuotationPage() {
+export default function NewQuotationPageWrapper() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading...</div>}>
+      <NewQuotationPage />
+    </Suspense>
+  )
+}
+
+function NewQuotationPage() {
   const { t } = useLocale()
   const router = useRouter()
   const searchParams = useSearchParams()

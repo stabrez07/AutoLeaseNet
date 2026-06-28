@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useLocale } from '../../../lib/locale-provider'
 import {
@@ -35,7 +35,15 @@ function toLocalDatetime(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-export default function NewLeasePage() {
+export default function NewLeasePageWrapper() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading...</div>}>
+      <NewLeasePage />
+    </Suspense>
+  )
+}
+
+function NewLeasePage() {
   const { t, locale } = useLocale()
   const searchParams = useSearchParams()
   const fromQuoteId = searchParams?.get('fromQuote') ?? null
